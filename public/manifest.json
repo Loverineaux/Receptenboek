@@ -1,0 +1,24 @@
+{
+  "name": "Receptenboek",
+  "short_name": "Receptenboek",
+  "description": "Jouw persoonlijk receptenplatform met AI-extractie",
+  "start_url": "/recepten",
+  "display": "standalone",
+  "background_color": "#fafaf8",
+  "theme_color": "#16653a",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
