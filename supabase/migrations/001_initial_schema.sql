@@ -219,9 +219,9 @@ CREATE POLICY "profiles_insert_own"
 -- ----------------------------------------
 -- recipes
 -- ----------------------------------------
-CREATE POLICY "recipes_select_public_or_own"
+CREATE POLICY "recipes_select_all"
     ON recipes FOR SELECT
-    USING (is_public = true OR auth.uid() = user_id);
+    USING (true);
 
 CREATE POLICY "recipes_insert_own"
     ON recipes FOR INSERT
@@ -239,15 +239,9 @@ CREATE POLICY "recipes_delete_own"
 -- ----------------------------------------
 -- ingredients (follows parent recipe visibility)
 -- ----------------------------------------
-CREATE POLICY "ingredients_select"
+CREATE POLICY "ingredients_select_all"
     ON ingredients FOR SELECT
-    USING (
-        EXISTS (
-            SELECT 1 FROM recipes
-            WHERE recipes.id = ingredients.recipe_id
-            AND (recipes.is_public = true OR recipes.user_id = auth.uid())
-        )
-    );
+    USING (true);
 
 CREATE POLICY "ingredients_insert"
     ON ingredients FOR INSERT
@@ -289,15 +283,9 @@ CREATE POLICY "ingredients_delete"
 -- ----------------------------------------
 -- steps (follows parent recipe visibility)
 -- ----------------------------------------
-CREATE POLICY "steps_select"
+CREATE POLICY "steps_select_all"
     ON steps FOR SELECT
-    USING (
-        EXISTS (
-            SELECT 1 FROM recipes
-            WHERE recipes.id = steps.recipe_id
-            AND (recipes.is_public = true OR recipes.user_id = auth.uid())
-        )
-    );
+    USING (true);
 
 CREATE POLICY "steps_insert"
     ON steps FOR INSERT
@@ -339,15 +327,9 @@ CREATE POLICY "steps_delete"
 -- ----------------------------------------
 -- nutrition (follows parent recipe visibility)
 -- ----------------------------------------
-CREATE POLICY "nutrition_select"
+CREATE POLICY "nutrition_select_all"
     ON nutrition FOR SELECT
-    USING (
-        EXISTS (
-            SELECT 1 FROM recipes
-            WHERE recipes.id = nutrition.recipe_id
-            AND (recipes.is_public = true OR recipes.user_id = auth.uid())
-        )
-    );
+    USING (true);
 
 CREATE POLICY "nutrition_insert"
     ON nutrition FOR INSERT
@@ -389,15 +371,9 @@ CREATE POLICY "nutrition_delete"
 -- ----------------------------------------
 -- benodigdheden (follows parent recipe visibility)
 -- ----------------------------------------
-CREATE POLICY "benodigdheden_select"
+CREATE POLICY "benodigdheden_select_all"
     ON benodigdheden FOR SELECT
-    USING (
-        EXISTS (
-            SELECT 1 FROM recipes
-            WHERE recipes.id = benodigdheden.recipe_id
-            AND (recipes.is_public = true OR recipes.user_id = auth.uid())
-        )
-    );
+    USING (true);
 
 CREATE POLICY "benodigdheden_insert"
     ON benodigdheden FOR INSERT
@@ -450,15 +426,9 @@ CREATE POLICY "tags_insert_authenticated"
 -- ----------------------------------------
 -- recipe_tags (follows parent recipe visibility)
 -- ----------------------------------------
-CREATE POLICY "recipe_tags_select"
+CREATE POLICY "recipe_tags_select_all"
     ON recipe_tags FOR SELECT
-    USING (
-        EXISTS (
-            SELECT 1 FROM recipes
-            WHERE recipes.id = recipe_tags.recipe_id
-            AND (recipes.is_public = true OR recipes.user_id = auth.uid())
-        )
-    );
+    USING (true);
 
 CREATE POLICY "recipe_tags_insert"
     ON recipe_tags FOR INSERT
@@ -483,15 +453,9 @@ CREATE POLICY "recipe_tags_delete"
 -- ----------------------------------------
 -- ratings
 -- ----------------------------------------
-CREATE POLICY "ratings_select"
+CREATE POLICY "ratings_select_all"
     ON ratings FOR SELECT
-    USING (
-        EXISTS (
-            SELECT 1 FROM recipes
-            WHERE recipes.id = ratings.recipe_id
-            AND (recipes.is_public = true OR recipes.user_id = auth.uid())
-        )
-    );
+    USING (true);
 
 CREATE POLICY "ratings_insert_authenticated"
     ON ratings FOR INSERT
@@ -509,15 +473,9 @@ CREATE POLICY "ratings_delete_own"
 -- ----------------------------------------
 -- comments
 -- ----------------------------------------
-CREATE POLICY "comments_select"
+CREATE POLICY "comments_select_all"
     ON comments FOR SELECT
-    USING (
-        EXISTS (
-            SELECT 1 FROM recipes
-            WHERE recipes.id = comments.recipe_id
-            AND (recipes.is_public = true OR recipes.user_id = auth.uid())
-        )
-    );
+    USING (true);
 
 CREATE POLICY "comments_insert_authenticated"
     ON comments FOR INSERT

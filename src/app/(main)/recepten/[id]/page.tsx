@@ -70,7 +70,7 @@ export default function RecipeDetailPage() {
   const [recipe, setRecipe] = useState<RecipeWithRelations | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>('ingredienten');
-  const [portions, setPortions] = useState(4);
+  const [portions, setPortions] = useState(2);
   const [isFavorited, setIsFavorited] = useState(false);
   const [userRating, setUserRating] = useState(0);
   const [comments, setComments] = useState<any[]>([]);
@@ -94,6 +94,7 @@ export default function RecipeDetailPage() {
         tags:recipe_tags(tag:tags(*)),
         nutrition(*),
         ratings(*),
+        benodigdheden(*),
         comments(*, user:profiles!comments_user_id_fkey(id, display_name, avatar_url)),
         user:profiles!recipes_user_id_fkey(id, display_name, avatar_url)
       `
@@ -109,7 +110,7 @@ export default function RecipeDetailPage() {
     const ratings = data.ratings ?? [];
     const avg =
       ratings.length > 0
-        ? ratings.reduce((s: number, r: any) => s + r.score, 0) / ratings.length
+        ? ratings.reduce((s: number, r: any) => s + r.sterren, 0) / ratings.length
         : null;
 
     const flatTags = (data.tags ?? []).map((rt: any) => rt.tag).filter(Boolean);
@@ -132,14 +133,14 @@ export default function RecipeDetailPage() {
     };
 
     setRecipe(r);
-    setPortions(r.servings);
+    setPortions(r.basis_porties);
     setComments(data.comments ?? []);
 
     // Check favorite
     if (user) {
       const { data: fav } = await supabase
         .from('favorites')
-        .select('id')
+        .select('recipe_id')
         .eq('recipe_id', params.id)
         .eq('user_id', user.id)
         .single();
@@ -148,7 +149,7 @@ export default function RecipeDetailPage() {
 
       // Check user rating
       const myRating = ratings.find((rt: any) => rt.user_id === user.id);
-      if (myRating) setUserRating(myRating.score);
+      if (myRating) setUserRating(myRating.sterren);
     }
 
     setLoading(false);
@@ -254,10 +255,7 @@ export default function RecipeDetailPage() {
   // ── derived values ─────────────────────────────
 
   const isOwner = user?.id === recipe.user_id;
-  const ratio = portions / recipe.servings;
-  const totalTime =
-    recipe.total_time_minutes ??
-    (((recipe.prep_time_minutes ?? 0) + (recipe.cook_time_minutes ?? 0)) || null);
+  const ratio = portions / recipe.basis_porties;
 
   const tabs: { key: Tab; label: string }[] = [
     { key: 'ingredienten', label: 'Ingredienten' },
@@ -288,7 +286,7 @@ export default function RecipeDetailPage() {
 
         {/* BronBadge */}
         <div className="absolute left-4 top-4">
-          <BronBadge bron={recipe.source} />
+          <BronBadge bron={recipe.bron} />
         </div>
 
         {/* Actions overlay */}
@@ -317,21 +315,29 @@ export default function RecipeDetailPage() {
       {/* ── Title area ─────────────────────────────── */}
       <div>
         <h1 className="text-2xl font-bold text-text-primary">{recipe.title}</h1>
-        {recipe.description && (
-          <p className="mt-1 text-text-secondary">{recipe.description}</p>
+
+        {/* Intro/subtitle in styled block */}
+        {recipe.subtitle && (
+          <div className="mt-3 rounded-lg border-l-4 border-primary/40 bg-primary/5 px-4 py-3">
+            <p className="text-sm italic leading-relaxed text-text-secondary">
+              {recipe.subtitle}
+            </p>
+          </div>
         )}
 
         <div className="mt-3 flex flex-wrap items-center gap-4">
-          {totalTime && (
+          {recipe.tijd && (
             <div className="flex items-center gap-1 text-sm text-text-secondary">
               <Clock className="h-4 w-4" />
-              <span>{totalTime} min</span>
+              <span>{recipe.tijd}</span>
             </div>
           )}
 
-          <span className="rounded-full bg-gray-100 px-3 py-0.5 text-xs font-medium text-text-secondary">
-            {recipe.difficulty}
-          </span>
+          {recipe.moeilijkheid && (
+            <span className="rounded-full bg-gray-100 px-3 py-0.5 text-xs font-medium text-text-secondary">
+              {recipe.moeilijkheid}
+            </span>
+          )}
 
           {recipe.average_rating !== null && (
             <StarRating
@@ -412,23 +418,33 @@ export default function RecipeDetailPage() {
 
       {/* ── Tab content ────────────────────────────── */}
       {tab === 'ingredienten' && (
-        <ul className="space-y-2">
+        <div className="space-y-1">
           {recipe.ingredients.map((ing) => {
-            const scaled = ing.hoeveelheid ? ing.hoeveelheid * ratio : null;
+            const parsed = ing.hoeveelheid ? parseFloat(ing.hoeveelheid) : null;
+            const scaled = parsed !== null && !isNaN(parsed) ? parsed * ratio : null;
+            const amount = scaled !== null ? toFraction(scaled) : (ing.hoeveelheid ?? '');
             return (
-              <li
+              <label
                 key={ing.id}
-                className="flex items-baseline gap-2 border-b border-gray-100 py-2 text-sm"
+                className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-gray-50"
               >
-                <span className="min-w-[3rem] font-semibold text-text-primary">
-                  {scaled !== null ? toFraction(scaled) : ''}
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary/20"
+                />
+                <span className="flex-1 text-sm text-text-primary">
+                  {amount && (
+                    <span className="font-semibold">{amount}</span>
+                  )}{' '}
+                  {ing.eenheid && (
+                    <span className="text-text-secondary">{ing.eenheid}</span>
+                  )}{' '}
+                  {ing.naam}
                 </span>
-                <span className="text-text-secondary">{ing.eenheid ?? ''}</span>
-                <span className="text-text-primary">{ing.naam}</span>
-              </li>
+              </label>
             );
           })}
-        </ul>
+        </div>
       )}
 
       {tab === 'bereiding' && (
@@ -475,23 +491,26 @@ export default function RecipeDetailPage() {
             </thead>
             <tbody className="divide-y">
               {[
-                ['Calorieen', recipe.nutrition.calories, 'kcal'],
-                ['Eiwitten', recipe.nutrition.protein_grams, 'g'],
-                ['Koolhydraten', recipe.nutrition.carbs_grams, 'g'],
-                ['Vet', recipe.nutrition.fat_grams, 'g'],
-                ['Vezels', recipe.nutrition.fiber_grams, 'g'],
-                ['Suikers', recipe.nutrition.sugar_grams, 'g'],
-                ['Natrium', recipe.nutrition.sodium_mg, 'mg'],
+                ['Energie', recipe.nutrition.energie_kcal, 'kcal'],
+                ['Energie', recipe.nutrition.energie_kj, 'kJ'],
+                ['Vetten', recipe.nutrition.vetten, 'g'],
+                ['  waarvan verzadigd', recipe.nutrition.verzadigd, 'g'],
+                ['Koolhydraten', recipe.nutrition.koolhydraten, 'g'],
+                ['  waarvan suikers', recipe.nutrition.suikers, 'g'],
+                ['Vezels', recipe.nutrition.vezels, 'g'],
+                ['Eiwitten', recipe.nutrition.eiwitten, 'g'],
+                ['Zout', recipe.nutrition.zout, 'g'],
               ].map(
-                ([label, value, unit]) =>
+                ([label, value, unit], idx) =>
                   value !== null &&
-                  value !== undefined && (
-                    <tr key={label as string}>
+                  value !== undefined &&
+                  value !== '' && (
+                    <tr key={`${label}-${idx}`}>
                       <td className="px-4 py-2 text-text-primary">
                         {label as string}
                       </td>
                       <td className="px-4 py-2 text-right text-text-secondary">
-                        {value as number} {unit as string}
+                        {value as string} {unit as string}
                       </td>
                     </tr>
                   )
@@ -507,42 +526,49 @@ export default function RecipeDetailPage() {
         </p>
       )}
 
-      {/* ── Sidebar info: weetje, allergenen, benodigdheden ── */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        {/* Weetje - stored as metadata; show if available */}
-        <div className="rounded-lg border bg-amber-50 p-4">
-          <div className="flex items-center gap-2 font-semibold text-amber-800">
-            <Lightbulb className="h-4 w-4" />
-            Weetje
-          </div>
-          <p className="mt-1 text-sm text-amber-700">
-            Binnenkort beschikbaar
-          </p>
-        </div>
+      {/* ── Extra info cards (only show when data exists) ── */}
+      {(recipe.weetje || recipe.allergenen || (recipe as any).benodigdheden?.length > 0) && (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          {recipe.weetje && (
+            <div className="rounded-lg border bg-amber-50 p-4">
+              <div className="flex items-center gap-2 font-semibold text-amber-800">
+                <Lightbulb className="h-4 w-4" />
+                Weetje
+              </div>
+              <p className="mt-1 text-sm text-amber-700">{recipe.weetje}</p>
+            </div>
+          )}
 
-        <div className="rounded-lg border bg-red-50 p-4">
-          <div className="flex items-center gap-2 font-semibold text-red-800">
-            <AlertTriangle className="h-4 w-4" />
-            Allergenen
-          </div>
-          <p className="mt-1 text-sm text-red-700">
-            Binnenkort beschikbaar
-          </p>
-        </div>
+          {recipe.allergenen && (
+            <div className="rounded-lg border bg-red-50 p-4">
+              <div className="flex items-center gap-2 font-semibold text-red-800">
+                <AlertTriangle className="h-4 w-4" />
+                Allergenen
+              </div>
+              <p className="mt-1 text-sm text-red-700">{recipe.allergenen}</p>
+            </div>
+          )}
 
-        <div className="rounded-lg border bg-blue-50 p-4">
-          <div className="flex items-center gap-2 font-semibold text-blue-800">
-            <ChefHat className="h-4 w-4" />
-            Benodigdheden
-          </div>
-          <p className="mt-1 text-sm text-blue-700">
-            Binnenkort beschikbaar
-          </p>
+          {(recipe as any).benodigdheden?.length > 0 && (
+            <div className="rounded-lg border bg-blue-50 p-4">
+              <div className="flex items-center gap-2 font-semibold text-blue-800">
+                <ChefHat className="h-4 w-4" />
+                Benodigdheden
+              </div>
+              <ul className="mt-1 space-y-1">
+                {(recipe as any).benodigdheden.map((b: any) => (
+                  <li key={b.id} className="text-sm text-blue-700">
+                    • {b.naam}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
-      </div>
+      )}
 
       {/* ── Comments ───────────────────────────────── */}
-      {recipe.is_public && (
+      {(
         <section className="space-y-4">
           <h2 className="text-lg font-semibold text-text-primary">Reacties</h2>
 
@@ -574,7 +600,7 @@ export default function RecipeDetailPage() {
                     {c.user?.display_name ?? 'Anoniem'}
                   </p>
                   <p className="mt-0.5 text-sm text-text-secondary">
-                    {c.body}
+                    {c.tekst}
                   </p>
                 </div>
               </div>

@@ -15,9 +15,9 @@ export async function POST(
   }
 
   const body = await request.json();
-  const score = body.sterren;
+  const sterren = body.sterren;
 
-  if (!score || score < 1 || score > 5) {
+  if (!sterren || sterren < 1 || sterren > 5) {
     return NextResponse.json(
       { error: 'Score moet tussen 1 en 5 liggen' },
       { status: 400 }
@@ -35,7 +35,7 @@ export async function POST(
   if (existing) {
     const { error } = await supabase
       .from('ratings')
-      .update({ score, updated_at: new Date().toISOString() })
+      .update({ sterren })
       .eq('id', existing.id);
 
     if (error) {
@@ -45,7 +45,7 @@ export async function POST(
     const { error } = await supabase.from('ratings').insert({
       recipe_id: params.id,
       user_id: user.id,
-      score,
+      sterren,
     });
 
     if (error) {

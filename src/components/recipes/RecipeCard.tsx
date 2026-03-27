@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { Clock, Heart } from 'lucide-react';
+import { Clock, Heart, MessageCircle } from 'lucide-react';
 import BronBadge from '@/components/ui/BronBadge';
 import StarRating from '@/components/ui/StarRating';
 import type { RecipeWithRelations } from '@/types';
@@ -22,10 +22,6 @@ export default function RecipeCard({ recipe, onFavoriteToggle }: RecipeCardProps
     e.stopPropagation();
     onFavoriteToggle?.(recipe.id, !recipe.is_favorited);
   };
-
-  const totalTime = recipe.total_time_minutes ?? (
-    ((recipe.prep_time_minutes ?? 0) + (recipe.cook_time_minutes ?? 0)) || null
-  );
 
   return (
     <div
@@ -48,7 +44,7 @@ export default function RecipeCard({ recipe, onFavoriteToggle }: RecipeCardProps
 
         {/* BronBadge overlay */}
         <div className="absolute left-2 top-2">
-          <BronBadge bron={recipe.source} />
+          <BronBadge bron={recipe.bron} />
         </div>
 
         {/* Favorite heart */}
@@ -72,18 +68,24 @@ export default function RecipeCard({ recipe, onFavoriteToggle }: RecipeCardProps
           {recipe.title}
         </h3>
 
-        {recipe.description && (
+        {recipe.subtitle && (
           <p className="mt-0.5 line-clamp-1 text-xs text-text-secondary">
-            {recipe.description}
+            {recipe.subtitle}
           </p>
         )}
 
         <div className="mt-2 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {totalTime && (
+          <div className="flex items-center gap-3">
+            {recipe.tijd && (
               <div className="flex items-center gap-1 text-xs text-text-secondary">
                 <Clock className="h-3.5 w-3.5" />
-                <span>{totalTime} min</span>
+                <span>{recipe.tijd}</span>
+              </div>
+            )}
+            {(recipe.comments?.length ?? 0) > 0 && (
+              <div className="flex items-center gap-1 text-xs text-text-secondary">
+                <MessageCircle className="h-3.5 w-3.5" />
+                <span>{recipe.comments.length}</span>
               </div>
             )}
           </div>
