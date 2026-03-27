@@ -53,7 +53,7 @@ export default function PublicProfilePage() {
         const ratings = r.ratings ?? [];
         const avg =
           ratings.length > 0
-            ? ratings.reduce((s: number, rt: any) => s + rt.score, 0) /
+            ? ratings.reduce((s: number, rt: any) => s + rt.sterren, 0) /
               ratings.length
             : null;
 
@@ -142,7 +142,7 @@ export default function PublicProfilePage() {
   );
   const avgGiven =
     userGivenRatings.length > 0
-      ? userGivenRatings.reduce((s, r) => s + r.score, 0) /
+      ? userGivenRatings.reduce((s, r) => s + r.sterren, 0) /
         userGivenRatings.length
       : null;
 

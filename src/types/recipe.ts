@@ -2,12 +2,7 @@
 // Enums / union types
 // ──────────────────────────────────────────────
 
-export type Source =
-  | "HelloFresh"
-  | "Albert Heijn"
-  | "Jumbo"
-  | "Broodje Dunner"
-  | "Eigen recept";
+export type Source = string;
 
 export type Difficulty = "Makkelijk" | "Gemiddeld" | "Moeilijk";
 
@@ -19,17 +14,16 @@ export interface Recipe {
   id: string;
   user_id: string;
   title: string;
-  slug: string;
-  description: string | null;
+  subtitle: string | null;
   image_url: string | null;
-  source: Source;
-  source_url: string | null;
-  servings: number;
-  prep_time_minutes: number | null;
-  cook_time_minutes: number | null;
-  total_time_minutes: number | null;
-  difficulty: Difficulty;
+  tijd: string | null;
+  moeilijkheid: Difficulty | null;
+  categorie: string | null;
+  bron: Source | null;
+  basis_porties: number;
   is_public: boolean;
+  weetje: string | null;
+  allergenen: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -37,11 +31,10 @@ export interface Recipe {
 export interface Ingredient {
   id: string;
   recipe_id: string;
-  hoeveelheid: number | null;
+  hoeveelheid: string | null;
   eenheid: string | null;
   naam: string;
   sort_order: number;
-  created_at: string;
 }
 
 export interface Step {
@@ -51,14 +44,12 @@ export interface Step {
   beschrijving: string;
   afbeelding_url: string | null;
   sort_order: number;
-  created_at: string;
 }
 
 export interface Tag {
   id: string;
   name: string;
-  slug: string;
-  created_at: string;
+  created_by: string | null;
 }
 
 export interface RecipeTag {
@@ -67,26 +58,24 @@ export interface RecipeTag {
 }
 
 export interface Nutrition {
-  id: string;
   recipe_id: string;
-  calories: number | null;
-  protein_grams: number | null;
-  carbs_grams: number | null;
-  fat_grams: number | null;
-  fiber_grams: number | null;
-  sugar_grams: number | null;
-  sodium_mg: number | null;
-  created_at: string;
-  updated_at: string;
+  energie_kcal: string | null;
+  energie_kj: string | null;
+  vetten: string | null;
+  verzadigd: string | null;
+  koolhydraten: string | null;
+  suikers: string | null;
+  vezels: string | null;
+  eiwitten: string | null;
+  zout: string | null;
 }
 
 export interface Rating {
   id: string;
   recipe_id: string;
   user_id: string;
-  score: number; // 1-5
+  sterren: number; // 1-5
   created_at: string;
-  updated_at: string;
 }
 
 export interface Comment {
@@ -94,15 +83,13 @@ export interface Comment {
   recipe_id: string;
   user_id: string;
   parent_id: string | null;
-  body: string;
+  tekst: string;
   created_at: string;
-  updated_at: string;
 }
 
 export interface Favorite {
-  id: string;
-  recipe_id: string;
   user_id: string;
+  recipe_id: string;
   created_at: string;
 }
 
@@ -112,7 +99,6 @@ export interface UserProfile {
   display_name: string | null;
   avatar_url: string | null;
   created_at: string;
-  updated_at: string;
 }
 
 // ──────────────────────────────────────────────
@@ -136,7 +122,7 @@ export interface RecipeWithRelations extends Recipe {
 // ──────────────────────────────────────────────
 
 export interface ExtractedIngredient {
-  hoeveelheid: number | null;
+  hoeveelheid: string | null;
   eenheid: string | null;
   naam: string;
 }
@@ -148,15 +134,13 @@ export interface ExtractedStep {
 
 export interface ExtractedRecipe {
   title: string;
-  description: string | null;
-  source: Source | null;
-  servings: number | null;
-  prep_time_minutes: number | null;
-  cook_time_minutes: number | null;
-  total_time_minutes: number | null;
-  difficulty: Difficulty | null;
+  subtitle: string | null;
+  bron: Source | null;
+  basis_porties: number | null;
+  tijd: string | null;
+  moeilijkheid: Difficulty | null;
   ingredients: ExtractedIngredient[];
   steps: ExtractedStep[];
   tags: string[];
-  nutrition: Omit<Nutrition, "id" | "recipe_id" | "created_at" | "updated_at"> | null;
+  nutrition: Omit<Nutrition, "recipe_id"> | null;
 }

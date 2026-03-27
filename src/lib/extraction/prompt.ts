@@ -1,10 +1,12 @@
 export const EXTRACTION_SYSTEM_PROMPT = `Je bent een gespecialiseerde receptextractor. Je taak is om receptgegevens uit de aangeleverde bron te extraheren en te retourneren als een enkel JSON-object.
 
 REGELS:
-- Alle tekst moet in het Nederlands zijn.
+- ALLE tekst moet in het Nederlands zijn. Vertaal Engelstalige recepten volledig naar het Nederlands (titel, ingrediënten, stappen, alles).
 - Detecteer automatisch de bron (website-naam) uit de URL of inhoud.
 - Combineer ALLE ingrediënten in één lijst. Maak GEEN onderscheid tussen "uit de box" en "zelf toevoegen" of vergelijkbare splitsingen.
-- Neem voedingswaarden per portie op wanneer beschikbaar.
+- Neem voedingswaarden per portie op wanneer beschikbaar. Zoek goed in de tekst naar calorieën, vetten, koolhydraten, eiwitten etc.
+- Neem benodigdheden (keukengereedschap zoals bakvormen, deegrollers, pannen etc.) op wanneer vermeld.
+- Als er een korte introductietekst of verhaaltje bij het recept staat, gebruik die als "subtitle".
 - Retourneer UITSLUITEND geldig JSON. Geen uitleg, geen markdown, geen extra tekst. Alleen het JSON-object.
 
 JSON SCHEMA:
@@ -117,17 +119,35 @@ export function parseRecipeResponse(responseText: string): ExtractedRecipe {
     }
   }
 
-  const parsed = JSON.parse(jsonStr) as ExtractedRecipe;
+  let parsed: ExtractedRecipe;
+  try {
+    parsed = JSON.parse(jsonStr) as ExtractedRecipe;
+  } catch {
+    // If JSON parsing fails, Claude might have returned text instead of JSON.
+    // Try to find any JSON object in the response.
+    const lastTry = responseText.match(/\{[\s\S]*"title"[\s\S]*\}/);
+    if (lastTry) {
+      parsed = JSON.parse(lastTry[0]) as ExtractedRecipe;
+    } else {
+      throw new Error(`Kon geen recept-JSON vinden in het antwoord`);
+    }
+  }
 
-  // Basic validation
-  if (!parsed.title || typeof parsed.title !== "string") {
-    throw new Error("Extracted recipe is missing a valid title");
+  // Ensure title exists
+  if (!parsed.title || typeof parsed.title !== "string" || parsed.title.trim() === "") {
+    // Try common fallback fields
+    parsed.title = parsed.name || parsed.headline || null;
+    if (!parsed.title) {
+      throw new Error("Extracted recipe is missing a valid title");
+    }
   }
-  if (!Array.isArray(parsed.ingredients) || parsed.ingredients.length === 0) {
-    throw new Error("Extracted recipe has no ingredients");
+
+  // Ensure arrays exist (don't fail — let user fill in missing data)
+  if (!Array.isArray(parsed.ingredients)) {
+    parsed.ingredients = [];
   }
-  if (!Array.isArray(parsed.steps) || parsed.steps.length === 0) {
-    throw new Error("Extracted recipe has no steps");
+  if (!Array.isArray(parsed.steps)) {
+    parsed.steps = [];
   }
 
   return parsed;

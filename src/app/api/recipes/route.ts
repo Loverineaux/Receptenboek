@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
   }
 
   if (source) {
-    query = query.eq('source', source);
+    query = query.eq('bron', source);
   }
 
   // -- sorting --
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
       query = query.order('created_at', { ascending: false }); // fallback; real rating sort done below
       break;
     case 'time':
-      query = query.order('total_time_minutes', { ascending: true, nullsFirst: false });
+      query = query.order('tijd', { ascending: true, nullsFirst: false });
       break;
     case 'newest':
     default:
@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
     const ratings = r.ratings ?? [];
     const avg =
       ratings.length > 0
-        ? ratings.reduce((sum: number, rt: any) => sum + rt.score, 0) / ratings.length
+        ? ratings.reduce((sum: number, rt: any) => sum + rt.sterren, 0) / ratings.length
         : null;
 
     const flatTags = (r.tags ?? [])
@@ -95,17 +95,20 @@ export async function GET(request: NextRequest) {
 // POST  /api/recipes
 // ────────────────────────────────────────────
 export async function POST(request: NextRequest) {
+  console.log('[POST /api/recipes] Start');
   const supabase = createClient();
 
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  console.log('[POST /api/recipes] User:', user?.id ?? 'NONE');
 
   if (!user) {
     return NextResponse.json({ error: 'Niet ingelogd' }, { status: 401 });
   }
 
   const body = await request.json();
+  console.log('[POST /api/recipes] Body keys:', Object.keys(body));
 
   // 1. Create recipe
   const { data: recipe, error: recipeError } = await supabase
@@ -113,23 +116,21 @@ export async function POST(request: NextRequest) {
     .insert({
       user_id: user.id,
       title: body.title,
-      slug: body.title
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/(^-|-$)/g, ''),
-      description: body.description || null,
+      subtitle: body.subtitle || null,
       image_url: body.image_url || null,
-      source: body.source || 'Eigen recept',
-      source_url: body.source_url || null,
-      servings: body.servings ?? 4,
-      prep_time_minutes: body.prep_time_minutes ?? null,
-      cook_time_minutes: body.cook_time_minutes ?? null,
-      total_time_minutes: body.total_time_minutes ?? null,
-      difficulty: body.difficulty || 'Gemiddeld',
+      bron: body.bron || 'Eigen recept',
+      basis_porties: body.basis_porties ?? 2,
+      tijd: body.tijd || null,
+      moeilijkheid: body.moeilijkheid || 'Gemiddeld',
+      categorie: body.categorie || null,
       is_public: body.is_public ?? false,
+      weetje: body.weetje || null,
+      allergenen: body.allergenen || null,
     })
     .select()
     .single();
+
+  console.log('[POST /api/recipes] Insert result:', recipeError ? `ERROR: ${recipeError.message}` : `OK id=${recipe?.id}`);
 
   if (recipeError || !recipe) {
     return NextResponse.json(
@@ -140,76 +141,114 @@ export async function POST(request: NextRequest) {
 
   const recipeId = recipe.id;
 
-  // 2. Ingredients
+  // Run all inserts in parallel
+  const promises: Promise<any>[] = [];
+
+  // Ingredients
   if (body.ingredients?.length) {
+    console.log(`[POST /api/recipes] Inserting ${body.ingredients.length} ingredients`);
     const rows = body.ingredients.map((ing: any, idx: number) => ({
       recipe_id: recipeId,
-      hoeveelheid: ing.hoeveelheid,
-      eenheid: ing.eenheid,
+      hoeveelheid: ing.hoeveelheid || null,
+      eenheid: ing.eenheid || null,
       naam: ing.naam,
       sort_order: idx,
     }));
-    await supabase.from('ingredients').insert(rows);
+    promises.push(
+      supabase.from('ingredients').insert(rows).then(({ error }) => {
+        if (error) console.error('[POST /api/recipes] Ingredients error:', error.message);
+        else console.log('[POST /api/recipes] Ingredients OK');
+      })
+    );
   }
 
-  // 3. Steps
+  // Steps
   if (body.steps?.length) {
+    console.log(`[POST /api/recipes] Inserting ${body.steps.length} steps`);
     const rows = body.steps.map((step: any, idx: number) => ({
       recipe_id: recipeId,
-      titel: step.titel,
+      titel: step.titel || null,
       beschrijving: step.beschrijving,
-      afbeelding_url: step.afbeelding_url,
+      afbeelding_url: step.afbeelding_url || null,
       sort_order: idx,
     }));
-    await supabase.from('steps').insert(rows);
+    promises.push(
+      supabase.from('steps').insert(rows).then(({ error }) => {
+        if (error) console.error('[POST /api/recipes] Steps error:', error.message);
+        else console.log('[POST /api/recipes] Steps OK');
+      })
+    );
   }
 
-  // 4. Nutrition
+  // Nutrition
   if (body.nutrition) {
+    console.log('[POST /api/recipes] Inserting nutrition');
     const n = body.nutrition;
-    await supabase.from('nutrition').insert({
-      recipe_id: recipeId,
-      calories: n.calories ? parseFloat(n.calories) : null,
-      protein_grams: n.protein_grams ? parseFloat(n.protein_grams) : null,
-      carbs_grams: n.carbs_grams ? parseFloat(n.carbs_grams) : null,
-      fat_grams: n.fat_grams ? parseFloat(n.fat_grams) : null,
-      fiber_grams: n.fiber_grams ? parseFloat(n.fiber_grams) : null,
-      sugar_grams: n.sugar_grams ? parseFloat(n.sugar_grams) : null,
-      sodium_mg: n.sodium_mg ? parseFloat(n.sodium_mg) : null,
-    });
+    promises.push(
+      supabase.from('nutrition').insert({
+        recipe_id: recipeId,
+        energie_kcal: n.energie_kcal || null,
+        energie_kj: n.energie_kj || null,
+        vetten: n.vetten || null,
+        verzadigd: n.verzadigd || null,
+        koolhydraten: n.koolhydraten || null,
+        suikers: n.suikers || null,
+        vezels: n.vezels || null,
+        eiwitten: n.eiwitten || null,
+        zout: n.zout || null,
+      }).then(({ error }) => {
+        if (error) console.error('[POST /api/recipes] Nutrition error:', error.message);
+        else console.log('[POST /api/recipes] Nutrition OK');
+      })
+    );
   }
 
-  // 5. Tags (upsert tag by name, then link)
+  // Tags — upsert all at once, then link
   if (body.tags?.length) {
-    for (const tagName of body.tags) {
-      const slug = tagName
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/(^-|-$)/g, '');
+    console.log(`[POST /api/recipes] Upserting ${body.tags.length} tags`);
+    promises.push(
+      (async () => {
+        const tagRows = body.tags.map((name: string) => ({ name }));
+        const { data: tags, error: tagError } = await supabase
+          .from('tags')
+          .upsert(tagRows, { onConflict: 'name' })
+          .select();
 
-      // Upsert tag
-      const { data: tag } = await supabase
-        .from('tags')
-        .upsert({ name: tagName, slug }, { onConflict: 'slug' })
-        .select()
-        .single();
+        if (tagError) {
+          console.error('[POST /api/recipes] Tags upsert error:', tagError.message);
+          return;
+        }
+        console.log(`[POST /api/recipes] Tags upserted: ${tags?.length}`);
 
-      if (tag) {
-        await supabase
-          .from('recipe_tags')
-          .insert({ recipe_id: recipeId, tag_id: tag.id });
-      }
-    }
+        if (tags?.length) {
+          const { error: linkError } = await supabase.from('recipe_tags').insert(
+            tags.map((t: any) => ({ recipe_id: recipeId, tag_id: t.id }))
+          );
+          if (linkError) console.error('[POST /api/recipes] recipe_tags error:', linkError.message);
+          else console.log('[POST /api/recipes] recipe_tags OK');
+        }
+      })()
+    );
   }
 
-  // 6. Benodigdheden
+  // Benodigdheden
   if (body.benodigdheden?.length) {
+    console.log(`[POST /api/recipes] Inserting ${body.benodigdheden.length} benodigdheden`);
     const rows = body.benodigdheden.map((naam: string) => ({
       recipe_id: recipeId,
       naam,
     }));
-    await supabase.from('benodigdheden').insert(rows);
+    promises.push(
+      supabase.from('benodigdheden').insert(rows).then(({ error }) => {
+        if (error) console.error('[POST /api/recipes] Benodigdheden error:', error.message);
+        else console.log('[POST /api/recipes] Benodigdheden OK');
+      })
+    );
   }
+
+  console.log(`[POST /api/recipes] Awaiting ${promises.length} parallel inserts...`);
+  await Promise.all(promises);
+  console.log('[POST /api/recipes] All done, returning 201');
 
   return NextResponse.json({ recipe }, { status: 201 });
 }

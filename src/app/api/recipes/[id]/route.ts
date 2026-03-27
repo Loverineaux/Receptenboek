@@ -35,7 +35,7 @@ export async function GET(
   const ratings = data.ratings ?? [];
   const avg =
     ratings.length > 0
-      ? ratings.reduce((sum: number, r: any) => sum + r.score, 0) / ratings.length
+      ? ratings.reduce((sum: number, r: any) => sum + r.sterren, 0) / ratings.length
       : null;
 
   const flatTags = (data.tags ?? []).map((rt: any) => rt.tag).filter(Boolean);
@@ -92,21 +92,16 @@ export async function PUT(
     .from('recipes')
     .update({
       title: body.title,
-      slug: body.title
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/(^-|-$)/g, ''),
-      description: body.description || null,
+      subtitle: body.subtitle || null,
       image_url: body.image_url || null,
-      source: body.source || 'Eigen recept',
-      source_url: body.source_url || null,
-      servings: body.servings ?? 4,
-      prep_time_minutes: body.prep_time_minutes ?? null,
-      cook_time_minutes: body.cook_time_minutes ?? null,
-      total_time_minutes: body.total_time_minutes ?? null,
-      difficulty: body.difficulty || 'Gemiddeld',
+      bron: body.bron || 'Eigen recept',
+      basis_porties: body.basis_porties ?? 2,
+      tijd: body.tijd || null,
+      moeilijkheid: body.moeilijkheid || 'Gemiddeld',
+      categorie: body.categorie || null,
       is_public: body.is_public ?? false,
-      updated_at: new Date().toISOString(),
+      weetje: body.weetje || null,
+      allergenen: body.allergenen || null,
     })
     .eq('id', params.id);
 
@@ -119,8 +114,8 @@ export async function PUT(
   if (body.ingredients?.length) {
     const rows = body.ingredients.map((ing: any, idx: number) => ({
       recipe_id: params.id,
-      hoeveelheid: ing.hoeveelheid,
-      eenheid: ing.eenheid,
+      hoeveelheid: ing.hoeveelheid || null,
+      eenheid: ing.eenheid || null,
       naam: ing.naam,
       sort_order: idx,
     }));
@@ -132,9 +127,9 @@ export async function PUT(
   if (body.steps?.length) {
     const rows = body.steps.map((step: any, idx: number) => ({
       recipe_id: params.id,
-      titel: step.titel,
+      titel: step.titel || null,
       beschrijving: step.beschrijving,
-      afbeelding_url: step.afbeelding_url,
+      afbeelding_url: step.afbeelding_url || null,
       sort_order: idx,
     }));
     await supabase.from('steps').insert(rows);
@@ -146,13 +141,15 @@ export async function PUT(
     const n = body.nutrition;
     await supabase.from('nutrition').insert({
       recipe_id: params.id,
-      calories: n.calories ? parseFloat(n.calories) : null,
-      protein_grams: n.protein_grams ? parseFloat(n.protein_grams) : null,
-      carbs_grams: n.carbs_grams ? parseFloat(n.carbs_grams) : null,
-      fat_grams: n.fat_grams ? parseFloat(n.fat_grams) : null,
-      fiber_grams: n.fiber_grams ? parseFloat(n.fiber_grams) : null,
-      sugar_grams: n.sugar_grams ? parseFloat(n.sugar_grams) : null,
-      sodium_mg: n.sodium_mg ? parseFloat(n.sodium_mg) : null,
+      energie_kcal: n.energie_kcal || null,
+      energie_kj: n.energie_kj || null,
+      vetten: n.vetten || null,
+      verzadigd: n.verzadigd || null,
+      koolhydraten: n.koolhydraten || null,
+      suikers: n.suikers || null,
+      vezels: n.vezels || null,
+      eiwitten: n.eiwitten || null,
+      zout: n.zout || null,
     });
   }
 
@@ -160,14 +157,9 @@ export async function PUT(
   await supabase.from('recipe_tags').delete().eq('recipe_id', params.id);
   if (body.tags?.length) {
     for (const tagName of body.tags) {
-      const slug = tagName
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/(^-|-$)/g, '');
-
       const { data: tag } = await supabase
         .from('tags')
-        .upsert({ name: tagName, slug }, { onConflict: 'slug' })
+        .upsert({ name: tagName }, { onConflict: 'name' })
         .select()
         .single();
 

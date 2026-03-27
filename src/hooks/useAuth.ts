@@ -6,11 +6,10 @@ import type { User, AuthError } from '@supabase/supabase-js'
 
 interface Profile {
   id: string
-  username: string | null
-  full_name: string | null
+  email: string | null
+  display_name: string | null
   avatar_url: string | null
   bio: string | null
-  updated_at: string | null
 }
 
 interface AuthState {
@@ -60,7 +59,8 @@ export function useAuth() {
     // Listen for auth state changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      console.log('[useAuth] onAuthStateChange:', _event, session?.user?.id)
       const currentUser = session?.user ?? null
 
       setAuthState((prev) => ({
@@ -70,7 +70,7 @@ export function useAuth() {
       }))
 
       if (currentUser) {
-        await fetchProfile(currentUser.id)
+        fetchProfile(currentUser.id)
       } else {
         setAuthState((prev) => ({ ...prev, profile: null }))
       }

@@ -3,14 +3,16 @@
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { Menu, X, ChefHat, User, LogOut } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
 
 const navLinks = [
   { href: '/recepten', label: 'Recepten' },
-  { href: '/ontdek', label: 'Ontdek' },
+  { href: '/ontdek', label: 'Nieuwste' },
   { href: '/recepten/nieuw', label: 'Nieuw Recept' },
 ];
 
 export default function Header() {
+  const { user, profile, signOut } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -25,6 +27,12 @@ export default function Header() {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
+
+  const handleSignOut = async () => {
+    setUserMenuOpen(false);
+    await signOut();
+    window.location.href = '/';
+  };
 
   return (
     <header className="sticky top-0 z-40 border-b bg-surface">
@@ -50,33 +58,63 @@ export default function Header() {
 
         {/* Desktop user menu */}
         <div className="hidden md:block" ref={userMenuRef}>
-          <button
-            type="button"
-            onClick={() => setUserMenuOpen(!userMenuOpen)}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-light text-primary transition-colors hover:bg-primary/20"
-          >
-            <User className="h-5 w-5" />
-          </button>
-
-          {userMenuOpen && (
-            <div className="absolute right-4 mt-2 w-44 rounded-lg border bg-surface py-1 shadow-lg sm:right-6">
-              <Link
-                href="/profiel"
-                className="flex items-center gap-2 px-4 py-2 text-sm text-text-secondary hover:bg-gray-50"
-                onClick={() => setUserMenuOpen(false)}
-              >
-                <User className="h-4 w-4" />
-                Profiel
-              </Link>
+          {user ? (
+            <>
               <button
                 type="button"
-                className="flex w-full items-center gap-2 px-4 py-2 text-sm text-text-secondary hover:bg-gray-50"
-                onClick={() => setUserMenuOpen(false)}
+                onClick={() => setUserMenuOpen(!userMenuOpen)}
+                className="flex items-center gap-2 rounded-full py-1 pl-1 pr-3 transition-colors hover:bg-gray-100"
               >
-                <LogOut className="h-4 w-4" />
-                Uitloggen
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-light text-primary">
+                  {profile?.avatar_url ? (
+                    <img
+                      src={profile.avatar_url}
+                      alt={profile.display_name || ''}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <User className="h-5 w-5" />
+                  )}
+                </div>
+                <span className="text-sm font-medium text-text-primary">
+                  {profile?.display_name || 'Gebruiker'}
+                </span>
               </button>
-            </div>
+
+              {userMenuOpen && (
+                <div className="absolute right-4 mt-2 w-48 rounded-lg border bg-surface py-1 shadow-lg sm:right-6">
+                  <div className="border-b px-4 py-2">
+                    <p className="text-sm font-medium text-text-primary">
+                      {profile?.display_name || 'Gebruiker'}
+                    </p>
+                    <p className="text-xs text-text-muted">{user.email}</p>
+                  </div>
+                  <Link
+                    href="/profiel"
+                    className="flex items-center gap-2 px-4 py-2 text-sm text-text-secondary hover:bg-gray-50"
+                    onClick={() => setUserMenuOpen(false)}
+                  >
+                    <User className="h-4 w-4" />
+                    Profiel
+                  </Link>
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 px-4 py-2 text-sm text-text-secondary hover:bg-gray-50"
+                    onClick={handleSignOut}
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Uitloggen
+                  </button>
+                </div>
+              )}
+            </>
+          ) : (
+            <Link
+              href="/login"
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90"
+            >
+              Inloggen
+            </Link>
           )}
         </div>
 
@@ -104,20 +142,54 @@ export default function Header() {
             </Link>
           ))}
           <hr className="my-2" />
-          <Link
-            href="/profiel"
-            className="block rounded-lg px-3 py-2 text-sm text-text-secondary hover:bg-gray-50"
-            onClick={() => setMobileOpen(false)}
-          >
-            Profiel
-          </Link>
-          <button
-            type="button"
-            className="block w-full rounded-lg px-3 py-2 text-left text-sm text-text-secondary hover:bg-gray-50"
-            onClick={() => setMobileOpen(false)}
-          >
-            Uitloggen
-          </button>
+          {user ? (
+            <>
+              <div className="flex items-center gap-3 px-3 py-2">
+                <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-gray-100">
+                  {profile?.avatar_url ? (
+                    <img
+                      src={profile.avatar_url}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <User className="h-4 w-4 text-text-muted" />
+                  )}
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-text-primary">
+                    {profile?.display_name || 'Gebruiker'}
+                  </p>
+                  <p className="text-xs text-text-muted">{user.email}</p>
+                </div>
+              </div>
+              <Link
+                href="/profiel"
+                className="block rounded-lg px-3 py-2 text-sm text-text-secondary hover:bg-gray-50"
+                onClick={() => setMobileOpen(false)}
+              >
+                Profiel
+              </Link>
+              <button
+                type="button"
+                className="block w-full rounded-lg px-3 py-2 text-left text-sm text-text-secondary hover:bg-gray-50"
+                onClick={() => {
+                  setMobileOpen(false);
+                  handleSignOut();
+                }}
+              >
+                Uitloggen
+              </button>
+            </>
+          ) : (
+            <Link
+              href="/login"
+              className="block rounded-lg px-3 py-2 text-sm font-medium text-primary hover:bg-gray-50"
+              onClick={() => setMobileOpen(false)}
+            >
+              Inloggen
+            </Link>
+          )}
         </nav>
       )}
     </header>

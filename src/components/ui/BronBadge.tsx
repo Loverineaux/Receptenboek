@@ -1,5 +1,5 @@
 interface BronBadgeProps {
-  bron: string;
+  bron: string | null;
 }
 
 const bronStyles: Record<string, { bg: string; text: string }> = {
@@ -14,6 +14,7 @@ const bronStyles: Record<string, { bg: string; text: string }> = {
 const defaultStyle = { bg: '#f1f5f9', text: '#475569' };
 
 export default function BronBadge({ bron }: BronBadgeProps) {
+  if (!bron) return null;
   const style = bronStyles[bron.toLowerCase()] || defaultStyle;
 
   return (

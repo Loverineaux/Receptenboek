@@ -30,9 +30,11 @@ export default function ProfielPage() {
     }
   }, [user, loading, router])
 
+  const [uploading, setUploading] = useState(false)
+
   useEffect(() => {
     if (profile) {
-      setDisplayName(profile.full_name || '')
+      setDisplayName(profile.display_name || '')
       setBio(profile.bio || '')
       setAvatarUrl(profile.avatar_url || '')
     }
@@ -47,10 +49,9 @@ export default function ProfielPage() {
     const { error } = await supabase
       .from('profiles')
       .update({
-        full_name: displayName,
+        display_name: displayName,
         bio,
         avatar_url: avatarUrl,
-        updated_at: new Date().toISOString(),
       })
       .eq('id', user!.id)
 
@@ -109,7 +110,7 @@ export default function ProfielPage() {
         <div className="rounded-xl bg-surface p-6 shadow-sm border border-gray-100">
           {/* Avatar preview */}
           <div className="mb-6 flex items-center gap-4">
-            <div className="relative h-20 w-20 overflow-hidden rounded-full bg-gray-100">
+            <label className="relative h-20 w-20 cursor-pointer overflow-hidden rounded-full bg-gray-100">
               {avatarUrl ? (
                 <img
                   src={avatarUrl}
@@ -121,13 +122,65 @@ export default function ProfielPage() {
                   <User className="h-8 w-8 text-text-muted" />
                 </div>
               )}
-              <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors hover:bg-black/20">
-                <Camera className="h-5 w-5 text-white opacity-0 transition-opacity hover:opacity-100" />
+              <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors hover:bg-black/30">
+                <Camera className="h-5 w-5 text-white opacity-0 transition-opacity group-hover:opacity-100" />
               </div>
-            </div>
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                disabled={uploading}
+                onChange={async (e) => {
+                  const file = e.target.files?.[0]
+                  if (!file || !user) return
+
+                  setUploading(true)
+                  setError(null)
+
+                  const ext = file.name.split('.').pop()
+                  const path = `${user.id}/avatar.${ext}`
+
+                  const { error: uploadErr } = await supabase.storage
+                    .from('avatars')
+                    .upload(path, file, { upsert: true })
+
+                  if (uploadErr) {
+                    setError('Upload mislukt: ' + uploadErr.message)
+                    setUploading(false)
+                    return
+                  }
+
+                  const { data: urlData } = supabase.storage
+                    .from('avatars')
+                    .getPublicUrl(path)
+
+                  const newUrl = urlData.publicUrl
+                  setAvatarUrl(newUrl)
+
+                  // Save to profile immediately
+                  const { error: saveErr } = await supabase
+                    .from('profiles')
+                    .update({ avatar_url: newUrl })
+                    .eq('id', user.id)
+
+                  if (saveErr) {
+                    setError('Foto opgeslagen maar profiel update mislukt: ' + saveErr.message)
+                  } else {
+                    setSuccess('Profielfoto bijgewerkt')
+                  }
+
+                  setUploading(false)
+                }}
+              />
+              {uploading && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                </div>
+              )}
+            </label>
             <div>
               <p className="font-medium text-text-primary">
-                {profile?.full_name || 'Geen naam ingesteld'}
+                {profile?.display_name || 'Geen naam ingesteld'}
               </p>
               <p className="text-sm text-text-secondary">{user.email}</p>
             </div>
@@ -164,14 +217,9 @@ export default function ProfielPage() {
               />
             </div>
 
-            <Input
-              label="Avatar URL"
-              type="url"
-              placeholder="https://voorbeeld.nl/avatar.jpg"
-              value={avatarUrl}
-              onChange={(e) => setAvatarUrl(e.target.value)}
-              icon={<Camera className="h-4 w-4" />}
-            />
+            <p className="text-xs text-text-muted">
+              Klik op je profielfoto hierboven om een nieuwe te uploaden.
+            </p>
 
             <Button
               type="submit"

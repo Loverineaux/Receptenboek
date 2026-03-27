@@ -55,7 +55,7 @@ export async function POST(
     .insert({
       recipe_id: params.id,
       user_id: user.id,
-      body: body.tekst.trim(),
+      tekst: body.tekst.trim(),
       parent_id: body.parent_id || null,
     })
     .select(

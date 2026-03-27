@@ -26,13 +26,15 @@ interface StepRow {
 }
 
 interface NutritionState {
-  calories: string;
-  protein_grams: string;
-  carbs_grams: string;
-  fat_grams: string;
-  fiber_grams: string;
-  sugar_grams: string;
-  sodium_mg: string;
+  energie_kcal: string;
+  energie_kj: string;
+  vetten: string;
+  verzadigd: string;
+  koolhydraten: string;
+  suikers: string;
+  vezels: string;
+  eiwitten: string;
+  zout: string;
 }
 
 interface BenodigdheidRow {
@@ -41,19 +43,16 @@ interface BenodigdheidRow {
 
 export interface RecipeFormData {
   title: string;
-  description: string;
+  subtitle: string;
   image_url: string;
-  total_time_minutes: number | null;
-  prep_time_minutes: number | null;
-  cook_time_minutes: number | null;
-  difficulty: Difficulty;
-  source: Source;
-  source_url: string;
-  servings: number;
+  tijd: string;
+  moeilijkheid: Difficulty;
+  bron: Source;
+  basis_porties: number;
   is_public: boolean;
   weetje: string;
   allergenen: string;
-  ingredients: { hoeveelheid: number | null; eenheid: string | null; naam: string }[];
+  ingredients: { hoeveelheid: string | null; eenheid: string | null; naam: string }[];
   steps: { titel: string | null; beschrijving: string; afbeelding_url: string | null }[];
   nutrition: NutritionState | null;
   benodigdheden: string[];
@@ -101,13 +100,15 @@ const emptyStep = (): StepRow => ({
 });
 
 const emptyNutrition = (): NutritionState => ({
-  calories: '',
-  protein_grams: '',
-  carbs_grams: '',
-  fat_grams: '',
-  fiber_grams: '',
-  sugar_grams: '',
-  sodium_mg: '',
+  energie_kcal: '',
+  energie_kj: '',
+  vetten: '',
+  verzadigd: '',
+  koolhydraten: '',
+  suikers: '',
+  vezels: '',
+  eiwitten: '',
+  zout: '',
 });
 
 export default function RecipeForm({ initialData, onSubmit }: RecipeFormProps) {
@@ -115,36 +116,31 @@ export default function RecipeForm({ initialData, onSubmit }: RecipeFormProps) {
   const isFullRecipe = initialData && 'id' in initialData;
 
   const [title, setTitle] = useState(initialData?.title ?? '');
-  const [description, setDescription] = useState(initialData?.description ?? '');
+  const [subtitle, setSubtitle] = useState(initialData?.subtitle ?? '');
   const [imageUrl, setImageUrl] = useState(
     (isFullRecipe ? (initialData as RecipeWithRelations).image_url : '') ?? ''
   );
-  const [totalTime, setTotalTime] = useState(
-    initialData?.total_time_minutes?.toString() ?? ''
+  const [tijd, setTijd] = useState(
+    initialData?.tijd ?? ''
   );
-  const [prepTime, setPrepTime] = useState(
-    initialData?.prep_time_minutes?.toString() ?? ''
+  const [moeilijkheid, setMoeilijkheid] = useState<Difficulty>(
+    initialData?.moeilijkheid ?? 'Gemiddeld'
   );
-  const [cookTime, setCookTime] = useState(
-    initialData?.cook_time_minutes?.toString() ?? ''
+  const [bron, setBron] = useState<Source>(
+    initialData?.bron ?? 'Eigen recept'
   );
-  const [difficulty, setDifficulty] = useState<Difficulty>(
-    initialData?.difficulty ?? 'Gemiddeld'
-  );
-  const [source, setSource] = useState<Source>(
-    initialData?.source ?? 'Eigen recept'
-  );
-  const [sourceUrl, setSourceUrl] = useState(
-    (isFullRecipe ? (initialData as RecipeWithRelations).source_url : '') ?? ''
-  );
-  const [servings, setServings] = useState(
-    initialData?.servings?.toString() ?? '4'
+  const [basisPorties, setBasisPorties] = useState(
+    initialData?.basis_porties?.toString() ?? '2'
   );
   const [isPublic, setIsPublic] = useState(
     isFullRecipe ? (initialData as RecipeWithRelations).is_public : false
   );
-  const [weetje, setWeetje] = useState('');
-  const [allergenen, setAllergenen] = useState('');
+  const [weetje, setWeetje] = useState(
+    (isFullRecipe ? (initialData as RecipeWithRelations).weetje : '') ?? ''
+  );
+  const [allergenen, setAllergenen] = useState(
+    (isFullRecipe ? (initialData as RecipeWithRelations).allergenen : '') ?? ''
+  );
 
   // Dynamic rows
   const [ingredients, setIngredients] = useState<IngredientRow[]>(() => {
@@ -178,13 +174,15 @@ export default function RecipeForm({ initialData, onSubmit }: RecipeFormProps) {
       : null;
     if (n) {
       return {
-        calories: n.calories?.toString() ?? '',
-        protein_grams: n.protein_grams?.toString() ?? '',
-        carbs_grams: n.carbs_grams?.toString() ?? '',
-        fat_grams: n.fat_grams?.toString() ?? '',
-        fiber_grams: n.fiber_grams?.toString() ?? '',
-        sugar_grams: n.sugar_grams?.toString() ?? '',
-        sodium_mg: n.sodium_mg?.toString() ?? '',
+        energie_kcal: n.energie_kcal?.toString() ?? '',
+        energie_kj: n.energie_kj?.toString() ?? '',
+        vetten: n.vetten?.toString() ?? '',
+        verzadigd: n.verzadigd?.toString() ?? '',
+        koolhydraten: n.koolhydraten?.toString() ?? '',
+        suikers: n.suikers?.toString() ?? '',
+        vezels: n.vezels?.toString() ?? '',
+        eiwitten: n.eiwitten?.toString() ?? '',
+        zout: n.zout?.toString() ?? '',
       };
     }
     return emptyNutrition();
@@ -267,22 +265,19 @@ export default function RecipeForm({ initialData, onSubmit }: RecipeFormProps) {
 
     const data: RecipeFormData = {
       title,
-      description,
+      subtitle,
       image_url: imageUrl,
-      total_time_minutes: totalTime ? parseInt(totalTime, 10) : null,
-      prep_time_minutes: prepTime ? parseInt(prepTime, 10) : null,
-      cook_time_minutes: cookTime ? parseInt(cookTime, 10) : null,
-      difficulty,
-      source,
-      source_url: sourceUrl,
-      servings: parseInt(servings, 10) || 4,
+      tijd,
+      moeilijkheid,
+      bron,
+      basis_porties: parseInt(basisPorties, 10) || 2,
       is_public: isPublic,
       weetje,
       allergenen,
       ingredients: ingredients
         .filter((i) => i.naam.trim() !== '')
         .map((i) => ({
-          hoeveelheid: i.hoeveelheid ? parseFloat(i.hoeveelheid) : null,
+          hoeveelheid: i.hoeveelheid || null,
           eenheid: i.eenheid || null,
           naam: i.naam.trim(),
         })),
@@ -301,8 +296,13 @@ export default function RecipeForm({ initialData, onSubmit }: RecipeFormProps) {
     };
 
     try {
+      console.log('[RecipeForm] Calling onSubmit...');
       await onSubmit(data);
+      console.log('[RecipeForm] onSubmit resolved');
+    } catch (err: any) {
+      console.error('[RecipeForm] onSubmit error:', err.message);
     } finally {
+      console.log('[RecipeForm] setSubmitting(false)');
       setSubmitting(false);
     }
   };
@@ -333,8 +333,8 @@ export default function RecipeForm({ initialData, onSubmit }: RecipeFormProps) {
             className={selectClass}
             rows={2}
             placeholder="Korte beschrijving van het recept..."
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
+            value={subtitle}
+            onChange={(e) => setSubtitle(e.target.value)}
           />
         </div>
 
@@ -346,37 +346,20 @@ export default function RecipeForm({ initialData, onSubmit }: RecipeFormProps) {
           onChange={(e) => setImageUrl(e.target.value)}
         />
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <Input
-            label="Voorbereidingstijd (min)"
-            type="number"
-            min={0}
-            value={prepTime}
-            onChange={(e) => setPrepTime(e.target.value)}
-          />
-          <Input
-            label="Bereidingstijd (min)"
-            type="number"
-            min={0}
-            value={cookTime}
-            onChange={(e) => setCookTime(e.target.value)}
-          />
-          <Input
-            label="Totale tijd (min)"
-            type="number"
-            min={0}
-            value={totalTime}
-            onChange={(e) => setTotalTime(e.target.value)}
-          />
-        </div>
+        <Input
+          label="Tijd (bijv. 25 min)"
+          placeholder="Bijv. 25 min"
+          value={tijd}
+          onChange={(e) => setTijd(e.target.value)}
+        />
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div>
             <label className={labelClass}>Moeilijkheid</label>
             <select
               className={selectClass}
-              value={difficulty}
-              onChange={(e) => setDifficulty(e.target.value as Difficulty)}
+              value={moeilijkheid}
+              onChange={(e) => setMoeilijkheid(e.target.value as Difficulty)}
             >
               {difficulties.map((d) => (
                 <option key={d} value={d}>
@@ -404,8 +387,8 @@ export default function RecipeForm({ initialData, onSubmit }: RecipeFormProps) {
             <label className={labelClass}>Bron</label>
             <select
               className={selectClass}
-              value={source}
-              onChange={(e) => setSource(e.target.value as Source)}
+              value={bron}
+              onChange={(e) => setBron(e.target.value as Source)}
             >
               {sources.map((s) => (
                 <option key={s} value={s}>
@@ -416,22 +399,14 @@ export default function RecipeForm({ initialData, onSubmit }: RecipeFormProps) {
           </div>
         </div>
 
-        <Input
-          label="Bron URL"
-          type="url"
-          placeholder="https://..."
-          value={sourceUrl}
-          onChange={(e) => setSourceUrl(e.target.value)}
-        />
-
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Input
             label="Basis porties *"
             type="number"
             min={1}
             max={20}
-            value={servings}
-            onChange={(e) => setServings(e.target.value)}
+            value={basisPorties}
+            onChange={(e) => setBasisPorties(e.target.value)}
             required
           />
 
@@ -587,48 +562,51 @@ export default function RecipeForm({ initialData, onSubmit }: RecipeFormProps) {
         </button>
 
         {nutritionOpen && (
-          <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3">
             <Input
-              label="Calorieen (kcal)"
-              type="number"
-              value={nutrition.calories}
-              onChange={(e) => updateNutrition('calories', e.target.value)}
+              label="Energie (kcal)"
+              value={nutrition.energie_kcal}
+              onChange={(e) => updateNutrition('energie_kcal', e.target.value)}
             />
             <Input
-              label="Eiwitten (g)"
-              type="number"
-              value={nutrition.protein_grams}
-              onChange={(e) => updateNutrition('protein_grams', e.target.value)}
+              label="Energie (kJ)"
+              value={nutrition.energie_kj}
+              onChange={(e) => updateNutrition('energie_kj', e.target.value)}
             />
             <Input
-              label="Koolhydraten (g)"
-              type="number"
-              value={nutrition.carbs_grams}
-              onChange={(e) => updateNutrition('carbs_grams', e.target.value)}
+              label="Vetten"
+              value={nutrition.vetten}
+              onChange={(e) => updateNutrition('vetten', e.target.value)}
             />
             <Input
-              label="Vet (g)"
-              type="number"
-              value={nutrition.fat_grams}
-              onChange={(e) => updateNutrition('fat_grams', e.target.value)}
+              label="Verzadigd"
+              value={nutrition.verzadigd}
+              onChange={(e) => updateNutrition('verzadigd', e.target.value)}
             />
             <Input
-              label="Vezels (g)"
-              type="number"
-              value={nutrition.fiber_grams}
-              onChange={(e) => updateNutrition('fiber_grams', e.target.value)}
+              label="Koolhydraten"
+              value={nutrition.koolhydraten}
+              onChange={(e) => updateNutrition('koolhydraten', e.target.value)}
             />
             <Input
-              label="Suikers (g)"
-              type="number"
-              value={nutrition.sugar_grams}
-              onChange={(e) => updateNutrition('sugar_grams', e.target.value)}
+              label="Suikers"
+              value={nutrition.suikers}
+              onChange={(e) => updateNutrition('suikers', e.target.value)}
             />
             <Input
-              label="Natrium (mg)"
-              type="number"
-              value={nutrition.sodium_mg}
-              onChange={(e) => updateNutrition('sodium_mg', e.target.value)}
+              label="Vezels"
+              value={nutrition.vezels}
+              onChange={(e) => updateNutrition('vezels', e.target.value)}
+            />
+            <Input
+              label="Eiwitten"
+              value={nutrition.eiwitten}
+              onChange={(e) => updateNutrition('eiwitten', e.target.value)}
+            />
+            <Input
+              label="Zout"
+              value={nutrition.zout}
+              onChange={(e) => updateNutrition('zout', e.target.value)}
             />
           </div>
         )}

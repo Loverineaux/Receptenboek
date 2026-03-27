@@ -13,14 +13,6 @@ import type { RecipeWithRelations, Source } from '@/types';
 
 const PAGE_SIZE = 20;
 
-const sourceOptions: Source[] = [
-  'HelloFresh',
-  'Albert Heijn',
-  'Jumbo',
-  'Broodje Dunner',
-  'Eigen recept',
-];
-
 type SortOption = 'newest' | 'rating' | 'time';
 
 export default function ReceptenPage() {
@@ -38,6 +30,23 @@ export default function ReceptenPage() {
   const [source, setSource] = useState<string>('');
   const [sort, setSort] = useState<SortOption>('newest');
   const [offset, setOffset] = useState(0);
+  const [sourceOptions, setSourceOptions] = useState<string[]>([]);
+
+  // Fetch unique sources from DB
+  useEffect(() => {
+    const fetchSources = async () => {
+      const { data } = await supabase
+        .from('recipes')
+        .select('bron');
+      if (data) {
+        const unique = [...new Set(data.map((r: any) => r.bron).filter(Boolean))] as string[];
+        unique.sort((a, b) => a.localeCompare(b));
+        setSourceOptions(unique);
+      }
+    };
+    fetchSources();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const fetchRecipes = useCallback(
     async (reset = false) => {
@@ -54,28 +63,26 @@ export default function ReceptenPage() {
           .from('recipes')
           .select(
             `
-            *,
-            ingredients(*),
-            steps(*),
-            tags:recipe_tags(tag:tags(*)),
-            nutrition(*),
-            ratings(*)
+            id, title, subtitle, image_url, bron, tijd, moeilijkheid, created_at,
+            tags:recipe_tags(tag:tags(id, name)),
+            ratings(sterren),
+            comments(id),
+            user:profiles!recipes_user_id_fkey(id, display_name, avatar_url)
           `,
             { count: 'exact' }
-          )
-          .eq('user_id', user?.id ?? '');
+          );
 
         if (search) {
           query = query.ilike('title', `%${search}%`);
         }
 
         if (source) {
-          query = query.eq('source', source);
+          query = query.eq('bron', source);
         }
 
         switch (sort) {
           case 'time':
-            query = query.order('total_time_minutes', {
+            query = query.order('tijd', {
               ascending: true,
               nullsFirst: false,
             });
@@ -88,14 +95,19 @@ export default function ReceptenPage() {
 
         query = query.range(currentOffset, currentOffset + PAGE_SIZE - 1);
 
-        const { data, count } = await query;
+        const { data, count, error: queryError } = await query;
+
+        console.log('[Recepten] Query result:', { count, error: queryError?.message, dataLength: data?.length });
+        if (queryError) {
+          console.error('[Recepten] Supabase error:', queryError);
+        }
 
         // Post-process
         const processed: RecipeWithRelations[] = (data ?? []).map((r: any) => {
           const ratings = r.ratings ?? [];
           const avg =
             ratings.length > 0
-              ? ratings.reduce((s: number, rt: any) => s + rt.score, 0) /
+              ? ratings.reduce((s: number, rt: any) => s + rt.sterren, 0) /
                 ratings.length
               : null;
 
@@ -107,11 +119,10 @@ export default function ReceptenPage() {
             ...r,
             tags: flatTags,
             average_rating: avg,
-            nutrition: Array.isArray(r.nutrition)
-              ? r.nutrition[0] ?? null
-              : r.nutrition,
+            nutrition: null,
+            ingredients: [],
+            steps: [],
             comments: [],
-            user: null,
           };
         });
 
@@ -165,9 +176,7 @@ export default function ReceptenPage() {
 
   // Re-fetch when filters change
   useEffect(() => {
-    if (user) {
-      fetchRecipes(true);
-    }
+    fetchRecipes(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, category, source, sort, user?.id]);
 
