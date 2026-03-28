@@ -1,9 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
+  ArrowLeft,
   Clock,
   Heart,
   Share2,
@@ -23,7 +24,102 @@ import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
 import type { RecipeWithRelations, Comment as CommentType } from '@/types';
 
-// ── fraction formatting ──────────────────────────
+// ── fraction parsing + formatting ────────────────
+
+const UNICODE_FRACTIONS: Record<string, number> = {
+  '\u00BC': 0.25, // ¼
+  '\u00BD': 0.5,  // ½
+  '\u00BE': 0.75, // ¾
+  '\u2153': 0.33, // ⅓
+  '\u2154': 0.66, // ⅔
+  '\u215B': 0.125, // ⅛
+};
+
+// Dutch word amounts
+const DUTCH_AMOUNTS: Record<string, number> = {
+  'halve': 0.5, 'half': 0.5,
+  'kwart': 0.25,
+  'driekwart': 0.75,
+  'hele': 1, 'heel': 1,
+  'dubbele': 2, 'dubbel': 2,
+};
+
+function parseAmount(text: string | null): number | null {
+  if (!text) return null;
+  let str = text.trim().toLowerCase();
+  if (!str) return null;
+
+  // Dutch word amounts: "halve" → 0.5
+  if (DUTCH_AMOUNTS[str] !== undefined) return DUTCH_AMOUNTS[str];
+
+  // Replace comma with dot: "1,5" → "1.5"
+  str = str.replace(',', '.');
+
+  // Handle unicode fractions: "1½" → 1.5, "½" → 0.5
+  for (const [char, val] of Object.entries(UNICODE_FRACTIONS)) {
+    if (str.includes(char)) {
+      const before = str.replace(char, '').trim();
+      const whole = before ? parseFloat(before) : 0;
+      return isNaN(whole) ? val : whole + val;
+    }
+  }
+
+  // Handle text fractions: "1/2" → 0.5, "3/4" → 0.75
+  const fracMatch = str.match(/^(\d+)\s*\/\s*(\d+)$/);
+  if (fracMatch) {
+    return parseInt(fracMatch[1]) / parseInt(fracMatch[2]);
+  }
+
+  // Handle mixed: "1 1/2" → 1.5
+  const mixedMatch = str.match(/^(\d+)\s+(\d+)\s*\/\s*(\d+)$/);
+  if (mixedMatch) {
+    return parseInt(mixedMatch[1]) + parseInt(mixedMatch[2]) / parseInt(mixedMatch[3]);
+  }
+
+  const num = parseFloat(str);
+  return isNaN(num) ? null : num;
+}
+
+/**
+ * Scale numbers in step text based on portion ratio.
+ * Smart about what to scale (ingredients) vs what not to (time, temp, steps).
+ */
+function scaleStepText(text: string, ratio: number): string {
+  if (ratio === 1) return text;
+
+  // Words that should NOT scale
+  const skipWords = /^(minuut|minuten|min|uur|uren|sec|seconden|graden|°|cm|mm|meter|stap|keer\s+per|procent|%)/i;
+
+  // Words that should scale AND round to whole numbers (countable items)
+  const wholeNumberWords = /^(bord|borden|glas|glazen|kom|kommen|schaal|schalen|pannen?|lepels?|vork|vorken|mes|messen|kopjes?|mokken?)/i;
+
+  // Words that should scale (ingredient amounts)
+  const scaleWords = /^(g|gram|kg|ml|l|dl|cl|el|tl|stuks?|plakjes?|sneetjes?|teentjes?|blaadjes?|takjes?|scheutjes?|snufjes?|eetlepels?|theelepels?|handjes?|bosjes?|banaan|bananen|ei|eieren|ui|uien|tomaat|tomaten|aardappel|aardappelen|wortel|wortelen|plak|plakken|schijf|schijven|bal|ballen|wrap|wraps|brood|broodjes|stuk|stukken|stukjes|snee|sneetje|beker|bekers|blik|blikjes?|zakjes?|potjes?)/i;
+
+  return text.replace(/(\d+[\d,./]*)/g, (match, _num, offset) => {
+    const after = text.substring(offset + match.length).trimStart();
+
+    // Don't scale time/temperature
+    if (skipWords.test(after)) return match;
+
+    const parsed = parseFloat(match.replace(',', '.'));
+    if (isNaN(parsed)) return match;
+
+    // Check if followed by a scalable word
+    if (wholeNumberWords.test(after)) {
+      // Round to whole numbers for countable non-food items
+      return String(Math.round(parsed * ratio));
+    }
+
+    if (scaleWords.test(after) || /^[a-z]/.test(after)) {
+      const scaled = parsed * ratio;
+      if (Number.isInteger(scaled)) return String(scaled);
+      return scaled.toFixed(1).replace(/\.0$/, '');
+    }
+
+    return match;
+  });
+}
 
 function toFraction(val: number): string {
   if (val === 0) return '0';
@@ -78,6 +174,9 @@ export default function RecipeDetailPage() {
   const [submittingComment, setSubmittingComment] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [scaledSteps, setScaledSteps] = useState<any[] | null>(null);
+  const [scalingSteps, setScalingSteps] = useState(false);
+  const scaledForPortions = useRef<number | null>(null);
 
   // ── fetch recipe ────────────────────────────────
 
@@ -158,6 +257,45 @@ export default function RecipeDetailPage() {
   useEffect(() => {
     fetchRecipe();
   }, [fetchRecipe]);
+
+  // ── scale steps with AI ────────────────────────
+
+  const scaleStepsWithAi = useCallback(async (newPortions: number) => {
+    if (!recipe || newPortions === recipe.basis_porties) {
+      setScaledSteps(null);
+      scaledForPortions.current = null;
+      return;
+    }
+    if (scaledForPortions.current === newPortions) return;
+
+    setScalingSteps(true);
+    try {
+      const res = await fetch(`/api/recipes/${params.id}/scale`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          steps: recipe.steps,
+          ingredients: recipe.ingredients,
+          basisPorties: recipe.basis_porties,
+          newPorties: newPortions,
+        }),
+      });
+      if (res.ok) {
+        const { steps } = await res.json();
+        setScaledSteps(steps);
+        scaledForPortions.current = newPortions;
+      }
+    } catch {
+      // Fallback: keep regex-scaled text
+    } finally {
+      setScalingSteps(false);
+    }
+  }, [recipe, params.id]);
+
+  const handlePortionChange = (newPortions: number) => {
+    setPortions(newPortions);
+    scaleStepsWithAi(newPortions);
+  };
 
   // ── actions ────────────────────────────────────
 
@@ -284,8 +422,14 @@ export default function RecipeDetailPage() {
         {/* Gradient overlay */}
         <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/60 to-transparent" />
 
-        {/* BronBadge */}
-        <div className="absolute left-4 top-4">
+        {/* Back button + BronBadge */}
+        <div className="absolute left-4 top-4 flex items-center gap-2">
+          <button
+            onClick={() => router.back()}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-white/80 backdrop-blur-sm transition-colors hover:bg-white"
+          >
+            <ArrowLeft className="h-5 w-5 text-gray-600" />
+          </button>
           <BronBadge bron={recipe.bron} />
         </div>
 
@@ -386,7 +530,7 @@ export default function RecipeDetailPage() {
       {/* ── Portie selector ────────────────────────── */}
       <div className="flex items-center gap-3">
         <span className="text-sm font-medium text-text-primary">Porties:</span>
-        <PortieSelector value={portions} onChange={setPortions} />
+        <PortieSelector value={portions} onChange={handlePortionChange} />
       </div>
 
       {/* ── Rate (interactive for logged-in users) ── */}
@@ -420,8 +564,8 @@ export default function RecipeDetailPage() {
       {tab === 'ingredienten' && (
         <div className="space-y-1">
           {recipe.ingredients.map((ing) => {
-            const parsed = ing.hoeveelheid ? parseFloat(ing.hoeveelheid) : null;
-            const scaled = parsed !== null && !isNaN(parsed) ? parsed * ratio : null;
+            const parsed = parseAmount(ing.hoeveelheid);
+            const scaled = parsed !== null ? parsed * ratio : null;
             const amount = scaled !== null ? toFraction(scaled) : (ing.hoeveelheid ?? '');
             return (
               <label
@@ -448,32 +592,40 @@ export default function RecipeDetailPage() {
       )}
 
       {tab === 'bereiding' && (
-        <ol className="space-y-6">
-          {recipe.steps.map((step, idx) => (
-            <li key={step.id} className="flex gap-4">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-white">
-                {idx + 1}
-              </div>
-              <div className="flex-1 space-y-2">
-                {step.titel && (
-                  <h4 className="font-semibold text-text-primary">
-                    {step.titel}
-                  </h4>
-                )}
-                <p className="text-sm text-text-secondary whitespace-pre-line">
-                  {step.beschrijving}
-                </p>
-                {step.afbeelding_url && (
-                  <img
-                    src={step.afbeelding_url}
-                    alt={`Stap ${idx + 1}`}
-                    className="mt-2 max-h-48 rounded-lg object-cover"
-                  />
-                )}
-              </div>
-            </li>
-          ))}
-        </ol>
+        <div className="space-y-6">
+          {scalingSteps && (
+            <div className="flex items-center gap-2 rounded-lg bg-primary/5 px-4 py-2 text-sm text-primary">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+              Bereiding aanpassen voor {portions} porties...
+            </div>
+          )}
+          <ol className="space-y-6">
+            {(scaledSteps || recipe.steps).map((step, idx) => (
+              <li key={step.id || idx} className="flex gap-4">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-white">
+                  {idx + 1}
+                </div>
+                <div className="flex-1 space-y-2">
+                  {step.titel && (
+                    <h4 className="font-semibold text-text-primary">
+                      {step.titel}
+                    </h4>
+                  )}
+                  <p className="text-sm text-text-secondary whitespace-pre-line">
+                    {scaledSteps ? step.beschrijving : scaleStepText(step.beschrijving, ratio)}
+                  </p>
+                  {step.afbeelding_url && (
+                    <img
+                      src={step.afbeelding_url}
+                      alt={`Stap ${idx + 1}`}
+                      className="mt-2 max-h-48 rounded-lg object-cover"
+                    />
+                  )}
+                </div>
+              </li>
+            ))}
+          </ol>
+        </div>
       )}
 
       {tab === 'voeding' && recipe.nutrition && (

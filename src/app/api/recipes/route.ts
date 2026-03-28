@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
       title: body.title,
       subtitle: body.subtitle || null,
       image_url: body.image_url || null,
-      bron: body.bron || 'Eigen recept',
+      bron: (body.bron && body.bron.trim()) || 'Eigen recept',
       basis_porties: body.basis_porties ?? 2,
       tijd: body.tijd || null,
       moeilijkheid: body.moeilijkheid || 'Gemiddeld',

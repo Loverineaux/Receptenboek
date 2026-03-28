@@ -2,25 +2,24 @@
 
 import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { FileText, Link as LinkIcon, Camera, FileUp, PenLine, Loader2, Check } from 'lucide-react';
+import { Link as LinkIcon, Camera, FileUp, PenLine, Loader2, Check } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import RecipeForm, { RecipeFormData } from '@/components/recipes/RecipeForm';
 import type { Source, Difficulty } from '@/types';
 
-type ImportTab = 'handmatig' | 'url' | 'tekst' | 'foto' | 'pdf';
+type ImportTab = 'url' | 'foto' | 'pdf' | 'handmatig';
 
 const tabs: { key: ImportTab; label: string; icon: React.ReactNode }[] = [
-  { key: 'handmatig', label: 'Handmatig', icon: <PenLine className="h-4 w-4" /> },
   { key: 'url', label: 'URL', icon: <LinkIcon className="h-4 w-4" /> },
-  { key: 'tekst', label: 'Tekst', icon: <FileText className="h-4 w-4" /> },
   { key: 'foto', label: 'Foto', icon: <Camera className="h-4 w-4" /> },
   { key: 'pdf', label: 'PDF', icon: <FileUp className="h-4 w-4" /> },
+  { key: 'handmatig', label: 'Handmatig', icon: <PenLine className="h-4 w-4" /> },
 ];
 
 function mapSource(bron?: string): Source {
-  return bron || 'Eigen recept';
+  return (bron && bron.trim()) || 'Eigen recept';
 }
 
 function mapDifficulty(moeilijkheid?: string): Difficulty {
@@ -92,7 +91,7 @@ export default function NieuwReceptPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<ImportTab>('handmatig');
+  const [activeTab, setActiveTab] = useState<ImportTab>('url');
   const [extractedData, setExtractedData] = useState<any>(null);
   const [extracting, setExtracting] = useState(false);
   const [extractError, setExtractError] = useState<string | null>(null);
@@ -101,7 +100,6 @@ export default function NieuwReceptPage() {
 
   // Import inputs
   const [importUrl, setImportUrl] = useState('');
-  const [importText, setImportText] = useState('');
 
   // PDF import
   const [pdfFile, setPdfFile] = useState<File | null>(null);
@@ -175,40 +173,6 @@ export default function NieuwReceptPage() {
     }
   };
 
-  const handleExtractText = async () => {
-    setExtracting(true);
-    setExtractError(null);
-    setProgressStep(0);
-
-    const interval = setInterval(() => {
-      setProgressStep((prev) => (prev < 3 ? prev + 1 : prev));
-    }, 2500);
-
-    try {
-      const res = await fetch('/api/extract/text', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: importText }),
-      });
-
-      clearInterval(interval);
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Extractie mislukt');
-      }
-
-      const extracted = await res.json();
-      setExtractedData(extracted);
-      setActiveTab('handmatig');
-    } catch (err: any) {
-      clearInterval(interval);
-      setExtractError(err.message);
-    } finally {
-      setExtracting(false);
-    }
-  };
-
   const [pdfProgress, setPdfProgress] = useState('');
 
   const handleExtractPdf = async () => {
@@ -221,35 +185,62 @@ export default function NieuwReceptPage() {
     setPdfProgress('PDF inlezen...');
 
     try {
-      // Step 1: Extract text client-side
-      console.log('[PDF Import] Extracting text from:', pdfFile.name);
-      const { extractPdfText } = await import('@/lib/pdf-reader');
-      const pages = await extractPdfText(pdfFile, (current, total) => {
-        setPdfProgress(`Pagina ${current} van ${total} inlezen...`);
-      });
+      // Upload PDF directly to API — Python handles extraction
+      console.log('[PDF Import] Uploading:', pdfFile.name);
+      setPdfProgress('PDF uploaden en analyseren...');
 
-      console.log(`[PDF Import] Extracted ${pages.length} pages with text`);
+      const formData = new FormData();
+      formData.append('pdf', pdfFile);
 
-      if (pages.length === 0) {
-        throw new Error('Geen tekst gevonden in PDF');
-      }
-
-      // Step 2: Send text to API for recipe extraction
-      setPdfProgress(`${pages.length} pagina's analyseren met AI...`);
       const res = await fetch('/api/extract/pdf', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pages: pages.map(p => p.text) }),
+        body: formData,
       });
 
-      if (!res.ok) {
+      if (!res.ok && res.headers.get('content-type')?.includes('application/json')) {
         const err = await res.json();
         throw new Error(err.error || 'PDF extractie mislukt');
       }
 
-      const { recipes, total } = await res.json();
-      console.log(`[PDF Import] Found ${total} recipes`);
-      setPdfRecipes(recipes);
+      // Read SSE stream
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      const foundRecipes: any[] = [];
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const event = JSON.parse(line.slice(6));
+
+            if (event.type === 'status') {
+              setPdfProgress(event.message);
+            } else if (event.type === 'batch_done') {
+              foundRecipes.push(...event.recipes);
+              setPdfRecipes([...foundRecipes]);
+              setPdfProgress(`Batch ${event.completed}/${event.total_batches} klaar — ${foundRecipes.length} recepten gevonden`);
+            } else if (event.type === 'batch_error') {
+              setPdfProgress(`Batch ${event.batch} mislukt, doorgaan...`);
+            } else if (event.type === 'done') {
+              console.log(`[PDF Import] Done: ${event.total} recipes`);
+              setPdfRecipes(event.recipes);
+            } else if (event.type === 'error') {
+              throw new Error(event.error);
+            }
+          } catch (parseErr: any) {
+            if (parseErr.message !== event?.error) continue;
+            throw parseErr;
+          }
+        }
+      }
     } catch (err: any) {
       console.error('[PDF Import] Error:', err.message);
       setExtractError(err.message);
@@ -266,7 +257,28 @@ export default function NieuwReceptPage() {
     setPdfSaving((prev) => new Set(prev).add(index));
 
     try {
-      const formData = mapExtractedToFormData(recipe);
+      let imageUrl = recipe.image_url || '';
+
+      // Upload image_data (base64 from PDF) to Supabase Storage if present
+      if (recipe.image_data && !imageUrl) {
+        try {
+          const { createClient } = await import('@/lib/supabase/client');
+          const supabase = createClient();
+          const blob = await fetch(recipe.image_data).then(r => r.blob());
+          const path = `recipes/${Date.now()}-${index}.jpg`;
+          const { error: upErr } = await supabase.storage
+            .from('recipe-images')
+            .upload(path, blob, { contentType: 'image/jpeg', upsert: true });
+          if (!upErr) {
+            const { data: urlData } = supabase.storage.from('recipe-images').getPublicUrl(path);
+            imageUrl = urlData.publicUrl;
+          }
+        } catch (imgErr: any) {
+          console.warn('[PDF Import] Image upload failed:', imgErr.message);
+        }
+      }
+
+      const formData = mapExtractedToFormData({ ...recipe, image_url: imageUrl });
       const res = await fetch('/api/recipes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -298,6 +310,8 @@ export default function NieuwReceptPage() {
         await handleSavePdfRecipe(i);
       }
     }
+    // All saved — redirect to recipes
+    router.push('/recepten');
   };
 
   const handleSubmit = async (data: RecipeFormData) => {
@@ -425,45 +439,6 @@ export default function NieuwReceptPage() {
             disabled={!importUrl.trim() || extracting}
           >
             {extracting ? 'Bezig...' : 'Importeer & opslaan'}
-          </Button>
-        </div>
-      )}
-
-      {/* ── Tekst import ───────────────────────────── */}
-      {activeTab === 'tekst' && (
-        <div className="space-y-4 rounded-xl border bg-surface p-6">
-          <h2 className="text-lg font-semibold text-text-primary">
-            Plak recepttekst
-          </h2>
-          <p className="text-sm text-text-secondary">
-            Plak de volledige recepttekst hieronder en wij structureren het voor je.
-          </p>
-          <textarea
-            className="w-full rounded-lg border border-gray-300 bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-            rows={10}
-            placeholder="Plak hier je recepttekst..."
-            value={importText}
-            onChange={(e) => setImportText(e.target.value)}
-            disabled={extracting}
-          />
-
-          {/* Progress indicator for text */}
-          {extracting && (
-            <div className="flex items-center gap-3 rounded-lg bg-primary/5 p-4 text-sm">
-              <Loader2 className="h-5 w-5 animate-spin text-primary" />
-              <span className="font-medium text-text-primary">
-                {PROGRESS_STEPS[Math.min(progressStep, 3)]}
-              </span>
-            </div>
-          )}
-
-          <Button
-            variant="primary"
-            loading={extracting}
-            onClick={handleExtractText}
-            disabled={!importText.trim() || extracting}
-          >
-            Extracteer
           </Button>
         </div>
       )}

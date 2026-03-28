@@ -21,15 +21,12 @@ export default function ReceptenPage() {
 
   const [recipes, setRecipes] = useState<RecipeWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [total, setTotal] = useState(0);
 
   // Filters
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<string | null>(null);
   const [source, setSource] = useState<string>('');
   const [sort, setSort] = useState<SortOption>('newest');
-  const [offset, setOffset] = useState(0);
   const [sourceOptions, setSourceOptions] = useState<string[]>([]);
 
   // Fetch unique sources from DB
@@ -49,27 +46,21 @@ export default function ReceptenPage() {
   }, []);
 
   const fetchRecipes = useCallback(
-    async (reset = false) => {
-      const currentOffset = reset ? 0 : offset;
-
-      if (reset) {
-        setLoading(true);
-      } else {
-        setLoadingMore(true);
-      }
+    async () => {
+      setLoading(true);
 
       try {
         let query = supabase
           .from('recipes')
           .select(
             `
-            id, title, subtitle, image_url, bron, tijd, moeilijkheid, created_at,
+            id, title, subtitle, image_url, bron, tijd, moeilijkheid, categorie, created_at,
+            ingredients(naam),
             tags:recipe_tags(tag:tags(id, name)),
             ratings(sterren),
             comments(id),
             user:profiles!recipes_user_id_fkey(id, display_name, avatar_url)
-          `,
-            { count: 'exact' }
+          `
           );
 
         if (search) {
@@ -82,10 +73,7 @@ export default function ReceptenPage() {
 
         switch (sort) {
           case 'time':
-            query = query.order('tijd', {
-              ascending: true,
-              nullsFirst: false,
-            });
+            query = query.order('tijd', { ascending: true, nullsFirst: false });
             break;
           case 'rating':
           case 'newest':
@@ -93,11 +81,8 @@ export default function ReceptenPage() {
             query = query.order('created_at', { ascending: false });
         }
 
-        query = query.range(currentOffset, currentOffset + PAGE_SIZE - 1);
+        const { data, error: queryError } = await query;
 
-        const { data, count, error: queryError } = await query;
-
-        console.log('[Recepten] Query result:', { count, error: queryError?.message, dataLength: data?.length });
         if (queryError) {
           console.error('[Recepten] Supabase error:', queryError);
         }
@@ -120,20 +105,45 @@ export default function ReceptenPage() {
             tags: flatTags,
             average_rating: avg,
             nutrition: null,
-            ingredients: [],
             steps: [],
-            comments: [],
           };
         });
 
-        // Client-side category filter (tag-based)
+        // Client-side category filter
         let filtered = processed;
         if (category) {
-          filtered = processed.filter((r) =>
-            r.tags.some(
-              (t) => t.name.toLowerCase() === category.toLowerCase()
-            )
-          );
+          const cat = category.toLowerCase();
+          filtered = processed.filter((r) => {
+            if (r.tags.some((t) => t.name.toLowerCase() === cat)) return true;
+            if (r.categorie && r.categorie.toLowerCase().includes(cat)) return true;
+            const titleLower = r.title.toLowerCase();
+            const ingNames = (r.ingredients || []).map((i: any) => (i.naam || '').toLowerCase()).join(' ');
+            const allText = `${titleLower} ${ingNames}`;
+            const meatWords = ['kip', 'chicken', 'biefstuk', 'gehakt', 'runder', 'varken', 'spek', 'bacon', 'boerenworst', 'worst', 'burger', 'bavette', 'beef', 'ham', 'lamb', 'lam', 'kippendij', 'kipfilet'];
+            const fishWords = ['vis', 'zalm', 'koolvis', 'garnaal', 'tonijn', 'fish', 'pangasius', 'kabeljauw', 'scampi', 'kreeft'];
+            const dairyEggWords = ['kaas', 'cheese', 'mozzarella', 'feta', 'brie', 'pecorino', 'burrata', 'geitenkaas', 'halloumi', 'parmezan', 'parmezaan', 'ricotta', 'mascarpone', 'room', 'melk', 'milk', 'boter', 'butter', 'yoghurt', 'crème', 'creme', 'ei', 'eier', 'egg'];
+            const hasMeat = meatWords.some((w) => allText.includes(w));
+            const hasFish = fishWords.some((w) => allText.includes(w));
+            const hasDairy = dairyEggWords.some((w) => {
+              // Avoid false positives: "ei" in "eigenlijk", use word boundary check
+              if (w === 'ei') return /\bei\b|\beier/.test(allText);
+              if (w === 'room') return /\broom\b|slagroom|kokosroom/.test(allText);
+              return allText.includes(w);
+            });
+
+            switch (cat) {
+              case 'kip': return allText.includes('kip') || allText.includes('chicken');
+              case 'vlees': return hasMeat;
+              case 'vis': return hasFish;
+              case 'vegetarisch': return !hasMeat && !hasFish;
+              case 'veganistisch': return !hasMeat && !hasFish && !hasDairy;
+              case 'pasta': return allText.includes('pasta') || allText.includes('conchiglie') || allText.includes('casarecce') || allText.includes('cannelloni') || allText.includes('spaghetti') || allText.includes('lasagne') || allText.includes('penne') || allText.includes('noedel');
+              case 'salade': return allText.includes('salade') || allText.includes('salad');
+              case 'soep': return allText.includes('soep') || allText.includes('soup');
+              case 'dessert': return allText.includes('dessert') || allText.includes('taart') || allText.includes('cake') || allText.includes('tiramisu');
+              default: return false;
+            }
+          });
         }
 
         // Client-side rating sort
@@ -157,26 +167,17 @@ export default function ReceptenPage() {
           }));
         }
 
-        if (reset) {
-          setRecipes(filtered);
-          setOffset(PAGE_SIZE);
-        } else {
-          setRecipes((prev) => [...prev, ...filtered]);
-          setOffset((prev) => prev + PAGE_SIZE);
-        }
-
-        setTotal(count ?? 0);
+        setRecipes(filtered);
       } finally {
         setLoading(false);
-        setLoadingMore(false);
       }
     },
-    [supabase, user, search, category, source, sort, offset]
+    [supabase, user, search, category, source, sort]
   );
 
   // Re-fetch when filters change
   useEffect(() => {
-    fetchRecipes(true);
+    fetchRecipes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, category, source, sort, user?.id]);
 
@@ -202,8 +203,6 @@ export default function ReceptenPage() {
       )
     );
   };
-
-  const hasMore = recipes.length < total;
 
   return (
     <div className="space-y-6">
@@ -266,17 +265,6 @@ export default function ReceptenPage() {
             ))}
           </div>
 
-          {hasMore && (
-            <div className="flex justify-center pt-4">
-              <Button
-                variant="secondary"
-                loading={loadingMore}
-                onClick={() => fetchRecipes(false)}
-              >
-                Meer laden
-              </Button>
-            </div>
-          )}
         </>
       )}
 

@@ -177,11 +177,16 @@ export function jsonLdToRecipe(ld: any, ogImage: string | null) {
     else if (img?.url) image_url = img.url;
   }
 
-  // Time
+  // Time — try each field, skip if it parses to null (0 min)
   let tijd: string | null = null;
-  const totalTime = ld.totalTime || ld.cookTime || ld.prepTime;
-  if (totalTime) {
-    tijd = parseIsoDuration(totalTime);
+  for (const field of [ld.totalTime, ld.cookTime, ld.prepTime]) {
+    if (field) {
+      const parsed = parseIsoDuration(field);
+      if (parsed) {
+        tijd = parsed;
+        break;
+      }
+    }
   }
 
   // Servings
@@ -252,13 +257,14 @@ export function jsonLdToRecipe(ld: any, ogImage: string | null) {
   };
 }
 
-function parseIsoDuration(iso: any): string {
-  if (typeof iso !== "string") return String(iso || "");
+function parseIsoDuration(iso: any): string | null {
+  if (typeof iso !== "string") return null;
   // PT30M, PT1H30M, PT45M, etc.
   const match = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?/);
   if (!match) return iso;
   const hours = parseInt(match[1] || "0", 10);
   const minutes = parseInt(match[2] || "0", 10);
+  if (hours === 0 && minutes === 0) return null;
   if (hours > 0 && minutes > 0) return `${hours} uur ${minutes} min`;
   if (hours > 0) return `${hours} uur`;
   return `${minutes} min`;
