@@ -7,8 +7,8 @@ import { useAuth } from '@/hooks/useAuth';
 
 const navLinks = [
   { href: '/recepten', label: 'Recepten' },
+  { href: '/favorieten', label: 'Favorieten' },
   { href: '/ontdek', label: 'Nieuwste' },
-  { href: '/recepten/nieuw', label: 'Nieuw Recept' },
 ];
 
 export default function Header() {

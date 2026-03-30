@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Clock, User } from 'lucide-react';
+import { Clock } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import RecipeCard from '@/components/recipes/RecipeCard';
@@ -111,48 +111,21 @@ export default function NieuwsteReceptenPage() {
       </p>
 
       {loading && (
-        <div className="space-y-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {Array.from({ length: 5 }).map((_, i) => (
-            <div
-              key={i}
-              className="h-32 animate-pulse rounded-xl bg-gray-200"
-            />
+            <div key={i} className="h-64 animate-pulse rounded-xl bg-gray-200" />
           ))}
         </div>
       )}
 
       {!loading && recipes.length > 0 && (
-        <div className="space-y-4">
-          {recipes.map((recipe, index) => (
-            <div key={recipe.id} className="flex items-start gap-4">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
-                {index + 1}
-              </span>
-              <div className="flex-1">
-                <RecipeCard
-                  recipe={recipe}
-                  onFavoriteToggle={handleFavoriteToggle}
-                />
-                {recipe.user && (
-                  <div className="mt-2 flex items-center gap-2 px-1">
-                    <div className="flex h-5 w-5 items-center justify-center rounded-full bg-gray-100">
-                      {recipe.user.avatar_url ? (
-                        <img
-                          src={recipe.user.avatar_url}
-                          alt=""
-                          className="h-5 w-5 rounded-full object-cover"
-                        />
-                      ) : (
-                        <User className="h-3 w-3 text-text-muted" />
-                      )}
-                    </div>
-                    <span className="text-xs text-text-secondary">
-                      {recipe.user.display_name ?? 'Anoniem'}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {recipes.map((recipe) => (
+            <RecipeCard
+              key={recipe.id}
+              recipe={recipe}
+              onFavoriteToggle={handleFavoriteToggle}
+            />
           ))}
         </div>
       )}

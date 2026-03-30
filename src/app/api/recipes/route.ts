@@ -1,5 +1,102 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { supabaseAdmin } from '@/lib/supabase/admin';
+import Anthropic from '@anthropic-ai/sdk';
+
+const CATEGORY_TAGS = ['Kip', 'Vlees', 'Vis', 'Vegetarisch', 'Veganistisch', 'Pasta', 'Salade', 'Soep', 'Dessert', 'Ontbijt', 'Lunch'];
+
+async function autoCategorize(recipeId: string, title: string, ingredients: any[]) {
+  const client = new Anthropic();
+
+  const ingList = ingredients
+    .map((i: any) => `- ${i.hoeveelheid || ''} ${i.eenheid || ''} ${i.naam || ''}`.trim())
+    .filter(Boolean)
+    .join('\n');
+
+  console.log(`[Auto-categorize] ${title}`);
+
+  const response = await client.messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 256,
+    messages: [{
+      role: 'user',
+      content: `Je bent een ervaren kok. Categoriseer dit recept op basis van je culinaire kennis.
+
+Titel: "${title}"
+Ingrediënten:
+${ingList || '(geen)'}
+
+EIWIT — kies PRECIES ÉÉN op basis van de ingrediënten:
+- "Kip" = bevat kip/chicken/kipfilet/kippendij/kipgehakt
+- "Vlees" = bevat rood vlees (biefstuk, rundergehakt, gehakt, worst, boerenworst, spek, bacon, ossenhaas, filet americain, rosbief, hamburger). Carbonara = spek = Vlees. NIET kip.
+- "Vis" = bevat vis/zeevruchten (zalm, tonijn, garnaal, gamba, kabeljauw, koolvis)
+- "Vegetarisch" = GEEN vlees, kip of vis aanwezig. Ei/kaas/zuivel mag.
+- "Veganistisch" = GEEN dierlijke producten (geen vlees/kip/vis/ei/zuivel/boter/room/honing)
+
+GERECHT TYPE — wijs toe wat past. Denk als een kok: wat IS dit gerecht?
+- "Pasta" = een pastagerecht (spaghetti, noedels, bami, penne, casarecce, fusilli, noodles, lasagne, cannelloni)
+- "Salade" = een ECHTE salade met sla/bladgroente als basis. Broodje tonijnsalade = GEEN salade.
+- "Soep" = een soep
+- "Dessert" = een zoet nagerecht of tussendoortje
+- "Ontbijt" = een gerecht dat je bij het ontbijt eet: bowls, overnight oats, smoothie, yoghurt met toppings
+- "Lunch" = een LICHTE maaltijd die je tussen de middag eet: broodje, tosti, sandwich, een simpele wrap met salade-vulling. GEEN complete warme maaltijden — een risotto, pizza, loempia, burrito met rijst, stamppot, ovenschotel, curry of ossenhaas is een DINER, geen lunch. Bij twijfel: het is geen lunch.
+
+Antwoord ALLEEN als JSON array, bijv. ["Kip", "Pasta"]. Geen tekst.`
+    }]
+  });
+
+  const text = response.content.filter((b) => b.type === 'text').map((b) => (b as any).text).join('').trim();
+
+  let cats: string[];
+  try {
+    const rawMatch = text.match(/\[.*\]/s);
+    if (!rawMatch) throw new Error('No JSON array found');
+    const rawParsed = JSON.parse(rawMatch[0]);
+
+    // Handle both ["Kip", "Pasta"] and [{"eiwit": "Kip", "type": "Pasta"}]
+    let rawCats: string[];
+    if (rawParsed.length > 0 && typeof rawParsed[0] === 'object') {
+      rawCats = rawParsed.flatMap((obj: any) => Object.values(obj).filter((v: any) => typeof v === 'string'));
+    } else {
+      rawCats = rawParsed.filter((c: any) => typeof c === 'string');
+    }
+
+    cats = rawCats
+      .map((c: string) => CATEGORY_TAGS.find((k) => k.toLowerCase() === c.toLowerCase()))
+      .filter(Boolean) as string[];
+  } catch {
+    console.error('[Auto-categorize] Parse error:', text.substring(0, 60));
+    return;
+  }
+
+  // Enforce single protein
+  const proteins = ['Kip', 'Vlees', 'Vis', 'Vegetarisch', 'Veganistisch'];
+  const proteinCats = cats.filter((c) => proteins.includes(c));
+  if (proteinCats.length > 1) {
+    const best = ['Kip', 'Vlees', 'Vis', 'Vegetarisch', 'Veganistisch'].find((p) => proteinCats.includes(p));
+    cats = cats.filter((c) => !proteins.includes(c) || c === best);
+  }
+
+  if (cats.length === 0) return;
+
+  // Upsert tags and link (use admin client to bypass RLS)
+  for (const cat of cats) {
+    const { data: tag } = await supabaseAdmin
+      .from('tags')
+      .upsert({ name: cat }, { onConflict: 'name' })
+      .select()
+      .single();
+
+    if (tag) {
+      await supabaseAdmin.from('recipe_tags').upsert(
+        { recipe_id: recipeId, tag_id: tag.id },
+        { onConflict: 'recipe_id,tag_id' }
+      );
+    }
+  }
+
+  console.log(`[Auto-categorize] ${title} → ${cats.join(', ')}`);
+}
 
 // ────────────────────────────────────────────
 // GET  /api/recipes
@@ -209,7 +306,7 @@ export async function POST(request: NextRequest) {
     promises.push(
       (async () => {
         const tagRows = body.tags.map((name: string) => ({ name }));
-        const { data: tags, error: tagError } = await supabase
+        const { data: tags, error: tagError } = await supabaseAdmin
           .from('tags')
           .upsert(tagRows, { onConflict: 'name' })
           .select();
@@ -221,7 +318,7 @@ export async function POST(request: NextRequest) {
         console.log(`[POST /api/recipes] Tags upserted: ${tags?.length}`);
 
         if (tags?.length) {
-          const { error: linkError } = await supabase.from('recipe_tags').insert(
+          const { error: linkError } = await supabaseAdmin.from('recipe_tags').insert(
             tags.map((t: any) => ({ recipe_id: recipeId, tag_id: t.id }))
           );
           if (linkError) console.error('[POST /api/recipes] recipe_tags error:', linkError.message);
@@ -248,6 +345,12 @@ export async function POST(request: NextRequest) {
 
   console.log(`[POST /api/recipes] Awaiting ${promises.length} parallel inserts...`);
   await Promise.all(promises);
+
+  // Auto-categorize in the background (don't block the response)
+  autoCategorize(recipeId, body.title, body.ingredients || []).catch((err) =>
+    console.error('[POST /api/recipes] Auto-categorize error:', err.message)
+  );
+
   console.log('[POST /api/recipes] All done, returning 201');
 
   return NextResponse.json({ recipe }, { status: 201 });

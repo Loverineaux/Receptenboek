@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Plus } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -11,23 +12,34 @@ import Button from '@/components/ui/Button';
 import RecipeCard from '@/components/recipes/RecipeCard';
 import type { RecipeWithRelations, Source } from '@/types';
 
-const PAGE_SIZE = 20;
-
 type SortOption = 'newest' | 'rating' | 'time';
 
 export default function ReceptenPage() {
   const { user } = useAuth();
   const supabase = createClient();
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [recipes, setRecipes] = useState<RecipeWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Filters
-  const [search, setSearch] = useState('');
-  const [category, setCategory] = useState<string | null>(null);
-  const [source, setSource] = useState<string>('');
-  const [sort, setSort] = useState<SortOption>('newest');
+  // Initialize filters from URL params
+  const [search, setSearch] = useState(searchParams.get('q') || '');
+  const [category, setCategory] = useState<string | null>(searchParams.get('cat') || null);
+  const [source, setSource] = useState(searchParams.get('bron') || '');
+  const [sort, setSort] = useState<SortOption>((searchParams.get('sort') as SortOption) || 'newest');
   const [sourceOptions, setSourceOptions] = useState<string[]>([]);
+
+  // Sync filters to URL params
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (search) params.set('q', search);
+    if (category) params.set('cat', category);
+    if (source) params.set('bron', source);
+    if (sort !== 'newest') params.set('sort', sort);
+    const qs = params.toString();
+    router.replace(`/recepten${qs ? `?${qs}` : ''}`, { scroll: false });
+  }, [search, category, source, sort, router]);
 
   // Fetch unique sources from DB
   useEffect(() => {
@@ -109,41 +121,13 @@ export default function ReceptenPage() {
           };
         });
 
-        // Client-side category filter
+        // Client-side category filter — simply check tags
         let filtered = processed;
         if (category) {
           const cat = category.toLowerCase();
-          filtered = processed.filter((r) => {
-            if (r.tags.some((t) => t.name.toLowerCase() === cat)) return true;
-            if (r.categorie && r.categorie.toLowerCase().includes(cat)) return true;
-            const titleLower = r.title.toLowerCase();
-            const ingNames = (r.ingredients || []).map((i: any) => (i.naam || '').toLowerCase()).join(' ');
-            const allText = `${titleLower} ${ingNames}`;
-            const meatWords = ['kip', 'chicken', 'biefstuk', 'gehakt', 'runder', 'varken', 'spek', 'bacon', 'boerenworst', 'worst', 'burger', 'bavette', 'beef', 'ham', 'lamb', 'lam', 'kippendij', 'kipfilet'];
-            const fishWords = ['vis', 'zalm', 'koolvis', 'garnaal', 'tonijn', 'fish', 'pangasius', 'kabeljauw', 'scampi', 'kreeft'];
-            const dairyEggWords = ['kaas', 'cheese', 'mozzarella', 'feta', 'brie', 'pecorino', 'burrata', 'geitenkaas', 'halloumi', 'parmezan', 'parmezaan', 'ricotta', 'mascarpone', 'room', 'melk', 'milk', 'boter', 'butter', 'yoghurt', 'crème', 'creme', 'ei', 'eier', 'egg'];
-            const hasMeat = meatWords.some((w) => allText.includes(w));
-            const hasFish = fishWords.some((w) => allText.includes(w));
-            const hasDairy = dairyEggWords.some((w) => {
-              // Avoid false positives: "ei" in "eigenlijk", use word boundary check
-              if (w === 'ei') return /\bei\b|\beier/.test(allText);
-              if (w === 'room') return /\broom\b|slagroom|kokosroom/.test(allText);
-              return allText.includes(w);
-            });
-
-            switch (cat) {
-              case 'kip': return allText.includes('kip') || allText.includes('chicken');
-              case 'vlees': return hasMeat;
-              case 'vis': return hasFish;
-              case 'vegetarisch': return !hasMeat && !hasFish;
-              case 'veganistisch': return !hasMeat && !hasFish && !hasDairy;
-              case 'pasta': return allText.includes('pasta') || allText.includes('conchiglie') || allText.includes('casarecce') || allText.includes('cannelloni') || allText.includes('spaghetti') || allText.includes('lasagne') || allText.includes('penne') || allText.includes('noedel');
-              case 'salade': return allText.includes('salade') || allText.includes('salad');
-              case 'soep': return allText.includes('soep') || allText.includes('soup');
-              case 'dessert': return allText.includes('dessert') || allText.includes('taart') || allText.includes('cake') || allText.includes('tiramisu');
-              default: return false;
-            }
-          });
+          filtered = processed.filter((r) =>
+            r.tags.some((t: any) => (t.name || '').toLowerCase() === cat)
+          );
         }
 
         // Client-side rating sort
@@ -287,13 +271,6 @@ export default function ReceptenPage() {
         </div>
       )}
 
-      {/* Floating action button */}
-      <Link
-        href="/recepten/nieuw"
-        className="fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-white shadow-lg transition-transform hover:scale-110"
-      >
-        <Plus className="h-6 w-6" />
-      </Link>
     </div>
   );
 }

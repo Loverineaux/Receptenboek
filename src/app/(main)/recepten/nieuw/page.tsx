@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Link as LinkIcon, Camera, FileUp, PenLine, Loader2, Check } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
+import BronInput from '@/components/ui/BronInput';
 import RecipeForm, { RecipeFormData } from '@/components/recipes/RecipeForm';
 import type { Source, Difficulty } from '@/types';
 
@@ -18,8 +19,33 @@ const tabs: { key: ImportTab; label: string; icon: React.ReactNode }[] = [
   { key: 'handmatig', label: 'Handmatig', icon: <PenLine className="h-4 w-4" /> },
 ];
 
+// Normalize source names so synonyms map to the same bron
+const BRON_SYNONYMS: Record<string, string> = {
+  'barbecue': 'BBQ',
+  'barbeque': 'BBQ',
+  'bbq': 'BBQ',
+  'hellofresh nl': 'HelloFresh',
+  'hellofresh be': 'HelloFresh',
+  'hello fresh': 'HelloFresh',
+  'ah': 'Albert Heijn',
+  'allerhande': 'Albert Heijn',
+  'albert heijn belgie': 'Albert Heijn',
+  'albert heijn België': 'Albert Heijn',
+  'broodje dunner ebook': 'Broodje Dunner',
+  'broodje dunner e-book': 'Broodje Dunner',
+};
+
 function mapSource(bron?: string): Source {
-  return (bron && bron.trim()) || 'Eigen recept';
+  if (!bron || !bron.trim()) return 'Eigen recept';
+  const trimmed = bron.trim();
+  const lower = trimmed.toLowerCase();
+  // Check exact synonym match
+  if (BRON_SYNONYMS[lower]) return BRON_SYNONYMS[lower];
+  // Check partial match
+  for (const [key, value] of Object.entries(BRON_SYNONYMS)) {
+    if (lower.includes(key) || key.includes(lower)) return value;
+  }
+  return trimmed;
 }
 
 function mapDifficulty(moeilijkheid?: string): Difficulty {
@@ -59,11 +85,45 @@ function mapExtractedToFormData(extracted: any, sourceUrl?: string): RecipeFormD
     allergenen: extracted.allergenen || '',
     ingredients: (extracted.ingredients ?? [])
       .filter((i: any) => i.naam)
-      .map((i: any) => ({
-        hoeveelheid: i.hoeveelheid ? String(i.hoeveelheid) : '',
-        eenheid: i.eenheid || '',
-        naam: i.naam.trim(),
-      })),
+      .map((i: any) => {
+        let hoeveelheid = i.hoeveelheid ? String(i.hoeveelheid) : '';
+        let eenheid = i.eenheid || '';
+        let naam = i.naam?.trim() || '';
+
+        // If AI put everything in naam (e.g. "200 gram kipfilet"), try to split
+        if (!hoeveelheid && naam) {
+          // Amount at start: "200 gram kipfilet" or "2 uien" or "halve ui"
+          const m = naam.match(
+            /^([\d½¼¾⅓⅔,./]+)\s*(gram|g|kg|ml|l|dl|cl|el|tl|eetlepel|theelepel|stuks?|plakjes?|sneetjes?|teentjes?|takjes?|handjes?|bosjes?|snufje|scheut|blikjes?|zakjes?|potjes?|stuk)?\s+(.+)$/i
+          );
+          if (m) {
+            hoeveelheid = m[1];
+            eenheid = m[2] || '';
+            naam = m[3];
+          } else {
+            // Dutch words: "halve ui", "kwart paprika"
+            const dm = naam.match(/^(halve|half|kwart|driekwart|hele|heel)\s+(.+)$/i);
+            if (dm) {
+              hoeveelheid = dm[1].toLowerCase();
+              naam = dm[2];
+            }
+          }
+        }
+
+        // Amount at end: "kipfilet 200 gram"
+        if (!hoeveelheid && naam) {
+          const em = naam.match(
+            /^(.+?)\s+([\d½¼¾⅓⅔,./]+)\s*(gram|g|kg|ml|l|dl|cl|el|tl|eetlepel|theelepel|stuks?|plakjes?|sneetjes?|teentjes?|takjes?|handjes?|bosjes?|snufje|scheut|blikjes?|zakjes?|potjes?|stuk)?\s*$/i
+          );
+          if (em) {
+            naam = em[1];
+            hoeveelheid = em[2];
+            eenheid = em[3] || '';
+          }
+        }
+
+        return { hoeveelheid, eenheid, naam };
+      }),
     steps: (extracted.steps ?? [])
       .filter((s: any) => s.beschrijving)
       .map((s: any) => ({
@@ -75,7 +135,7 @@ function mapExtractedToFormData(extracted: any, sourceUrl?: string): RecipeFormD
     benodigdheden: (extracted.benodigdheden ?? [])
       .map((b: any) => (typeof b === 'string' ? b : b.naam))
       .filter(Boolean),
-    tags: extracted.tags ?? [],
+    tags: [...new Set([...(extracted.tags ?? []), ...(extracted.categorieen ?? [])])],
   };
 }
 
@@ -98,15 +158,197 @@ export default function NieuwReceptPage() {
   const [progressStep, setProgressStep] = useState(0);
   const [saving, setSaving] = useState(false);
 
+
   // Import inputs
   const [importUrl, setImportUrl] = useState('');
 
+  // Foto import
+  const [photoFiles, setPhotoFiles] = useState<File[]>([]);
+  const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
+  const [photoBron, setPhotoBron] = useState('');
+  const [dishPhoto, setDishPhoto] = useState<File | null>(null);
+  const [dishPhotoPreview, setDishPhotoPreview] = useState<string>('');
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const dishPhotoInputRef = useRef<HTMLInputElement>(null);
+
+  const handlePhotoSelect = (files: FileList | null) => {
+    if (!files) return;
+    const newFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
+    const combined = [...photoFiles, ...newFiles].slice(0, 10); // max 10
+    setPhotoFiles(combined);
+    // Generate previews
+    const previews = combined.map(f => URL.createObjectURL(f));
+    setPhotoPreviews(prev => {
+      prev.forEach(u => URL.revokeObjectURL(u));
+      return previews;
+    });
+  };
+
+  const removePhoto = (index: number) => {
+    const newFiles = photoFiles.filter((_, i) => i !== index);
+    setPhotoFiles(newFiles);
+    URL.revokeObjectURL(photoPreviews[index]);
+    setPhotoPreviews(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const [photoProgress, setPhotoProgress] = useState('');
+
+  const handleExtractPhotos = async () => {
+    if (photoFiles.length === 0) return;
+
+    setExtracting(true);
+    setExtractError(null);
+    setPhotoProgress('Foto\'s voorbereiden...');
+
+    try {
+      // Convert files to base64
+      const images = await Promise.all(
+        photoFiles.map(async (file) => {
+          const buffer = await file.arrayBuffer();
+          const bytes = new Uint8Array(buffer);
+          let binary = '';
+          for (let i = 0; i < bytes.length; i++) {
+            binary += String.fromCharCode(bytes[i]);
+          }
+          return { data: btoa(binary), media_type: file.type };
+        })
+      );
+
+      setPhotoProgress('Foto\'s uploaden naar AI...');
+
+      const res = await fetch('/api/extract/image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ images, bron: photoBron.trim() || undefined }),
+      });
+
+      if (!res.ok && res.headers.get('content-type')?.includes('application/json')) {
+        const err = await res.json();
+        throw new Error(err.error || 'Foto extractie mislukt');
+      }
+
+      // Read SSE stream
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let extracted: any = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const event = JSON.parse(line.slice(6));
+            if (event.type === 'status') {
+              setPhotoProgress(event.message);
+            } else if (event.type === 'done') {
+              extracted = event.recipe;
+            } else if (event.type === 'error') {
+              throw new Error(event.error);
+            }
+          } catch (e: any) {
+            if (e.message && e.message !== 'Unexpected end of JSON input') throw e;
+          }
+        }
+      }
+
+      if (!extracted) throw new Error('Geen recept geëxtraheerd');
+
+      // Upload the separate dish photo if provided
+      if (dishPhoto) {
+        setPhotoProgress('Gerecht-foto uploaden...');
+        try {
+          const { createClient } = await import('@/lib/supabase/client');
+          const supabase = createClient();
+          const ext = dishPhoto.name.split('.').pop() || 'jpg';
+          const path = `recipes/photo-${Date.now()}.${ext}`;
+          const { error: upErr } = await supabase.storage
+            .from('recipe-images')
+            .upload(path, dishPhoto, { contentType: dishPhoto.type, upsert: true });
+          if (!upErr) {
+            const { data: urlData } = supabase.storage.from('recipe-images').getPublicUrl(path);
+            extracted.image_url = urlData.publicUrl;
+          }
+        } catch (imgErr: any) {
+          console.warn('[Photo Import] Dish photo upload failed:', imgErr.message);
+        }
+      }
+
+      // Save
+      setPhotoProgress('Recept opslaan...');
+      const formData = mapExtractedToFormData(extracted);
+      const saveRes = await fetch('/api/recipes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+
+      if (!saveRes.ok) {
+        const err = await saveRes.json().catch(() => ({ error: 'Opslaan mislukt' }));
+        throw new Error(err.error || 'Opslaan mislukt');
+      }
+
+      const { recipe } = await saveRes.json();
+      router.push(`/recepten/${recipe.id}`);
+    } catch (err: any) {
+      console.error('[Photo Import] Error:', err.message);
+      setExtractError(err.message);
+    } finally {
+      setExtracting(false);
+      setPhotoProgress('');
+    }
+  };
+
   // PDF import
   const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [pdfBron, setPdfBron] = useState('');
   const [pdfRecipes, setPdfRecipes] = useState<any[]>([]);
   const [pdfSaving, setPdfSaving] = useState<Set<number>>(new Set());
   const [pdfSaved, setPdfSaved] = useState<Set<number>>(new Set());
   const pdfInputRef = useRef<HTMLInputElement>(null);
+
+  // Prevent navigation while extracting/saving
+  const isBusy = extracting || saving || pdfSaving.size > 0;
+
+  useEffect(() => {
+    if (!isBusy) return;
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+
+    const handleClick = (e: MouseEvent) => {
+      const anchor = (e.target as HTMLElement).closest('a');
+      if (anchor && anchor.href && !anchor.href.includes('/recepten/nieuw')) {
+        e.preventDefault();
+        e.stopPropagation();
+        alert('Er wordt nog een recept verwerkt. Wacht tot het klaar is.');
+      }
+    };
+
+    const handlePopState = () => {
+      window.history.pushState(null, '', window.location.href);
+      alert('Er wordt nog een recept verwerkt. Wacht tot het klaar is.');
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('click', handleClick, true);
+    window.history.pushState(null, '', window.location.href);
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('click', handleClick, true);
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [isBusy]);
 
   const handleExtractAndSave = async () => {
     setExtracting(true);
@@ -278,7 +520,13 @@ export default function NieuwReceptPage() {
         }
       }
 
-      const formData = mapExtractedToFormData({ ...recipe, image_url: imageUrl });
+      // Override bron if user specified one
+      const recipeWithOverrides = {
+        ...recipe,
+        image_url: imageUrl,
+        bron: pdfBron.trim() || recipe.bron,
+      };
+      const formData = mapExtractedToFormData(recipeWithOverrides);
       const res = await fetch('/api/recipes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -352,6 +600,14 @@ export default function NieuwReceptPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <h1 className="text-2xl font-bold text-text-primary">Nieuw recept</h1>
+
+      {/* Busy banner */}
+      {isBusy && (
+        <div className="flex items-center gap-3 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span>Recept wordt verwerkt — navigeer niet weg van deze pagina.</span>
+        </div>
+      )}
 
       {/* Tab selector */}
       <div className="flex flex-wrap gap-2 border-b pb-3">
@@ -450,15 +706,138 @@ export default function NieuwReceptPage() {
             Importeer van foto
           </h2>
           <p className="text-sm text-text-secondary">
-            Upload een foto van een recept en wij herkennen de tekst automatisch.
+            Upload foto's van een recept. Meerdere foto's mogen (bijv. ingrediënten + bereiding + resultaat). We combineren alles tot één recept.
           </p>
-          <input
-            type="file"
-            accept="image/*"
-            className="block w-full text-sm text-text-secondary file:mr-4 file:rounded-lg file:border-0 file:bg-primary/10 file:px-4 file:py-2 file:text-sm file:font-medium file:text-primary hover:file:bg-primary/20"
+
+          <BronInput
+            value={photoBron}
+            onChange={setPhotoBron}
+            disabled={extracting}
           />
-          <Button variant="primary" disabled>
-            Extracteer (binnenkort beschikbaar)
+
+          {/* Drop zone */}
+          <div
+            className="relative flex min-h-[120px] cursor-pointer items-center justify-center rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 transition-colors hover:border-primary hover:bg-primary/5"
+            onClick={() => photoInputRef.current?.click()}
+            onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-primary', 'bg-primary/5'); }}
+            onDragLeave={(e) => { e.currentTarget.classList.remove('border-primary', 'bg-primary/5'); }}
+            onDrop={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-primary', 'bg-primary/5'); handlePhotoSelect(e.dataTransfer.files); }}
+          >
+            <div className="text-center">
+              <Camera className="mx-auto h-8 w-8 text-text-muted" />
+              <p className="mt-2 text-sm text-text-secondary">
+                Klik of sleep foto's hierheen
+              </p>
+              <p className="text-xs text-text-muted">Max 10 foto's, JPEG/PNG/WebP</p>
+            </div>
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={(e) => handlePhotoSelect(e.target.files)}
+              disabled={extracting}
+            />
+          </div>
+
+          {/* Photo previews */}
+          {photoPreviews.length > 0 && (
+            <div className="flex flex-wrap gap-3">
+              {photoPreviews.map((preview, idx) => (
+                <div key={idx} className="group relative h-24 w-24 overflow-hidden rounded-lg border">
+                  <img src={preview} alt={`Foto ${idx + 1}`} className="h-full w-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); removePhoto(idx); }}
+                    className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100"
+                  >
+                    &times;
+                  </button>
+                  <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white">
+                    {idx + 1}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Separate dish photo */}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-text-primary">
+              Foto van het gerecht (optioneel)
+            </label>
+            <p className="mb-2 text-xs text-text-muted">
+              Upload een aparte foto van het eindresultaat. Deze wordt als afbeelding bij het recept gebruikt.
+            </p>
+            <div className="flex items-center gap-3">
+              {dishPhotoPreview ? (
+                <div className="group relative h-20 w-20 overflow-hidden rounded-lg border">
+                  <img src={dishPhotoPreview} alt="Gerecht" className="h-full w-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      URL.revokeObjectURL(dishPhotoPreview);
+                      setDishPhoto(null);
+                      setDishPhotoPreview('');
+                    }}
+                    className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100"
+                  >
+                    &times;
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => dishPhotoInputRef.current?.click()}
+                  className="flex h-20 w-20 items-center justify-center rounded-lg border-2 border-dashed border-gray-300 text-text-muted transition-colors hover:border-primary hover:text-primary"
+                  disabled={extracting}
+                >
+                  <Camera className="h-6 w-6" />
+                </button>
+              )}
+              <input
+                ref={dishPhotoInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    setDishPhoto(file);
+                    setDishPhotoPreview(URL.createObjectURL(file));
+                  }
+                }}
+                disabled={extracting}
+              />
+            </div>
+          </div>
+
+          {/* Progress indicator */}
+          {extracting && (
+            <div className="space-y-2 rounded-lg bg-primary/5 p-4">
+              <div className="flex items-center gap-3 text-sm">
+                <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                <span className="font-medium text-text-primary">
+                  {photoProgress || 'Bezig...'}
+                </span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-gray-200">
+                <div
+                  className="h-full rounded-full bg-primary transition-all duration-500"
+                  style={{ width: photoProgress.includes('opslaan') ? '90%' : photoProgress.includes('extraheren') ? '75%' : photoProgress.includes('gevonden') ? '60%' : photoProgress.includes('herkennen') ? '40%' : photoProgress.includes('uploaden') ? '20%' : '10%' }}
+                />
+              </div>
+            </div>
+          )}
+
+          <Button
+            variant="primary"
+            loading={extracting}
+            onClick={handleExtractPhotos}
+            disabled={photoFiles.length === 0 || extracting}
+          >
+            {extracting ? 'Bezig...' : `Recept extraheren${photoFiles.length > 0 ? ` (${photoFiles.length} foto${photoFiles.length > 1 ? "'s" : ''})` : ''}`}
           </Button>
         </div>
       )}
@@ -472,6 +851,13 @@ export default function NieuwReceptPage() {
           <p className="text-sm text-text-secondary">
             Upload een PDF met recepten. We herkennen automatisch alle recepten in het bestand.
           </p>
+
+          <BronInput
+            value={pdfBron}
+            onChange={setPdfBron}
+            disabled={extracting}
+          />
+
           <input
             ref={pdfInputRef}
             type="file"

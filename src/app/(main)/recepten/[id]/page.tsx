@@ -157,6 +157,8 @@ function toFraction(val: number): string {
 
 type Tab = 'ingredienten' | 'bereiding' | 'voeding';
 
+const CATEGORY_LIST = ['Kip', 'Vlees', 'Vis', 'Vegetarisch', 'Veganistisch', 'Pasta', 'Salade', 'Soep', 'Dessert', 'Ontbijt', 'Lunch'];
+
 export default function RecipeDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -492,19 +494,74 @@ export default function RecipeDetailPage() {
           )}
         </div>
 
-        {/* Tags */}
-        {recipe.tags.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {recipe.tags.map((tag) => (
+        {/* Tags — owner can edit category tags */}
+        <div className="mt-3 flex flex-wrap gap-2">
+          {isOwner ? (
+            <>
+              {CATEGORY_LIST.map((cat) => {
+                const hasTag = recipe.tags.some((t) => t.name.toLowerCase() === cat.toLowerCase());
+                return (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={async () => {
+                      if (hasTag) {
+                        // Remove tag
+                        const tag = recipe.tags.find((t) => t.name.toLowerCase() === cat.toLowerCase());
+                        if (tag) {
+                          await supabase.from('recipe_tags').delete()
+                            .eq('recipe_id', recipe.id).eq('tag_id', tag.id);
+                        }
+                      } else {
+                        // Add tag — first find existing, then create if needed
+                        let { data: tag } = await supabase.from('tags')
+                          .select('id').eq('name', cat).single();
+                        if (!tag) {
+                          const { data: newTag } = await supabase.from('tags')
+                            .insert({ name: cat }).select().single();
+                          tag = newTag;
+                        }
+                        if (tag) {
+                          const { error } = await supabase.from('recipe_tags')
+                            .insert({ recipe_id: recipe.id, tag_id: tag.id });
+                          if (error) console.error('recipe_tags insert error:', error.message);
+                        }
+                      }
+                      fetchRecipe();
+                    }}
+                    className={`rounded-full px-3 py-0.5 text-xs font-medium transition-colors ${
+                      hasTag
+                        ? 'bg-primary text-white'
+                        : 'bg-gray-100 text-text-muted hover:bg-gray-200'
+                    }`}
+                  >
+                    {hasTag ? '✓ ' : ''}{cat}
+                  </button>
+                );
+              })}
+              {/* Non-category tags (read-only) */}
+              {recipe.tags
+                .filter((t) => !CATEGORY_LIST.some((c) => c.toLowerCase() === t.name.toLowerCase()))
+                .map((tag) => (
+                  <span
+                    key={tag.id}
+                    className="rounded-full bg-primary/10 px-3 py-0.5 text-xs font-medium text-primary"
+                  >
+                    {tag.name}
+                  </span>
+                ))}
+            </>
+          ) : (
+            recipe.tags.map((tag) => (
               <span
                 key={tag.id}
                 className="rounded-full bg-primary/10 px-3 py-0.5 text-xs font-medium text-primary"
               >
                 {tag.name}
               </span>
-            ))}
-          </div>
-        )}
+            ))
+          )}
+        </div>
 
         {/* Owner actions */}
         {isOwner && (

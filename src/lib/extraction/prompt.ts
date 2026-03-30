@@ -51,8 +51,23 @@ JSON SCHEMA:
       "naam": "string (verplicht)"
     }
   ] | null,
-  "tags": ["string"] | null
+  "tags": ["string"] | null,
+  "categorieen": ["string"] | null
 }
+
+BELANGRIJK voor categorieen: Wijs een of meerdere van deze categorieën toe op basis van de ingrediënten:
+- "Kip" — bevat kip/chicken
+- "Vlees" — bevat rood vlees, gehakt, worst, etc. (niet kip)
+- "Vis" — bevat vis, garnalen, etc.
+- "Vegetarisch" — geen vlees en geen vis
+- "Veganistisch" — geen vlees, vis, zuivel of eieren
+- "Pasta" — hoofdgerecht met pasta/noedels
+- "Salade" — hoofdzakelijk een salade
+- "Soep" — een soep
+- "Dessert" — een zoet nagerecht
+- "Ontbijt" — een ontbijtgerecht (bowl, overnight oats, etc.)
+- "Lunch" — een lunchgerecht (broodje, wrap, tosti, sandwich, etc.)
+Wijs ALLE categorieën toe die van toepassing zijn. Een kipgerecht is zowel "Kip" als eventueel "Pasta" als het een pasta met kip is.
 
 Retourneer ALLEEN het JSON-object. Geen andere tekst.`;
 

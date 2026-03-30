@@ -11,6 +11,12 @@ interface RecipeCardProps {
   onFavoriteToggle?: (recipeId: string, isFavorited: boolean) => void;
 }
 
+// Category tags that should be displayed as filter badges
+const CATEGORY_TAGS = new Set([
+  'kip', 'vlees', 'vis', 'vegetarisch', 'veganistisch',
+  'pasta', 'salade', 'soep', 'dessert', 'ontbijt', 'lunch',
+]);
+
 export default function RecipeCard({ recipe, onFavoriteToggle }: RecipeCardProps) {
   const router = useRouter();
 
@@ -22,6 +28,11 @@ export default function RecipeCard({ recipe, onFavoriteToggle }: RecipeCardProps
     e.stopPropagation();
     onFavoriteToggle?.(recipe.id, !recipe.is_favorited);
   };
+
+  // Split tags into category tags and other tags
+  const categoryTags = (recipe.tags || []).filter(
+    (t: any) => CATEGORY_TAGS.has((t.name || '').toLowerCase())
+  );
 
   return (
     <div
@@ -42,12 +53,12 @@ export default function RecipeCard({ recipe, onFavoriteToggle }: RecipeCardProps
           </div>
         )}
 
-        {/* BronBadge overlay */}
+        {/* BronBadge — top left */}
         <div className="absolute left-2 top-2">
           <BronBadge bron={recipe.bron} />
         </div>
 
-        {/* Favorite heart */}
+        {/* Favorite heart — top right */}
         <button
           onClick={handleFavoriteClick}
           className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-white/80 backdrop-blur-sm transition-colors hover:bg-white"
@@ -60,19 +71,27 @@ export default function RecipeCard({ recipe, onFavoriteToggle }: RecipeCardProps
             }`}
           />
         </button>
+
+        {/* Category tags — bottom left on image */}
+        {categoryTags.length > 0 && (
+          <div className="absolute bottom-2 left-2 flex flex-wrap gap-1">
+            {categoryTags.map((tag: any) => (
+              <span
+                key={tag.id || tag.name}
+                className="rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur-sm"
+              >
+                {tag.name}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Content */}
       <div className="p-3">
-        <h3 className="line-clamp-1 text-sm font-semibold text-text-primary">
+        <h3 className="line-clamp-2 text-sm font-semibold text-text-primary">
           {recipe.title}
         </h3>
-
-        {recipe.subtitle && (
-          <p className="mt-0.5 line-clamp-1 text-xs text-text-secondary">
-            {recipe.subtitle}
-          </p>
-        )}
 
         <div className="mt-2 flex items-center justify-between">
           <div className="flex items-center gap-3">

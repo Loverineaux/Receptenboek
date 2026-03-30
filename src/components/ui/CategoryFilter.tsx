@@ -15,7 +15,8 @@ const categories = [
   'Pasta',
   'Salade',
   'Soep',
-  'Bijgerecht',
+  'Ontbijt',
+  'Lunch',
   'Dessert',
 ];
 
