@@ -188,9 +188,14 @@ export default function RecipeForm({ initialData, onSubmit }: RecipeFormProps) {
     return emptyNutrition();
   });
 
-  const [benodigdheden, setBenodigdheden] = useState<BenodigdheidRow[]>([
-    { naam: '' },
-  ]);
+  const [benodigdheden, setBenodigdheden] = useState<BenodigdheidRow[]>(() => {
+    if (isFullRecipe && (initialData as any).benodigdheden?.length > 0) {
+      return (initialData as any).benodigdheden.map((b: any) => ({
+        naam: typeof b === 'string' ? b : b.naam || '',
+      }));
+    }
+    return [{ naam: '' }];
+  });
 
   const [tags, setTags] = useState<string[]>(() => {
     if (isFullRecipe && (initialData as RecipeWithRelations).tags) {

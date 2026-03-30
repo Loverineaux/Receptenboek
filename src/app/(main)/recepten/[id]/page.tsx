@@ -22,6 +22,7 @@ import PortieSelector from '@/components/ui/PortieSelector';
 import StarRating from '@/components/ui/StarRating';
 import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
+import CookMode from '@/components/recipes/CookMode';
 import type { RecipeWithRelations, Comment as CommentType } from '@/types';
 
 // ── fraction parsing + formatting ────────────────
@@ -178,6 +179,7 @@ export default function RecipeDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [scaledSteps, setScaledSteps] = useState<any[] | null>(null);
   const [scalingSteps, setScalingSteps] = useState(false);
+  const [cookMode, setCookMode] = useState(false);
   const scaledForPortions = useRef<number | null>(null);
 
   // ── fetch recipe ────────────────────────────────
@@ -362,9 +364,23 @@ export default function RecipeDetailPage() {
     setDeleteModalOpen(false);
   };
 
-  const handleShare = () => {
-    navigator.clipboard.writeText(window.location.href);
-    alert('Link gekopieerd naar klembord!');
+  const handleShare = async () => {
+    const shareData = {
+      title: recipe?.title || 'Recept',
+      text: `${recipe?.title}${recipe?.subtitle ? ` — ${recipe.subtitle.substring(0, 80)}` : ''}`,
+      url: window.location.href,
+    };
+
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+      } catch {
+        // User cancelled share
+      }
+    } else {
+      await navigator.clipboard.writeText(window.location.href);
+      alert('Link gekopieerd naar klembord!');
+    }
   };
 
   // ── loading / not found ────────────────────────
@@ -584,10 +600,20 @@ export default function RecipeDetailPage() {
         )}
       </div>
 
-      {/* ── Portie selector ────────────────────────── */}
-      <div className="flex items-center gap-3">
-        <span className="text-sm font-medium text-text-primary">Porties:</span>
-        <PortieSelector value={portions} onChange={handlePortionChange} />
+      {/* ── Portie selector + Kookmodus ────────────── */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-medium text-text-primary">Porties:</span>
+          <PortieSelector value={portions} onChange={handlePortionChange} />
+        </div>
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={() => setCookMode(true)}
+        >
+          <ChefHat className="h-4 w-4" />
+          Kookmodus
+        </Button>
       </div>
 
       {/* ── Rate (interactive for logged-in users) ── */}
@@ -837,6 +863,28 @@ export default function RecipeDetailPage() {
             </div>
           )}
         </section>
+      )}
+
+      {/* ── Cook mode ────────────────────────────── */}
+      {cookMode && (
+        <CookMode
+          title={recipe.title}
+          steps={(scaledSteps || recipe.steps).map((s) => ({
+            titel: s.titel,
+            beschrijving: s.beschrijving,
+          }))}
+          ingredients={recipe.ingredients.map((ing) => {
+            const parsed = parseAmount(ing.hoeveelheid);
+            const scaled = parsed !== null ? parsed * ratio : null;
+            return {
+              hoeveelheid: scaled !== null ? toFraction(scaled) : (ing.hoeveelheid ?? ''),
+              eenheid: ing.eenheid,
+              naam: ing.naam,
+            };
+          })}
+          portions={portions}
+          onClose={() => setCookMode(false)}
+        />
       )}
 
       {/* ── Delete modal ───────────────────────────── */}

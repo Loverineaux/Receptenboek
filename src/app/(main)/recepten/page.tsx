@@ -28,6 +28,7 @@ export default function ReceptenPage() {
   const [category, setCategory] = useState<string | null>(searchParams.get('cat') || null);
   const [source, setSource] = useState(searchParams.get('bron') || '');
   const [sort, setSort] = useState<SortOption>((searchParams.get('sort') as SortOption) || 'newest');
+  const [searchIngredients, setSearchIngredients] = useState(searchParams.get('ing') === '1');
   const [sourceOptions, setSourceOptions] = useState<string[]>([]);
 
   // Sync filters to URL params
@@ -37,9 +38,10 @@ export default function ReceptenPage() {
     if (category) params.set('cat', category);
     if (source) params.set('bron', source);
     if (sort !== 'newest') params.set('sort', sort);
+    if (searchIngredients) params.set('ing', '1');
     const qs = params.toString();
     router.replace(`/recepten${qs ? `?${qs}` : ''}`, { scroll: false });
-  }, [search, category, source, sort, router]);
+  }, [search, category, source, sort, searchIngredients, router]);
 
   // Fetch unique sources from DB
   useEffect(() => {
@@ -75,7 +77,7 @@ export default function ReceptenPage() {
           `
           );
 
-        if (search) {
+        if (search && !searchIngredients) {
           query = query.ilike('title', `%${search}%`);
         }
 
@@ -121,8 +123,20 @@ export default function ReceptenPage() {
           };
         });
 
-        // Client-side category filter — simply check tags
+        // Client-side ingredient search
         let filtered = processed;
+        if (search && searchIngredients) {
+          const q = search.toLowerCase();
+          filtered = filtered.filter((r) => {
+            const titleMatch = r.title.toLowerCase().includes(q);
+            const ingMatch = (r.ingredients || []).some((i: any) =>
+              (i.naam || '').toLowerCase().includes(q)
+            );
+            return titleMatch || ingMatch;
+          });
+        }
+
+        // Client-side category filter — simply check tags
         if (category) {
           const cat = category.toLowerCase();
           filtered = processed.filter((r) =>
@@ -156,14 +170,14 @@ export default function ReceptenPage() {
         setLoading(false);
       }
     },
-    [supabase, user, search, category, source, sort]
+    [supabase, user, search, searchIngredients, category, source, sort]
   );
 
   // Re-fetch when filters change
   useEffect(() => {
     fetchRecipes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, category, source, sort, user?.id]);
+  }, [search, searchIngredients, category, source, sort, user?.id]);
 
   const handleFavoriteToggle = async (recipeId: string, isFavorited: boolean) => {
     if (!user) return;
@@ -193,7 +207,12 @@ export default function ReceptenPage() {
       <h1 className="text-2xl font-bold text-text-primary">Mijn recepten</h1>
 
       {/* Search */}
-      <SearchBar value={search} onChange={setSearch} />
+      <SearchBar
+        value={search}
+        onChange={setSearch}
+        searchIngredients={searchIngredients}
+        onSearchIngredientsChange={setSearchIngredients}
+      />
 
       {/* Category filter */}
       <CategoryFilter selected={category} onChange={setCategory} />

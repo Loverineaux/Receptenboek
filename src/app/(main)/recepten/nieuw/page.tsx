@@ -280,22 +280,11 @@ export default function NieuwReceptPage() {
         }
       }
 
-      // Save
+      // Save with duplicate check
       setPhotoProgress('Recept opslaan...');
       const formData = mapExtractedToFormData(extracted);
-      const saveRes = await fetch('/api/recipes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      });
-
-      if (!saveRes.ok) {
-        const err = await saveRes.json().catch(() => ({ error: 'Opslaan mislukt' }));
-        throw new Error(err.error || 'Opslaan mislukt');
-      }
-
-      const { recipe } = await saveRes.json();
-      router.push(`/recepten/${recipe.id}`);
+      const recipe = await saveRecipe(formData);
+      if (recipe) router.push(`/recepten/${recipe.id}`);
     } catch (err: any) {
       console.error('[Photo Import] Error:', err.message);
       setExtractError(err.message);
@@ -383,27 +372,10 @@ export default function NieuwReceptPage() {
       setProgressStep(PROGRESS_STEPS.length - 1);
       setSaving(true);
 
-      // Map and save directly
+      // Map and save with duplicate check
       const formData = mapExtractedToFormData(extracted, importUrl);
-      console.log('[URL Import] 4. Mapped form data, saving...');
-
-      const saveRes = await fetch('/api/recipes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      });
-
-      console.log('[URL Import] 5. Save response status:', saveRes.status);
-
-      if (!saveRes.ok) {
-        const err = await saveRes.json();
-        throw new Error(err.error || 'Opslaan mislukt');
-      }
-
-      const { recipe } = await saveRes.json();
-      console.log('[URL Import] 6. Recipe saved, id:', recipe.id, '— navigating...');
-      router.push(`/recepten/${recipe.id}`);
-      console.log('[URL Import] 7. router.push called');
+      const recipe = await saveRecipe(formData);
+      if (recipe) router.push(`/recepten/${recipe.id}`);
     } catch (err: any) {
       clearInterval(interval);
       console.error('[URL Import] ERROR:', err.message);
@@ -562,26 +534,32 @@ export default function NieuwReceptPage() {
     router.push('/recepten');
   };
 
-  const handleSubmit = async (data: RecipeFormData) => {
-    console.log('[Manual Save] 1. Posting to /api/recipes...');
+  /** Save recipe with duplicate detection. Returns recipe or null if user cancelled. */
+  const saveRecipe = async (data: any, force = false): Promise<any> => {
     const res = await fetch('/api/recipes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
+      body: JSON.stringify(force ? { ...data, _force: true } : data),
     });
 
-    console.log('[Manual Save] 2. Response status:', res.status);
+    if (res.status === 409) {
+      const { message } = await res.json();
+      const proceed = window.confirm(`${message}\n\nWil je het toch opslaan?`);
+      if (proceed) return saveRecipe(data, true);
+      return null;
+    }
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: 'Opslaan mislukt' }));
-      console.error('[Manual Save] ERROR:', err.error);
       throw new Error(err.error || 'Opslaan mislukt');
     }
 
-    const { recipe } = await res.json();
-    console.log('[Manual Save] 3. Recipe saved, id:', recipe.id, '— navigating...');
-    router.push(`/recepten/${recipe.id}`);
-    console.log('[Manual Save] 4. router.push called');
+    return (await res.json()).recipe;
+  };
+
+  const handleSubmit = async (data: RecipeFormData) => {
+    const recipe = await saveRecipe(data);
+    if (recipe) router.push(`/recepten/${recipe.id}`);
   };
 
   if (authLoading) {

@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { Clock, Heart, MessageCircle } from 'lucide-react';
 import BronBadge from '@/components/ui/BronBadge';
 import StarRating from '@/components/ui/StarRating';
@@ -42,10 +43,12 @@ export default function RecipeCard({ recipe, onFavoriteToggle }: RecipeCardProps
       {/* Image */}
       <div className="relative aspect-[4/3] w-full overflow-hidden">
         {recipe.image_url ? (
-          <img
+          <Image
             src={recipe.image_url}
             alt={recipe.title}
-            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+            fill
+            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+            className="object-cover transition-transform duration-300 group-hover:scale-105"
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary/30 to-primary/60">

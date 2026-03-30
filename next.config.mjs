@@ -5,8 +5,12 @@ const nextConfig = {
       bodySizeLimit: '100mb',
     },
   },
+  images: {
+    remotePatterns: [
+      { protocol: 'https', hostname: '**' },
+    ],
+  },
   webpack: (config) => {
-    // pdfjs-dist tries to optionally require canvas — stub it out
     config.resolve.alias.canvas = false;
     return config;
   },

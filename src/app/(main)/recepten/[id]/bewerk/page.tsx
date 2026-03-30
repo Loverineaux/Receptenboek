@@ -29,6 +29,7 @@ export default function BewerkReceptPage() {
         steps(*),
         tags:recipe_tags(tag:tags(*)),
         nutrition(*),
+        benodigdheden(*),
         ratings(*),
         comments(*),
         user:profiles!recipes_user_id_fkey(id, display_name, avatar_url)

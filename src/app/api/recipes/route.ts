@@ -207,6 +207,36 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   console.log('[POST /api/recipes] Body keys:', Object.keys(body));
 
+  // Check for duplicates (skip if force=true)
+  if (!body._force) {
+    const { data: duplicates } = await supabaseAdmin
+      .from('recipes')
+      .select('id, title')
+      .ilike('title', `%${body.title?.substring(0, 30) || ''}%`)
+      .limit(5);
+
+    const similar = (duplicates || []).filter((d: any) => {
+      const a = d.title.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const b = (body.title || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      // Check if >70% overlap
+      const shorter = Math.min(a.length, b.length);
+      if (shorter === 0) return false;
+      let matches = 0;
+      for (let i = 0; i < shorter; i++) {
+        if (a[i] === b[i]) matches++;
+      }
+      return matches / shorter > 0.7;
+    });
+
+    if (similar.length > 0) {
+      return NextResponse.json({
+        warning: 'duplicate',
+        message: `Er bestaat al een vergelijkbaar recept: "${similar[0].title}"`,
+        existing: similar,
+      }, { status: 409 });
+    }
+  }
+
   // 1. Create recipe
   const { data: recipe, error: recipeError } = await supabase
     .from('recipes')
