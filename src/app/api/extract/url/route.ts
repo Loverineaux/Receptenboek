@@ -44,8 +44,20 @@ export async function POST(request: NextRequest) {
       console.log("[URL Extract] Scraped OK. JSON-LD:", !!scraped.jsonLd, "OG Image:", !!scraped.ogImage);
     } catch (scrapeError: any) {
       console.log("[URL Extract] Scrape failed:", scrapeError.message, "— falling back to web search");
-      // Fall back to web search if scraping fails
-      return await fallbackWebSearch(url);
+      const result = await fallbackWebSearch(url);
+      const recipe = await result.json();
+
+      if (!recipe.bron) recipe.bron = detectBronFromUrl(url);
+
+      // Flag incomplete data so frontend can warn user
+      const ings = recipe.ingredients || [];
+      const missingQty = ings.filter((i: any) => !i.hoeveelheid).length;
+      if (missingQty > ings.length / 2) {
+        recipe._incomplete = true;
+      }
+
+      setCachedRecipe(url, recipe);
+      return NextResponse.json(recipe);
     }
 
     // Step 2: If JSON-LD found, use it directly (fast path)
@@ -74,7 +86,14 @@ export async function POST(request: NextRequest) {
       return await extractWithClaude(scraped.pageText, url, scraped.ogImage);
     } catch (claudeError: any) {
       console.log("[URL Extract] Claude page-text extraction failed:", claudeError.message, "— trying web search");
-      return await fallbackWebSearch(url);
+      const result = await fallbackWebSearch(url);
+      const recipe = await result.json();
+
+      // Auto-enrich if quantities are missing
+      const enriched = await enrichIfIncomplete(recipe, url);
+
+      setCachedRecipe(url, enriched);
+      return NextResponse.json(enriched);
     }
   } catch (error) {
     const message =
@@ -127,7 +146,7 @@ async function extractWithClaude(
     : "";
 
   const response = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: "claude-sonnet-4-6",
     max_tokens: 4096,
     system: EXTRACTION_SYSTEM_PROMPT,
     messages: [
@@ -175,10 +194,10 @@ async function fallbackWebSearch(url: string): Promise<NextResponse> {
   const client = new Anthropic();
 
   const searchResponse = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: "claude-sonnet-4-6",
     max_tokens: 4096,
     system:
-      "Je bent een assistent die recepten opzoekt via het web. Zoek de volledige receptinformatie op van de gegeven URL. Geef alle gevonden informatie terug inclusief de afbeelding-URL van het recept.",
+      "Je bent een assistent die recepten opzoekt via het web. Zoek de volledige receptinformatie op van de gegeven URL. Geef ALLE gevonden informatie terug. Het is CRUCIAAL dat je de EXACTE hoeveelheden en eenheden bij elke ingrediënt geeft (bijv. '400 gram kippendijen', niet alleen 'kippendijen'). Geef ook de afbeelding-URL van het recept als je die kunt vinden.",
     tools: [
       {
         type: "web_search_20250305",
@@ -189,7 +208,21 @@ async function fallbackWebSearch(url: string): Promise<NextResponse> {
     messages: [
       {
         role: "user",
-        content: `Zoek het volledige recept op van deze URL: ${url}\n\nGeef ALLE informatie die je vindt:\n- Titel van het recept\n- Afbeelding URL\n- Ingrediënten met exacte hoeveelheden en eenheden\n- Bereidingsstappen\n- Bereidingstijd\n- Aantal porties\n- Voedingswaarden (calorieën, vetten, koolhydraten, eiwitten, etc.)\n- Benodigdheden/keukengereedschap\n\nAls het recept in het Engels is, vertaal dan alles naar het Nederlands.`,
+        content: `Zoek het volledige recept op van deze URL: ${url}
+
+STAP 1: Zoek het recept op via de URL. Als de pagina niet direct bereikbaar is, zoek dan op de receptnaam + website naam.
+STAP 2: Zoek SPECIFIEK naar de ingrediëntenlijst met EXACTE hoeveelheden. Zoek eventueel apart op "[receptnaam] ingrediënten" als je ze niet vindt.
+STAP 3: Zoek ook naar de afbeelding van het gerecht.
+
+Geef ALLE informatie die je vindt:
+- Titel van het recept
+- Afbeelding URL (de directe URL naar de receptfoto, bijv. eindigend op .jpg/.png/.webp)
+- Ingrediënten met EXACTE hoeveelheden en eenheden. Elk ingrediënt MOET een hoeveelheid hebben als die op de website staat (bijv. "400 gram kippendijen", "3 eetlepels ketjap manis", "½ theelepel nootmuskaat"). Als je geen hoeveelheid kunt vinden, geef dan "naar smaak" aan.
+- Alle bereidingsstappen in de juiste volgorde
+- Bereidingstijd en aantal porties
+- Voedingswaarden als beschikbaar
+
+Als het recept in het Engels is, vertaal dan alles naar het Nederlands.`,
       },
     ],
   });
@@ -199,14 +232,44 @@ async function fallbackWebSearch(url: string): Promise<NextResponse> {
     .map((block) => (block.type === "text" ? block.text : ""))
     .join("\n");
 
+  // If no quantities found in first search, do a targeted ingredient search
+  const hasQuantities = /\d+\s*(gram|g|ml|el|tl|eetlepel|theelepel|stuk)/i.test(searchText);
+  let extraIngredientText = "";
+  if (!hasQuantities) {
+    console.log("[URL Extract] No quantities found, doing targeted ingredient search");
+    try {
+      const slug = new URL(url).pathname.split("/").filter(Boolean).pop()?.replace(/-/g, " ") || "";
+      const hostname = new URL(url).hostname.replace("www.", "");
+      const ingSearch = await client.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 2048,
+        system: "Zoek specifiek de ingrediëntenlijst met hoeveelheden van dit recept. Geef ALLE ingrediënten met exacte hoeveelheden.",
+        tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }],
+        messages: [{
+          role: "user",
+          content: `Zoek de ingrediëntenlijst met exacte hoeveelheden voor het recept "${slug}" van ${hostname}. Ik heb de hoeveelheden nodig zoals "400 gram kippendijen", "3 el ketjap manis" etc.`,
+        }],
+      });
+      extraIngredientText = ingSearch.content
+        .filter((b) => b.type === "text")
+        .map((b) => (b.type === "text" ? b.text : ""))
+        .join("\n");
+      console.log("[URL Extract] Extra ingredient search done, length:", extraIngredientText.length);
+    } catch {}
+  }
+
+  const fullText = extraIngredientText
+    ? `${searchText}\n\nEXTRA INGREDIËNTEN INFO:\n${extraIngredientText}`
+    : searchText;
+
   const structureResponse = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: "claude-sonnet-4-6",
     max_tokens: 4096,
     system: EXTRACTION_SYSTEM_PROMPT,
     messages: [
       {
         role: "user",
-        content: `Hier is de receptinformatie gevonden op ${url}:\n\n${searchText}\n\nRetourneer dit als een enkel JSON-object volgens het opgegeven schema. Zorg dat image_url wordt ingevuld als je een afbeelding hebt gevonden. ALLEEN JSON, geen andere tekst.`,
+        content: `Hier is de receptinformatie gevonden op ${url}:\n\n${fullText}\n\nRetourneer dit als een enkel JSON-object volgens het opgegeven schema. Zorg dat ELKE ingrediënt een hoeveelheid en eenheid heeft als die beschikbaar is. Zorg dat image_url wordt ingevuld als je een afbeelding hebt gevonden. ALLEEN JSON, geen andere tekst.`,
       },
     ],
   });

@@ -8,8 +8,24 @@
 
 const FETCH_TIMEOUT = 15000;
 
-const USER_AGENT =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
+const CHROME_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+
+// Full browser-like headers that pass most bot detection
+const BROWSER_HEADERS: Record<string, string> = {
+  "User-Agent": CHROME_UA,
+  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+  "Accept-Language": "nl-NL,nl;q=0.9,en-US;q=0.8,en;q=0.7",
+  "Accept-Encoding": "gzip, deflate, br",
+  "Cache-Control": "max-age=0",
+  "Sec-Ch-Ua": '"Chromium";v="131", "Not_A Brand";v="24", "Google Chrome";v="131"',
+  "Sec-Ch-Ua-Mobile": "?0",
+  "Sec-Ch-Ua-Platform": '"Windows"',
+  "Sec-Fetch-Dest": "document",
+  "Sec-Fetch-Mode": "navigate",
+  "Sec-Fetch-Site": "none",
+  "Sec-Fetch-User": "?1",
+  "Upgrade-Insecure-Requests": "1",
+};
 
 interface ScrapedRecipe {
   /** JSON-LD recipe data if found */
@@ -25,28 +41,98 @@ interface ScrapedRecipe {
 }
 
 export async function scrapePage(url: string): Promise<ScrapedRecipe> {
+  // Strategy 1: Direct fetch with full browser headers (fast)
+  const directResult = await tryFetch(url, BROWSER_HEADERS);
+  if (directResult) return directResult;
+
+  // Strategy 2: Headless browser (bypasses Cloudflare JS challenge)
+  console.log("[Scrape] Direct fetch failed, trying headless browser...");
+  const browserResult = await tryHeadlessBrowser(url);
+  if (browserResult) return browserResult;
+
+  throw new Error("Pagina niet bereikbaar (geblokkeerd door bot-detectie)");
+}
+
+async function tryHeadlessBrowser(url: string): Promise<ScrapedRecipe | null> {
+  try {
+    const puppeteer = await import("puppeteer-core");
+    const fs = await import("fs");
+
+    // Find browser executable
+    const paths = [
+      "C:/Program Files/Google/Chrome/Application/chrome.exe",
+      "C:/Program Files/BraveSoftware/Brave-Browser/Application/brave.exe",
+      "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe",
+      "/usr/bin/google-chrome",
+      "/usr/bin/chromium-browser",
+    ];
+    const execPath = paths.find((p) => fs.existsSync(p));
+    if (!execPath) {
+      console.log("[Scrape] No browser found for headless scraping");
+      return null;
+    }
+
+    const browser = await puppeteer.default.launch({
+      executablePath: execPath,
+      headless: "new" as any,
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu"],
+    });
+
+    try {
+      const page = await browser.newPage();
+      await page.setUserAgent(CHROME_UA);
+      await page.goto(url, { waitUntil: "networkidle2", timeout: 20000 });
+
+      const html = await page.content();
+
+      if (html.length < 5000 && (html.includes("Just a moment") || html.includes("Checking your browser"))) {
+        console.log("[Scrape] Headless browser also blocked by Cloudflare");
+        return null;
+      }
+
+      console.log(`[Scrape] Headless browser success: ${html.length} bytes`);
+      return parseHtml(html, url);
+    } finally {
+      await browser.close();
+    }
+  } catch (err: any) {
+    console.log("[Scrape] Headless browser error:", err.message);
+    return null;
+  }
+}
+
+async function tryFetch(url: string, headers: Record<string, string>): Promise<ScrapedRecipe | null> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
 
   try {
     const res = await fetch(url, {
-      headers: {
-        "User-Agent": USER_AGENT,
-        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "nl-NL,nl;q=0.9,en;q=0.8",
-      },
+      headers,
       signal: controller.signal,
       redirect: "follow",
     });
 
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}`);
-    }
+    clearTimeout(timeout);
+
+    if (!res.ok) return null;
 
     const html = await res.text();
+
+    // Check for Cloudflare challenge
+    if (html.length < 5000 && (html.includes("Just a moment") || html.includes("Checking your browser"))) {
+      console.log("[Scrape] Cloudflare challenge detected");
+      return null;
+    }
+
+    // Check for Google "not in cache" page
+    if (html.includes("cache:") && html.includes("not available") && html.length < 3000) {
+      return null;
+    }
+
     return parseHtml(html, url);
-  } finally {
+  } catch {
     clearTimeout(timeout);
+    return null;
   }
 }
 

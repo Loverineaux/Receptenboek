@@ -27,6 +27,10 @@ export default function ReceptenPage() {
   const [search, setSearch] = useState(searchParams.get('q') || '');
   const [category, setCategory] = useState<string | null>(searchParams.get('cat') || null);
   const [source, setSource] = useState(searchParams.get('bron') || '');
+  const [excludedSources, setExcludedSources] = useState<Set<string>>(() => {
+    const ex = searchParams.get('exbron');
+    return ex ? new Set(ex.split(',')) : new Set();
+  });
   const [sort, setSort] = useState<SortOption>((searchParams.get('sort') as SortOption) || 'newest');
   const [searchIngredients, setSearchIngredients] = useState(searchParams.get('ing') === '1');
   const [sourceOptions, setSourceOptions] = useState<string[]>([]);
@@ -37,11 +41,12 @@ export default function ReceptenPage() {
     if (search) params.set('q', search);
     if (category) params.set('cat', category);
     if (source) params.set('bron', source);
+    if (excludedSources.size > 0) params.set('exbron', [...excludedSources].join(','));
     if (sort !== 'newest') params.set('sort', sort);
     if (searchIngredients) params.set('ing', '1');
     const qs = params.toString();
     router.replace(`/recepten${qs ? `?${qs}` : ''}`, { scroll: false });
-  }, [search, category, source, sort, searchIngredients, router]);
+  }, [search, category, source, excludedSources, sort, searchIngredients, router]);
 
   // Fetch unique sources from DB
   useEffect(() => {
@@ -77,13 +82,9 @@ export default function ReceptenPage() {
           `
           );
 
-        if (search && !searchIngredients) {
-          query = query.ilike('title', `%${search}%`);
-        }
+        // Don't server-filter when searching ingredients (need all recipes for client-side filter)
 
-        if (source) {
-          query = query.eq('bron', source);
-        }
+        // Source filtering done client-side (supports exclude mode)
 
         switch (sort) {
           case 'time':
@@ -123,17 +124,28 @@ export default function ReceptenPage() {
           };
         });
 
-        // Client-side ingredient search
+        // Client-side search filter
         let filtered = processed;
-        if (search && searchIngredients) {
+        if (search) {
           const q = search.toLowerCase();
           filtered = filtered.filter((r) => {
             const titleMatch = r.title.toLowerCase().includes(q);
-            const ingMatch = (r.ingredients || []).some((i: any) =>
-              (i.naam || '').toLowerCase().includes(q)
-            );
-            return titleMatch || ingMatch;
+            if (titleMatch) return true;
+            if (searchIngredients) {
+              return (r.ingredients || []).some((i: any) =>
+                (i.naam || '').toLowerCase().includes(q)
+              );
+            }
+            return false;
           });
+        }
+
+        // Client-side source filter (include or exclude)
+        if (source) {
+          filtered = filtered.filter((r) => (r.bron || '') === source);
+        }
+        if (excludedSources.size > 0) {
+          filtered = filtered.filter((r) => !excludedSources.has(r.bron || ''));
         }
 
         // Client-side category filter — simply check tags
@@ -170,14 +182,40 @@ export default function ReceptenPage() {
         setLoading(false);
       }
     },
-    [supabase, user, search, searchIngredients, category, source, sort]
+    [supabase, user, search, searchIngredients, category, source, excludedSources, sort]
   );
 
   // Re-fetch when filters change
   useEffect(() => {
     fetchRecipes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, searchIngredients, category, source, sort, user?.id]);
+  }, [search, searchIngredients, category, source, excludedSources, sort, user?.id]);
+
+  // Silently refresh tags after 5s to pick up auto-categorize results
+  useEffect(() => {
+    if (recipes.length === 0) return;
+    const timer = setTimeout(async () => {
+      const { data } = await supabase
+        .from('recipes')
+        .select('id, tags:recipe_tags(tag:tags(id, name))');
+      if (!data) return;
+      const tagMap = new Map(data.map((r: any) => [
+        r.id,
+        (r.tags ?? []).map((rt: any) => rt.tag).filter(Boolean),
+      ]));
+      setRecipes((prev) =>
+        prev.map((r) => {
+          const newTags = tagMap.get(r.id);
+          if (newTags && JSON.stringify(newTags) !== JSON.stringify(r.tags)) {
+            return { ...r, tags: newTags };
+          }
+          return r;
+        })
+      );
+    }, 5000);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recipes.length]);
 
   const handleFavoriteToggle = async (recipeId: string, isFavorited: boolean) => {
     if (!user) return;
@@ -232,6 +270,27 @@ export default function ReceptenPage() {
           ))}
         </select>
 
+        {/* Exclude sources dropdown */}
+        <div className="relative">
+          <select
+            value=""
+            onChange={(e) => {
+              if (e.target.value) {
+                setExcludedSources((prev) => new Set(prev).add(e.target.value));
+                setSource(''); // Clear include filter when excluding
+              }
+            }}
+            className="rounded-lg border border-gray-300 bg-surface px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+          >
+            <option value="" className="text-text-muted">Verberg bron...</option>
+            {sourceOptions
+              .filter((s) => !excludedSources.has(s))
+              .map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+          </select>
+        </div>
+
         <select
           value={sort}
           onChange={(e) => setSort(e.target.value as SortOption)}
@@ -242,6 +301,35 @@ export default function ReceptenPage() {
           <option value="time">Bereidingstijd</option>
         </select>
       </div>
+
+      {/* Excluded source chips */}
+      {excludedSources.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-text-muted">Verborgen:</span>
+          {[...excludedSources].map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setExcludedSources((prev) => {
+                const next = new Set(prev);
+                next.delete(s);
+                return next;
+              })}
+              className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-100"
+            >
+              {s}
+              <span className="text-red-400">&times;</span>
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => setExcludedSources(new Set())}
+            className="text-xs text-text-muted hover:text-text-secondary"
+          >
+            Alles tonen
+          </button>
+        </div>
+      )}
 
       {/* Loading skeleton */}
       {loading && (

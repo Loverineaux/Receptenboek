@@ -122,6 +122,19 @@ function scaleStepText(text: string, ratio: number): string {
   });
 }
 
+function pluralizeUnit(unit: string, amount: number): string {
+  if (amount <= 1) return unit;
+  const plurals: Record<string, string> = {
+    'handje': 'handjes', 'snufje': 'snufjes', 'scheutje': 'scheutjes',
+    'bosje': 'bosjes', 'takje': 'takjes', 'teentje': 'teentjes',
+    'plakje': 'plakjes', 'stuk': 'stuks', 'blaadje': 'blaadjes',
+    'sneetje': 'sneetjes', 'el': 'el', 'tl': 'tl',
+    'gram': 'gram', 'kg': 'kg', 'ml': 'ml', 'l': 'l',
+    'dl': 'dl', 'cl': 'cl',
+  };
+  return plurals[unit.toLowerCase()] || unit;
+}
+
 function toFraction(val: number): string {
   if (val === 0) return '0';
 
@@ -647,9 +660,51 @@ export default function RecipeDetailPage() {
       {tab === 'ingredienten' && (
         <div className="space-y-1">
           {recipe.ingredients.map((ing) => {
-            const parsed = parseAmount(ing.hoeveelheid);
+            // Try to parse amount from hoeveelheid field first
+            let parsed = parseAmount(ing.hoeveelheid);
+            let eenheid = ing.eenheid ?? '';
+            let naam = ing.naam ?? '';
+
+            // If no amount in hoeveelheid, try to extract from naam
+            // e.g. "Rucola Handje" → amount=1, eenheid=handje, naam=Rucola
+            // e.g. "Avocado Halve" → amount=0.5, naam=Avocado
+            if (parsed === null && naam) {
+              const parts = naam.trim().split(/\s+/);
+              const lastWord = parts[parts.length - 1]?.toLowerCase();
+
+              // Check if last word is a unit implying quantity 1
+              const impliedOneUnits: Record<string, string> = {
+                'handje': 'handje', 'handjes': 'handje',
+                'snufje': 'snufje', 'snufjes': 'snufje',
+                'scheutje': 'scheutje', 'scheutjes': 'scheutje',
+                'bosje': 'bosje', 'bosjes': 'bosje',
+                'takje': 'takje', 'takjes': 'takje',
+                'teentje': 'teentje', 'teentjes': 'teentje',
+                'plakje': 'plakje', 'plakjes': 'plakje',
+                'blaadjes': 'blaadjes',
+              };
+
+              if (impliedOneUnits[lastWord]) {
+                parsed = 1;
+                eenheid = impliedOneUnits[lastWord];
+                naam = parts.slice(0, -1).join(' ');
+              } else {
+                // Check for Dutch word amounts: "Avocado Halve"
+                const wordAmount = DUTCH_AMOUNTS[lastWord];
+                if (wordAmount !== undefined) {
+                  parsed = typeof wordAmount === 'number' ? wordAmount : parseAmount(wordAmount);
+                  naam = parts.slice(0, -1).join(' ');
+                }
+              }
+            }
+
             const scaled = parsed !== null ? parsed * ratio : null;
             const amount = scaled !== null ? toFraction(scaled) : (ing.hoeveelheid ?? '');
+            // Pluralize unit if scaled > 1
+            const displayEenheid = scaled !== null && scaled > 1 && eenheid
+              ? pluralizeUnit(eenheid, scaled)
+              : eenheid;
+
             return (
               <label
                 key={ing.id}
@@ -663,10 +718,10 @@ export default function RecipeDetailPage() {
                   {amount && (
                     <span className="font-semibold">{amount}</span>
                   )}{' '}
-                  {ing.eenheid && (
-                    <span className="text-text-secondary">{ing.eenheid}</span>
+                  {displayEenheid && (
+                    <span className="text-text-secondary">{displayEenheid}</span>
                   )}{' '}
-                  {ing.naam}
+                  {naam}
                 </span>
               </label>
             );

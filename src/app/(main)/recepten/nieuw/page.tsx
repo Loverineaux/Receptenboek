@@ -122,6 +122,27 @@ function mapExtractedToFormData(extracted: any, sourceUrl?: string): RecipeFormD
           }
         }
 
+        // If we have hoeveelheid but eenheid is in naam (e.g. hoeveelheid="600", naam="gram kippendijen")
+        if (hoeveelheid && !eenheid && naam) {
+          const um = naam.match(
+            /^(gram|g|kg|ml|l|dl|cl|el|tl|eetlepel|eetlepels|theelepel|theelepels|stuks?|plakjes?|sneetjes?|teentjes?|takjes?|handjes?|bosjes?|snufje|scheut|blikjes?|zakjes?|potjes?|stuk|stokje)\s+(.+)$/i
+          );
+          if (um) {
+            eenheid = um[1];
+            naam = um[2];
+          }
+        }
+
+        // If naam still has "2 eetlepels sojasaus" pattern (hoeveelheid in naam)
+        if (!hoeveelheid && naam) {
+          const nm = naam.match(/^([\d½¼¾⅓⅔,./]+)\s+(eetlepels?|theelepels?|el|tl)\s+(.+)$/i);
+          if (nm) {
+            hoeveelheid = nm[1];
+            eenheid = nm[2];
+            naam = nm[3];
+          }
+        }
+
         return { hoeveelheid, eenheid, naam };
       }),
     steps: (extracted.steps ?? [])
@@ -140,7 +161,8 @@ function mapExtractedToFormData(extracted: any, sourceUrl?: string): RecipeFormD
 }
 
 const PROGRESS_STEPS = [
-  'Recept ophalen van URL...',
+  'Website ophalen...',
+  'Pagina scrapen met browser...',
   'Ingrediënten herkennen...',
   'Bereidingsstappen verwerken...',
   'Voedingswaarden extraheren...',
@@ -366,14 +388,28 @@ export default function NieuwReceptPage() {
       }
 
       const extracted = await res.json();
-      console.log('[URL Import] 3. Extracted data keys:', Object.keys(extracted));
+
+      // Warn if data is incomplete (Cloudflare-blocked sites)
+      if (extracted._incomplete) {
+        const action = window.confirm(
+          'Deze website blokkeert automatisch uitlezen.\n\n' +
+          'Hoeveelheden bij ingrediënten ontbreken. ' +
+          'Maak een screenshot van het recept en gebruik de Foto import voor een compleet resultaat.\n\n' +
+          'Wil je het recept toch opslaan zonder hoeveelheden?'
+        );
+        if (!action) {
+          setExtracting(false);
+          setSaving(false);
+          return;
+        }
+      }
 
       // Show saving step
       setProgressStep(PROGRESS_STEPS.length - 1);
       setSaving(true);
 
       // Map and save with duplicate check
-      const formData = mapExtractedToFormData(extracted, importUrl);
+      const formData = mapExtractedToFormData(enriched, importUrl);
       const recipe = await saveRecipe(formData);
       if (recipe) router.push(`/recepten/${recipe.id}`);
     } catch (err: any) {
@@ -556,6 +592,7 @@ export default function NieuwReceptPage() {
 
     return (await res.json()).recipe;
   };
+
 
   const handleSubmit = async (data: RecipeFormData) => {
     const recipe = await saveRecipe(data);
