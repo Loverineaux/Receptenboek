@@ -6,6 +6,13 @@ import {
 } from "@/lib/extraction/prompt";
 import { scrapePage, jsonLdToRecipe, detectBronFromUrl } from "@/lib/extraction/scrape";
 import { getCachedRecipe, setCachedRecipe } from "@/lib/extraction/cache";
+import { validateRecipe } from "@/lib/extraction/validate";
+
+function respondWithValidation(recipe: any) {
+  const validation = validateRecipe(recipe);
+  console.log(`[URL Extract] Validation score: ${validation.score}/100, issues: ${validation.issues.length}`);
+  return NextResponse.json({ ...recipe, _validation: validation });
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -44,8 +51,7 @@ export async function POST(request: NextRequest) {
       console.log("[URL Extract] Scraped OK. JSON-LD:", !!scraped.jsonLd, "OG Image:", !!scraped.ogImage);
     } catch (scrapeError: any) {
       console.log("[URL Extract] Scrape failed:", scrapeError.message, "— falling back to web search");
-      const result = await fallbackWebSearch(url);
-      const recipe = await result.json();
+      const recipe = await fallbackWebSearch(url);
 
       if (!recipe.bron) recipe.bron = detectBronFromUrl(url);
 
@@ -57,7 +63,7 @@ export async function POST(request: NextRequest) {
       }
 
       setCachedRecipe(url, recipe);
-      return NextResponse.json(recipe);
+      return respondWithValidation(recipe);
     }
 
     // Step 2: If JSON-LD found, use it directly (fast path)
@@ -77,7 +83,7 @@ export async function POST(request: NextRequest) {
       }
 
       setCachedRecipe(url, recipe);
-      return NextResponse.json(recipe);
+      return respondWithValidation(recipe);
     }
 
     // Step 3: No JSON-LD — use Claude to extract from page text
@@ -86,14 +92,10 @@ export async function POST(request: NextRequest) {
       return await extractWithClaude(scraped.pageText, url, scraped.ogImage);
     } catch (claudeError: any) {
       console.log("[URL Extract] Claude page-text extraction failed:", claudeError.message, "— trying web search");
-      const result = await fallbackWebSearch(url);
-      const recipe = await result.json();
+      const recipe = await fallbackWebSearch(url);
 
-      // Auto-enrich if quantities are missing
-      const enriched = await enrichIfIncomplete(recipe, url);
-
-      setCachedRecipe(url, enriched);
-      return NextResponse.json(enriched);
+      setCachedRecipe(url, recipe);
+      return respondWithValidation(recipe);
     }
   } catch (error) {
     const message =
@@ -186,10 +188,10 @@ Retourneer dit als een enkel JSON-object volgens het opgegeven schema. ALLEEN JS
   }
 
   setCachedRecipe(url, recipe);
-  return NextResponse.json(recipe);
+  return respondWithValidation(recipe);
 }
 
-async function fallbackWebSearch(url: string): Promise<NextResponse> {
+async function fallbackWebSearch(url: string): Promise<any> {
   console.log("[URL Extract] Using web search fallback for:", url);
   const client = new Anthropic();
 
@@ -294,6 +296,5 @@ Als het recept in het Engels is, vertaal dan alles naar het Nederlands.`,
     recipe.bron = detectBronFromUrl(url);
   }
 
-  setCachedRecipe(url, recipe);
-  return NextResponse.json(recipe);
+  return recipe;
 }

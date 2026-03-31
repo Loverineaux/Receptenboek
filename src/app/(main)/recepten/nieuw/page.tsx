@@ -10,7 +10,7 @@ import BronInput from '@/components/ui/BronInput';
 import RecipeForm, { RecipeFormData } from '@/components/recipes/RecipeForm';
 import type { Source, Difficulty } from '@/types';
 
-type ImportTab = 'url' | 'foto' | 'pdf' | 'handmatig';
+type ImportTab = 'url' | 'foto' | 'pdf' | 'handmatig' | 'preview';
 
 const tabs: { key: ImportTab; label: string; icon: React.ReactNode }[] = [
   { key: 'url', label: 'URL', icon: <LinkIcon className="h-4 w-4" /> },
@@ -175,6 +175,7 @@ export default function NieuwReceptPage() {
 
   const [activeTab, setActiveTab] = useState<ImportTab>('url');
   const [extractedData, setExtractedData] = useState<any>(null);
+  const [extractedPreview, setExtractedPreview] = useState<any>(null);
   const [extracting, setExtracting] = useState(false);
   const [extractError, setExtractError] = useState<string | null>(null);
   const [progressStep, setProgressStep] = useState(0);
@@ -302,11 +303,22 @@ export default function NieuwReceptPage() {
         }
       }
 
-      // Save with duplicate check
-      setPhotoProgress('Recept opslaan...');
-      const formData = mapExtractedToFormData(extracted);
-      const recipe = await saveRecipe(formData);
-      if (recipe) router.push(`/recepten/${recipe.id}`);
+      // Show preview
+      // Add basic validation for photo imports (no server-side validation)
+      const ings = extracted.ingredients || [];
+      const missingQty = ings.filter((i: any) => !i.hoeveelheid).length;
+      extracted._validation = {
+        score: Math.max(0, 100 - (missingQty > ings.length / 2 ? 25 : 0) - (!extracted.image_url ? 10 : 0) - (!(extracted.steps?.length) ? 25 : 0) - (!extracted.basis_porties ? 10 : 0)),
+        issues: [
+          ...(!extracted.image_url ? [{ severity: 'warning', message: 'Geen afbeelding — voeg een gerecht-foto toe' }] : []),
+          ...(missingQty === ings.length && ings.length > 0 ? [{ severity: 'error', message: 'Geen hoeveelheden bij ingrediënten' }] : []),
+          ...(missingQty > 0 && missingQty < ings.length ? [{ severity: 'warning', message: `${missingQty} ingrediënten missen een hoeveelheid` }] : []),
+          ...(!extracted.steps?.length ? [{ severity: 'error', message: 'Geen bereidingsstappen' }] : []),
+          ...(!extracted.basis_porties ? [{ severity: 'warning', message: 'Aantal porties onbekend' }] : []),
+        ].filter(Boolean),
+      };
+      setExtractedPreview(extracted);
+      setActiveTab('preview');
     } catch (err: any) {
       console.error('[Photo Import] Error:', err.message);
       setExtractError(err.message);
@@ -389,29 +401,9 @@ export default function NieuwReceptPage() {
 
       const extracted = await res.json();
 
-      // Warn if data is incomplete (Cloudflare-blocked sites)
-      if (extracted._incomplete) {
-        const action = window.confirm(
-          'Deze website blokkeert automatisch uitlezen.\n\n' +
-          'Hoeveelheden bij ingrediënten ontbreken. ' +
-          'Maak een screenshot van het recept en gebruik de Foto import voor een compleet resultaat.\n\n' +
-          'Wil je het recept toch opslaan zonder hoeveelheden?'
-        );
-        if (!action) {
-          setExtracting(false);
-          setSaving(false);
-          return;
-        }
-      }
-
-      // Show saving step
-      setProgressStep(PROGRESS_STEPS.length - 1);
-      setSaving(true);
-
-      // Map and save with duplicate check
-      const formData = mapExtractedToFormData(enriched, importUrl);
-      const recipe = await saveRecipe(formData);
-      if (recipe) router.push(`/recepten/${recipe.id}`);
+      // Show preview with validation
+      setExtractedPreview(extracted);
+      setActiveTab('preview');
     } catch (err: any) {
       clearInterval(interval);
       console.error('[URL Import] ERROR:', err.message);
@@ -594,6 +586,20 @@ export default function NieuwReceptPage() {
   };
 
 
+  const handleSavePreview = async () => {
+    if (!extractedPreview) return;
+    setSaving(true);
+    try {
+      const formData = mapExtractedToFormData(extractedPreview);
+      const recipe = await saveRecipe(formData);
+      if (recipe) router.push(`/recepten/${recipe.id}`);
+    } catch (err: any) {
+      setExtractError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleSubmit = async (data: RecipeFormData) => {
     const recipe = await saveRecipe(data);
     if (recipe) router.push(`/recepten/${recipe.id}`);
@@ -624,7 +630,8 @@ export default function NieuwReceptPage() {
         </div>
       )}
 
-      {/* Tab selector */}
+      {/* Tab selector — hidden during preview */}
+      {activeTab !== 'preview' && (
       <div className="flex flex-wrap gap-2 border-b pb-3">
         {tabs.map((t) => (
           <button
@@ -641,10 +648,130 @@ export default function NieuwReceptPage() {
           </button>
         ))}
       </div>
+      )}
 
       {extractError && (
         <div className="rounded-lg bg-error/10 px-4 py-3 text-sm text-error">
           {extractError}
+        </div>
+      )}
+
+      {/* ── Preview na extractie ───────────────────── */}
+      {activeTab === 'preview' && extractedPreview && (
+        <div className="space-y-5 rounded-xl border bg-surface p-6">
+          <h2 className="text-lg font-semibold text-text-primary">Recept controleren</h2>
+
+          {/* Validation issues */}
+          {extractedPreview._validation && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <div className={`h-2.5 w-2.5 rounded-full ${
+                  extractedPreview._validation.score >= 80 ? 'bg-green-500' :
+                  extractedPreview._validation.score >= 50 ? 'bg-amber-500' : 'bg-red-500'
+                }`} />
+                <span className="text-sm font-medium text-text-primary">
+                  Kwaliteit: {extractedPreview._validation.score}/100
+                </span>
+              </div>
+              {extractedPreview._validation.issues.map((issue: any, idx: number) => (
+                <div
+                  key={idx}
+                  className={`rounded-lg px-3 py-2 text-xs ${
+                    issue.severity === 'error' ? 'bg-red-50 text-red-700' :
+                    issue.severity === 'warning' ? 'bg-amber-50 text-amber-700' :
+                    'bg-gray-50 text-text-muted'
+                  }`}
+                >
+                  {issue.severity === 'error' ? '!' : issue.severity === 'warning' ? '!' : 'i'} {issue.message}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Recipe preview */}
+          <div className="space-y-4">
+            {extractedPreview.image_url && (
+              <img src={extractedPreview.image_url} alt="" className="h-48 w-full rounded-lg object-cover" />
+            )}
+
+            <div>
+              <h3 className="text-xl font-bold text-text-primary">{extractedPreview.title}</h3>
+              {extractedPreview.subtitle && (
+                <p className="mt-1 text-sm italic text-text-secondary">{extractedPreview.subtitle}</p>
+              )}
+              <div className="mt-2 flex flex-wrap gap-2 text-xs text-text-muted">
+                {extractedPreview.bron && <span>Bron: {extractedPreview.bron}</span>}
+                {extractedPreview.tijd && <span>Tijd: {extractedPreview.tijd}</span>}
+                {extractedPreview.basis_porties && <span>Porties: {extractedPreview.basis_porties}</span>}
+              </div>
+            </div>
+
+            {/* Ingredients */}
+            <div>
+              <h4 className="mb-2 text-sm font-semibold text-text-primary">
+                Ingrediënten ({extractedPreview.ingredients?.length || 0})
+              </h4>
+              <div className="space-y-1">
+                {(extractedPreview.ingredients || []).map((ing: any, idx: number) => (
+                  <div key={idx} className="flex gap-2 text-sm">
+                    <span className={`min-w-[4rem] font-medium ${ing.hoeveelheid ? 'text-text-primary' : 'text-red-400'}`}>
+                      {ing.hoeveelheid || '?'}
+                    </span>
+                    <span className="min-w-[3rem] text-text-secondary">{ing.eenheid || ''}</span>
+                    <span className="text-text-primary">{ing.naam}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Steps */}
+            <div>
+              <h4 className="mb-2 text-sm font-semibold text-text-primary">
+                Bereiding ({extractedPreview.steps?.length || 0} stappen)
+              </h4>
+              <ol className="space-y-2">
+                {(extractedPreview.steps || []).map((step: any, idx: number) => (
+                  <li key={idx} className="flex gap-2 text-sm">
+                    <span className="shrink-0 font-medium text-primary">{idx + 1}.</span>
+                    <span className="text-text-secondary">{step.beschrijving}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+
+            {/* Nutrition */}
+            {extractedPreview.nutrition && Object.values(extractedPreview.nutrition).some(Boolean) && (
+              <div>
+                <h4 className="mb-1 text-sm font-semibold text-text-primary">Voedingswaarden</h4>
+                <div className="flex flex-wrap gap-3 text-xs text-text-muted">
+                  {extractedPreview.nutrition.energie_kcal && <span>{extractedPreview.nutrition.energie_kcal} kcal</span>}
+                  {extractedPreview.nutrition.eiwitten && <span>{extractedPreview.nutrition.eiwitten}g eiwit</span>}
+                  {extractedPreview.nutrition.koolhydraten && <span>{extractedPreview.nutrition.koolhydraten}g koolh.</span>}
+                  {extractedPreview.nutrition.vetten && <span>{extractedPreview.nutrition.vetten}g vet</span>}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-3 border-t pt-4">
+            <Button
+              variant="primary"
+              loading={saving}
+              onClick={handleSavePreview}
+            >
+              Recept opslaan
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setExtractedPreview(null);
+                setActiveTab('url');
+              }}
+            >
+              Annuleren
+            </Button>
+          </div>
         </div>
       )}
 
