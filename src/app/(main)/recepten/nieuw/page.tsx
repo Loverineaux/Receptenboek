@@ -143,6 +143,14 @@ function mapExtractedToFormData(extracted: any, sourceUrl?: string): RecipeFormD
           }
         }
 
+        // If we have a quantity but no unit, assign "stuks" for countable items
+        if (hoeveelheid && !eenheid && naam) {
+          const countable = /^(ui|uien|ei|eieren|tomaat|tomaten|paprika|paprika's|aardappel|aardappelen|wortel|wortelen|citroen|citroenen|limoen|limoenen|avocado|avocado's|banaan|bananen|appel|appels|peer|peren|mango|mango's|courgette|courgettes|aubergine|aubergines|komkommer|komkommers|wrap|wraps|broodje|broodjes|tortilla|tortilla's|peper|pepers|champignon|champignons|kaneelstokje|kaneelstokjes|kruidnagel|kruidnagels|laurierblad|laurierbladeren)\s*(\(.*\))?$/i;
+          if (countable.test(naam.trim())) {
+            eenheid = 'stuks';
+          }
+        }
+
         return { hoeveelheid, eenheid, naam };
       }),
     steps: (extracted.steps ?? [])

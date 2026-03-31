@@ -122,17 +122,30 @@ function scaleStepText(text: string, ratio: number): string {
   });
 }
 
-function pluralizeUnit(unit: string, amount: number): string {
-  if (amount <= 1) return unit;
-  const plurals: Record<string, string> = {
-    'handje': 'handjes', 'snufje': 'snufjes', 'scheutje': 'scheutjes',
-    'bosje': 'bosjes', 'takje': 'takjes', 'teentje': 'teentjes',
-    'plakje': 'plakjes', 'stuk': 'stuks', 'blaadje': 'blaadjes',
-    'sneetje': 'sneetjes', 'el': 'el', 'tl': 'tl',
-    'gram': 'gram', 'kg': 'kg', 'ml': 'ml', 'l': 'l',
-    'dl': 'dl', 'cl': 'cl',
-  };
-  return plurals[unit.toLowerCase()] || unit;
+function smartUnit(unit: string, amount: number): string {
+  const lower = unit.toLowerCase();
+
+  // Units that don't change
+  const invariant = ['gram', 'g', 'kg', 'ml', 'l', 'dl', 'cl', 'el', 'tl'];
+  if (invariant.includes(lower)) return unit;
+
+  // Singular/plural pairs
+  const pairs: [string, string][] = [
+    ['handje', 'handjes'], ['snufje', 'snufjes'], ['scheutje', 'scheutjes'],
+    ['bosje', 'bosjes'], ['takje', 'takjes'], ['teentje', 'teentjes'],
+    ['plakje', 'plakjes'], ['stuk', 'stuks'], ['blaadje', 'blaadjes'],
+    ['sneetje', 'sneetjes'], ['stokje', 'stokjes'], ['blikje', 'blikjes'],
+    ['zakje', 'zakjes'], ['potje', 'potjes'],
+    ['eetlepel', 'eetlepels'], ['theelepel', 'theelepels'],
+  ];
+
+  for (const [singular, plural] of pairs) {
+    if (lower === singular || lower === plural) {
+      return amount <= 1 ? singular : plural;
+    }
+  }
+
+  return unit;
 }
 
 function toFraction(val: number): string {
@@ -702,7 +715,7 @@ export default function RecipeDetailPage() {
             const amount = scaled !== null ? toFraction(scaled) : (ing.hoeveelheid ?? '');
             // Pluralize unit if scaled > 1
             const displayEenheid = scaled !== null && scaled > 1 && eenheid
-              ? pluralizeUnit(eenheid, scaled)
+              ? smartUnit(eenheid, scaled)
               : eenheid;
 
             return (

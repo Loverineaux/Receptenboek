@@ -32,16 +32,31 @@ export function validateRecipe(recipe: any): ValidationResult {
   if (ings.length === 0) {
     issues.push({ field: 'ingredients', severity: 'error', message: 'Geen ingrediënten gevonden' });
   } else {
-    const missingQty = ings.filter((i: any) => !i.hoeveelheid).length;
-    if (missingQty === ings.length) {
+    // Ingredients that naturally don't need quantities
+    const noQtyNeeded = /^(olie|olijfolie|zonnebloemolie|boter|peper|zout|peper en zout|peper & zout|naar smaak|water|bakvet|roomboter|sesamolie)/i;
+    const needsQty = ings.filter((i: any) => !noQtyNeeded.test((i.naam || '').trim()));
+    const missingQty = needsQty.filter((i: any) => !i.hoeveelheid).length;
+
+    if (missingQty === needsQty.length && needsQty.length > 0) {
       issues.push({ field: 'ingredients', severity: 'error', message: 'Geen enkele hoeveelheid bij ingrediënten — porties aanpassen werkt niet' });
     } else if (missingQty > 0) {
-      issues.push({ field: 'ingredients', severity: 'warning', message: `${missingQty} van ${ings.length} ingrediënten missen een hoeveelheid` });
+      issues.push({ field: 'ingredients', severity: 'warning', message: `${missingQty} van ${needsQty.length} ingrediënten missen een hoeveelheid` });
     }
 
-    const missingUnit = ings.filter((i: any) => i.hoeveelheid && !i.eenheid).length;
-    if (missingUnit > ings.length / 3) {
-      issues.push({ field: 'ingredients', severity: 'info', message: `${missingUnit} ingrediënten missen een eenheid (gram, ml, stuks etc.)` });
+    // Units: only flag if a numeric quantity has no unit AND the name doesn't imply a countable item
+    // "2 uien" = fine (countable), "600 kippendijen" = needs "gram"
+    const noUnitOk = /^(ui|uien|ei|eieren|tomaat|tomaten|paprika|aardappel|aardappelen|wortel|wortelen|citroen|limoen|avocado|banaan|bananen|appel|peer|mango|kaneelstokje|kruidnagel|kruidnagels|laurierblad|laurierbladeren|blaadjes?|teentje|teentjes|takje|takjes)/i;
+    const needsUnit = ings.filter((i: any) => {
+      if (!i.hoeveelheid || i.eenheid) return false;
+      const naam = (i.naam || '').trim();
+      if (noQtyNeeded.test(naam)) return false;
+      if (noUnitOk.test(naam)) return false;
+      // Large numbers (>10) usually need a unit (gram, ml)
+      const num = parseFloat(i.hoeveelheid);
+      return !isNaN(num) && num > 10;
+    });
+    if (needsUnit.length > 0) {
+      issues.push({ field: 'ingredients', severity: 'info', message: `${needsUnit.length} ingrediënten missen mogelijk een eenheid (gram, ml, stuks etc.)` });
     }
   }
 
