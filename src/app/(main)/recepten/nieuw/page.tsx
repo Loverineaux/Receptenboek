@@ -55,6 +55,87 @@ function mapDifficulty(moeilijkheid?: string): Difficulty {
   return 'Gemiddeld';
 }
 
+/** Parse a single ingredient — split hoeveelheid/eenheid/naam correctly */
+function parseIngredient(i: any): { hoeveelheid: string; eenheid: string; naam: string } {
+  let hoeveelheid = i.hoeveelheid ? String(i.hoeveelheid) : '';
+  let eenheid = i.eenheid || '';
+  let naam = i.naam?.trim() || '';
+
+  // If AI put everything in naam (e.g. "200 gram kipfilet"), try to split
+  if (!hoeveelheid && naam) {
+    const m = naam.match(
+      /^([\d½¼¾⅓⅔,./]+)\s*(gram|g|kg|ml|l|dl|cl|el|tl|eetlepel|eetlepels|theelepel|theelepels|stuks?|plakjes?|sneetjes?|teentjes?|takjes?|handjes?|bosjes?|snufje|scheut|blikjes?|zakjes?|potjes?|stuk)?\s+(.+)$/i
+    );
+    if (m) {
+      hoeveelheid = m[1];
+      eenheid = m[2] || '';
+      naam = m[3];
+    } else {
+      const dm = naam.match(/^(halve|half|kwart|driekwart|hele|heel)\s+(.+)$/i);
+      if (dm) {
+        hoeveelheid = dm[1].toLowerCase();
+        naam = dm[2];
+      }
+    }
+  }
+
+  // Amount at end: "kipfilet 200 gram"
+  if (!hoeveelheid && naam) {
+    const em = naam.match(
+      /^(.+?)\s+([\d½¼¾⅓⅔,./]+)\s*(gram|g|kg|ml|l|dl|cl|el|tl|eetlepel|eetlepels|theelepel|theelepels|stuks?|plakjes?|sneetjes?|teentjes?|takjes?|handjes?|bosjes?|snufje|scheut|blikjes?|zakjes?|potjes?|stuk)?\s*$/i
+    );
+    if (em) {
+      naam = em[1];
+      hoeveelheid = em[2];
+      eenheid = em[3] || '';
+    }
+  }
+
+  // Eenheid zit in naam: hoeveelheid="600", naam="gram kippendijen"
+  if (hoeveelheid && !eenheid && naam) {
+    const um = naam.match(
+      /^(gram|g|kg|ml|l|dl|cl|el|tl|eetlepel|eetlepels|theelepel|theelepels|stuks?|plakjes?|sneetjes?|teentjes?|takjes?|handjes?|bosjes?|snufje|scheut|blikjes?|zakjes?|potjes?|stuk|stokje|stokjes)\s+(.+)$/i
+    );
+    if (um) {
+      eenheid = um[1];
+      naam = um[2];
+    }
+  }
+
+  // "2 eetlepels sojasaus" in naam
+  if (!hoeveelheid && naam) {
+    const nm = naam.match(/^([\d½¼¾⅓⅔,./]+)\s+(eetlepels?|theelepels?|el|tl|teentjes?|handjes?|takjes?|plakjes?|sneetjes?|bosjes?)\s+(.+)$/i);
+    if (nm) {
+      hoeveelheid = nm[1];
+      eenheid = nm[2];
+      naam = nm[3];
+    }
+  }
+
+  // Countable items without unit → "stuks"
+  if (hoeveelheid && !eenheid && naam) {
+    const countable = /^(ui|uien|ei|eieren|tomaat|tomaten|paprika|paprika's|aardappel|aardappelen|wortel|wortelen|citroen|citroenen|limoen|limoenen|avocado|avocado's|banaan|bananen|appel|appels|peer|peren|mango|mango's|courgette|courgettes|aubergine|aubergines|komkommer|komkommers|wrap|wraps|broodje|broodjes|tortilla|tortilla's|peper|pepers|champignon|champignons|kaneelstokje|kaneelstokjes|kruidnagel|kruidnagels|laurierblad|laurierbladeren)\s*(\(.*\))?$/i;
+    if (countable.test(naam.trim())) {
+      eenheid = 'stuks';
+    }
+  }
+
+  // Olie etc. without quantity → hide "?"
+  const noQtyNeeded = /^(olie|olijfolie|zonnebloemolie|boter|peper|zout|peper en zout|peper & zout|naar smaak|water|bakvet|roomboter|sesamolie)/i;
+  if (!hoeveelheid && noQtyNeeded.test(naam)) {
+    hoeveelheid = '';
+  }
+
+  return { hoeveelheid, eenheid, naam };
+}
+
+/** Parse all ingredients from extracted data */
+function parseExtractedIngredients(ingredients: any[]): { hoeveelheid: string; eenheid: string; naam: string }[] {
+  return (ingredients || [])
+    .filter((i: any) => i.naam)
+    .map(parseIngredient);
+}
+
 /** Map AI extraction output to the format the POST /api/recipes expects */
 function mapExtractedToFormData(extracted: any, sourceUrl?: string): RecipeFormData {
   const nutrition = extracted.nutrition;
@@ -83,76 +164,7 @@ function mapExtractedToFormData(extracted: any, sourceUrl?: string): RecipeFormD
     is_public: false,
     weetje: extracted.weetje || '',
     allergenen: extracted.allergenen || '',
-    ingredients: (extracted.ingredients ?? [])
-      .filter((i: any) => i.naam)
-      .map((i: any) => {
-        let hoeveelheid = i.hoeveelheid ? String(i.hoeveelheid) : '';
-        let eenheid = i.eenheid || '';
-        let naam = i.naam?.trim() || '';
-
-        // If AI put everything in naam (e.g. "200 gram kipfilet"), try to split
-        if (!hoeveelheid && naam) {
-          // Amount at start: "200 gram kipfilet" or "2 uien" or "halve ui"
-          const m = naam.match(
-            /^([\d½¼¾⅓⅔,./]+)\s*(gram|g|kg|ml|l|dl|cl|el|tl|eetlepel|theelepel|stuks?|plakjes?|sneetjes?|teentjes?|takjes?|handjes?|bosjes?|snufje|scheut|blikjes?|zakjes?|potjes?|stuk)?\s+(.+)$/i
-          );
-          if (m) {
-            hoeveelheid = m[1];
-            eenheid = m[2] || '';
-            naam = m[3];
-          } else {
-            // Dutch words: "halve ui", "kwart paprika"
-            const dm = naam.match(/^(halve|half|kwart|driekwart|hele|heel)\s+(.+)$/i);
-            if (dm) {
-              hoeveelheid = dm[1].toLowerCase();
-              naam = dm[2];
-            }
-          }
-        }
-
-        // Amount at end: "kipfilet 200 gram"
-        if (!hoeveelheid && naam) {
-          const em = naam.match(
-            /^(.+?)\s+([\d½¼¾⅓⅔,./]+)\s*(gram|g|kg|ml|l|dl|cl|el|tl|eetlepel|theelepel|stuks?|plakjes?|sneetjes?|teentjes?|takjes?|handjes?|bosjes?|snufje|scheut|blikjes?|zakjes?|potjes?|stuk)?\s*$/i
-          );
-          if (em) {
-            naam = em[1];
-            hoeveelheid = em[2];
-            eenheid = em[3] || '';
-          }
-        }
-
-        // If we have hoeveelheid but eenheid is in naam (e.g. hoeveelheid="600", naam="gram kippendijen")
-        if (hoeveelheid && !eenheid && naam) {
-          const um = naam.match(
-            /^(gram|g|kg|ml|l|dl|cl|el|tl|eetlepel|eetlepels|theelepel|theelepels|stuks?|plakjes?|sneetjes?|teentjes?|takjes?|handjes?|bosjes?|snufje|scheut|blikjes?|zakjes?|potjes?|stuk|stokje)\s+(.+)$/i
-          );
-          if (um) {
-            eenheid = um[1];
-            naam = um[2];
-          }
-        }
-
-        // If naam still has "2 eetlepels sojasaus" pattern (hoeveelheid in naam)
-        if (!hoeveelheid && naam) {
-          const nm = naam.match(/^([\d½¼¾⅓⅔,./]+)\s+(eetlepels?|theelepels?|el|tl)\s+(.+)$/i);
-          if (nm) {
-            hoeveelheid = nm[1];
-            eenheid = nm[2];
-            naam = nm[3];
-          }
-        }
-
-        // If we have a quantity but no unit, assign "stuks" for countable items
-        if (hoeveelheid && !eenheid && naam) {
-          const countable = /^(ui|uien|ei|eieren|tomaat|tomaten|paprika|paprika's|aardappel|aardappelen|wortel|wortelen|citroen|citroenen|limoen|limoenen|avocado|avocado's|banaan|bananen|appel|appels|peer|peren|mango|mango's|courgette|courgettes|aubergine|aubergines|komkommer|komkommers|wrap|wraps|broodje|broodjes|tortilla|tortilla's|peper|pepers|champignon|champignons|kaneelstokje|kaneelstokjes|kruidnagel|kruidnagels|laurierblad|laurierbladeren)\s*(\(.*\))?$/i;
-          if (countable.test(naam.trim())) {
-            eenheid = 'stuks';
-          }
-        }
-
-        return { hoeveelheid, eenheid, naam };
-      }),
+    ingredients: parseExtractedIngredients(extracted.ingredients),
     steps: (extracted.steps ?? [])
       .filter((s: any) => s.beschrijving)
       .map((s: any) => ({
@@ -409,7 +421,8 @@ export default function NieuwReceptPage() {
 
       const extracted = await res.json();
 
-      // Show preview with validation
+      // Parse ingredients and show preview with validation
+      extracted.ingredients = parseExtractedIngredients(extracted.ingredients);
       setExtractedPreview(extracted);
       setActiveTab('preview');
     } catch (err: any) {
@@ -722,10 +735,10 @@ export default function NieuwReceptPage() {
               <div className="space-y-1">
                 {(extractedPreview.ingredients || []).map((ing: any, idx: number) => (
                   <div key={idx} className="flex gap-2 text-sm">
-                    <span className={`min-w-[4rem] font-medium ${ing.hoeveelheid ? 'text-text-primary' : 'text-red-400'}`}>
-                      {ing.hoeveelheid || '?'}
+                    <span className="min-w-[4rem] font-medium text-text-primary">
+                      {ing.hoeveelheid || ''}
                     </span>
-                    <span className="min-w-[3rem] text-text-secondary">{ing.eenheid || ''}</span>
+                    <span className="min-w-[4rem] text-text-secondary">{ing.eenheid || ''}</span>
                     <span className="text-text-primary">{ing.naam}</span>
                   </div>
                 ))}
