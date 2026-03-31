@@ -34,12 +34,26 @@ export default function TestPdfPage() {
     setProgress('PDF uploaden...');
 
     try {
-      const formData = new FormData();
-      formData.append('pdf', file);
+      // Step 1: Extract text + images client-side
+      setProgress('PDF inlezen...');
+      const { extractPdfText } = await import('@/lib/pdf-reader');
+      const pdfPages = await extractPdfText(file, (current, total) => {
+        setProgress(`Pagina ${current} van ${total} inlezen...`);
+      });
 
+      if (pdfPages.length === 0) throw new Error('Geen tekst gevonden in PDF');
+
+      setProgress(`${pdfPages.length} pagina's naar AI sturen...`);
+
+      // Step 2: Send to API
       const res = await fetch('/api/extract/pdf', {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pages: pdfPages.map(p => ({ pageNum: p.pageNum, text: p.text })),
+          images: pdfPages.map(p => p.image || null),
+          filename: file.name,
+        }),
       });
 
       if (!res.ok && res.headers.get('content-type')?.includes('application/json')) {
