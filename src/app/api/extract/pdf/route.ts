@@ -22,6 +22,8 @@ INGREDIËNTEN:
 - Lepels: "3 eetlepels ketjap" → hoeveelheid:"3", eenheid:"eetlepels", naam:"ketjap"
 - Zonder hoeveelheid: "Olie" → hoeveelheid:null, eenheid:null, naam:"olie"
 - "naar smaak" / "snufje" items: hoeveelheid:null
+- Bij "5x 80 gram carpaccio": bereken totaal → hoeveelheid:"400", eenheid:"gram", naam:"carpaccio (5 stuks)"
+- Bij "2x 200 ml room": bereken totaal → hoeveelheid:"400", eenheid:"ml", naam:"room"
 - Lees ELKE hoeveelheid ZORGVULDIG uit de tekst. Mis er GEEN.
 - ALLE tekst moet in het Nederlands zijn. Vertaal Engelstalige recepten volledig (titel, ingrediënten, stappen).
 - Secties: als er kopjes staan ("Voor de dressing:"), gebruik het "groep" veld.
@@ -177,6 +179,7 @@ export async function POST(request: NextRequest) {
 
               const client = new Anthropic();
               const allRecipes: any[] = [];
+              const globalUsedImages = new Set<number>();
               let completed = 0;
 
               for (let b = 0; b < batches.length; b += 3) {
@@ -210,22 +213,14 @@ export async function POST(request: NextRequest) {
 
                     const recipes = (Array.isArray(parsed) ? parsed : [parsed]).filter((r: any) => r.title && r.ingredients?.length > 0);
 
-                    // Sort recipes by page number, then assign images in order
+                    // Assign images using global used-set
                     recipes.sort((a: any, b: any) => (a.page_number || 0) - (b.page_number || 0));
-
-                    // Build sorted list of image-only pages
-                    const imagePages = [...pageImages.entries()]
-                      .filter(([_, img]) => img)
-                      .sort(([a], [b]) => a - b);
-
-                    // Match each recipe to its closest image page (1:1 in order)
-                    const usedImagePages = new Set<number>();
                     for (const recipe of recipes) {
                       const pn = recipe.page_number || 0;
                       let bestPage = -1;
                       let bestDist = Infinity;
-                      for (const [imgPage] of imagePages) {
-                        if (usedImagePages.has(imgPage)) continue;
+                      for (const [imgPage, img] of pageImages.entries()) {
+                        if (!img || globalUsedImages.has(imgPage)) continue;
                         const dist = Math.abs(pn - imgPage);
                         if (dist < bestDist) {
                           bestDist = dist;
@@ -234,7 +229,7 @@ export async function POST(request: NextRequest) {
                       }
                       if (bestPage >= 0 && bestDist <= 2) {
                         recipe.image_data = pageImages.get(bestPage);
-                        usedImagePages.add(bestPage);
+                        globalUsedImages.add(bestPage);
                       }
                     }
 

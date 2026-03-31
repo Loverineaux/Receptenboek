@@ -120,6 +120,28 @@ function parseIngredient(i: any): { hoeveelheid: string; eenheid: string; naam: 
     }
   }
 
+  // Handle "5x 80 gram" or "5 x 80 gram" patterns → calculate total
+  if (hoeveelheid && /^\d+\s*x\s*\d+/.test(hoeveelheid)) {
+    const m = hoeveelheid.match(/^(\d+)\s*x\s*(\d+)/);
+    if (m) {
+      const total = parseInt(m[1]) * parseInt(m[2]);
+      const origCount = m[1];
+      hoeveelheid = String(total);
+      if (!naam.includes(origCount)) {
+        naam = `${naam} (${origCount} stuks)`;
+      }
+    }
+  }
+  // Also handle if it ended up in eenheid: "x80 gram"
+  if (eenheid && /^x\s*\d+/.test(eenheid)) {
+    const m = eenheid.match(/^x\s*(\d+)\s*(.*)/);
+    if (m && hoeveelheid) {
+      const total = parseInt(hoeveelheid) * parseInt(m[1]);
+      hoeveelheid = String(total);
+      eenheid = m[2].trim() || '';
+    }
+  }
+
   // Olie etc. without quantity → hide "?"
   const noQtyNeeded = /^(olie|olijfolie|zonnebloemolie|boter|peper|zout|peper en zout|peper & zout|naar smaak|water|bakvet|roomboter|sesamolie)/i;
   if (!hoeveelheid && noQtyNeeded.test(naam)) {
