@@ -448,26 +448,13 @@ export default function NieuwReceptPage() {
     setPdfProgress('PDF inlezen...');
 
     try {
-      // Step 1: Extract text + images client-side
-      console.log('[PDF Import] Extracting text from:', pdfFile.name);
-      const { extractPdfText } = await import('@/lib/pdf-reader');
-      const pdfPages = await extractPdfText(pdfFile, (current, total) => {
-        setPdfProgress(`Pagina ${current} van ${total} inlezen...`);
-      });
+      setPdfProgress('PDF uploaden en analyseren...');
+      const formData = new FormData();
+      formData.append('pdf', pdfFile);
 
-      if (pdfPages.length === 0) throw new Error('Geen tekst gevonden in PDF');
-
-      // Step 2: Send to API
-      setPdfProgress(`${pdfPages.length} pagina's analyseren met AI...`);
       const res = await fetch('/api/extract/pdf', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          pages: pdfPages.map(p => ({ pageNum: p.pageNum, text: p.text })),
-          images: pdfPages.map(p => p.image || null),
-          filename: pdfFile.name,
-          bron: pdfBron.trim() || undefined,
-        }),
+        body: formData,
       });
 
       if (!res.ok && res.headers.get('content-type')?.includes('application/json')) {

@@ -21,6 +21,7 @@ export default function TestPdfPage() {
   const [file, setFile] = useState<File | null>(null);
   const [extracting, setExtracting] = useState(false);
   const [progress, setProgress] = useState('');
+  const [progressDetail, setProgressDetail] = useState<string[]>([]);
   const [recipes, setRecipes] = useState<TestRecipe[]>([]);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [error, setError] = useState<string | null>(null);
@@ -31,29 +32,24 @@ export default function TestPdfPage() {
     setExtracting(true);
     setError(null);
     setRecipes([]);
-    setProgress('PDF uploaden...');
+    setProgress('');
+    setProgressDetail([]);
+
+    const addLog = (msg: string) => {
+      setProgressDetail(prev => [...prev, `${new Date().toLocaleTimeString()} — ${msg}`]);
+      setProgress(msg);
+    };
+
+    addLog('PDF inlezen...');
 
     try {
-      // Step 1: Extract text + images client-side
-      setProgress('PDF inlezen...');
-      const { extractPdfText } = await import('@/lib/pdf-reader');
-      const pdfPages = await extractPdfText(file, (current, total) => {
-        setProgress(`Pagina ${current} van ${total} inlezen...`);
-      });
+      addLog('PDF uploaden...');
+      const formData = new FormData();
+      formData.append('pdf', file);
 
-      if (pdfPages.length === 0) throw new Error('Geen tekst gevonden in PDF');
-
-      setProgress(`${pdfPages.length} pagina's naar AI sturen...`);
-
-      // Step 2: Send to API
       const res = await fetch('/api/extract/pdf', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          pages: pdfPages.map(p => ({ pageNum: p.pageNum, text: p.text })),
-          images: pdfPages.map(p => p.image || null),
-          filename: file.name,
-        }),
+        body: formData,
       });
 
       if (!res.ok && res.headers.get('content-type')?.includes('application/json')) {
@@ -80,14 +76,17 @@ export default function TestPdfPage() {
           try {
             const event = JSON.parse(line.slice(6));
             if (event.type === 'status') {
-              setProgress(event.message);
+              addLog(event.message);
             } else if (event.type === 'batch_done') {
+              const names = event.recipes.map((r: any) => r.title).join(', ');
+              addLog(`Batch ${event.completed}/${event.total_batches} klaar: ${event.found} recept(en) — ${names}`);
               found.push(...event.recipes);
               setRecipes([...found]);
-              setProgress(`${found.length} recepten gevonden...`);
+            } else if (event.type === 'batch_error') {
+              addLog(`Batch ${event.batch} mislukt: ${event.error}`);
             } else if (event.type === 'done') {
+              addLog(`Klaar! ${event.total} recepten gevonden`);
               setRecipes(event.recipes);
-              setProgress(`Klaar: ${event.total} recepten`);
             } else if (event.type === 'error') {
               throw new Error(event.error);
             }
@@ -140,10 +139,56 @@ export default function TestPdfPage() {
           disabled={extracting}
         />
 
-        {extracting && (
-          <div className="flex items-center gap-3 rounded-lg bg-primary/5 p-4 text-sm">
-            <Loader2 className="h-5 w-5 animate-spin text-primary" />
-            <span className="font-medium text-text-primary">{progress}</span>
+        {(extracting || progressDetail.length > 0) && (
+          <div className="rounded-xl border bg-surface p-5 space-y-4">
+            {/* Current step */}
+            {extracting && (
+              <div className="flex items-center gap-3">
+                <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                <span className="text-sm font-medium text-text-primary">{progress}</span>
+              </div>
+            )}
+
+            {/* Progress bar */}
+            {progressDetail.length > 0 && (
+              <div className="space-y-2">
+                <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+                  <div
+                    className="h-full rounded-full bg-primary transition-all duration-500"
+                    style={{
+                      width: extracting
+                        ? `${Math.min(95, (progressDetail.filter(l => l.includes('klaar')).length / Math.max(1, progressDetail.find(l => l.includes('batches'))?.match(/(\d+) batches/)?.[1] ? parseInt(progressDetail.find(l => l.includes('batches'))!.match(/(\d+) batches/)![1]) : 5)) * 90 + 5)}%`
+                        : '100%'
+                    }}
+                  />
+                </div>
+
+                {/* Step list */}
+                <div className="space-y-1.5">
+                  {progressDetail.map((line, i) => {
+                    const msg = line.split(' — ')[1] || line;
+                    const isDone = msg.includes('klaar') || msg.includes('Klaar');
+                    const isError = msg.includes('mislukt');
+                    return (
+                      <div key={i} className="flex items-center gap-2 text-xs">
+                        {isDone ? (
+                          <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] text-white">✓</span>
+                        ) : isError ? (
+                          <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-red-500 text-[10px] text-white">!</span>
+                        ) : i === progressDetail.length - 1 && extracting ? (
+                          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" />
+                        ) : (
+                          <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-gray-200 text-[10px] text-gray-500">✓</span>
+                        )}
+                        <span className={`${i === progressDetail.length - 1 && extracting ? 'text-text-primary font-medium' : 'text-text-muted'}`}>
+                          {msg}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
