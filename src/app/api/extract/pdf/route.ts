@@ -16,22 +16,36 @@ function buildAiPrompt(bron: string | null) {
 TAAK: Vind ALLE recepten in de tekst en retourneer ze als een JSON array.
 
 REGELS:
-- Alle tekst moet in het Nederlands zijn.
+- Alle tekst moet in het Nederlands zijn. Vertaal indien nodig.
 - Elk recept moet minstens een naam en ingrediënten hebben.
-- Combineer ALLE ingrediënten in één lijst per recept. Geef hoeveelheid en eenheid apart op.
-- Sla pagina's over die geen recepten bevatten.
-- Zoek GOED naar voedingswaarden (calorieën/kcal, eiwitten, koolhydraten, vetten).
+- Sla pagina's over die geen recepten bevatten (inhoudsopgave, inleiding, etc).
 - ${bron ? `De bron is "${bron}".` : "Detecteer de bron uit de tekst."}
 - Retourneer UITSLUITEND een JSON array.
+
+INGREDIËNTEN — BELANGRIJK:
+- Geef hoeveelheid, eenheid en naam ALTIJD apart.
+- Bij telbare items ZONDER eenheid, gebruik "stuks": "4 tomaten" → hoeveelheid: "4", eenheid: "stuks", naam: "tomaten"
+- "2 uien" → hoeveelheid: "2", eenheid: "stuks", naam: "uien"
+- "1 kaneelstokje" → hoeveelheid: "1", eenheid: "stuks", naam: "kaneelstokje"
+- "200 gram kipfilet" → hoeveelheid: "200", eenheid: "gram", naam: "kipfilet"
+- "3 eetlepels ketjap" → hoeveelheid: "3", eenheid: "eetlepels", naam: "ketjap"
+- "Olie" (geen hoeveelheid) → hoeveelheid: null, eenheid: null, naam: "olie"
+- Als ingrediënten in SECTIES staan (bijv. "Voor de dressing:", "Voor de marinade:"), gebruik dan het "groep" veld.
+- Geef het PAGINANUMMER mee waarop het recept staat (voor image-koppeling).
+
+TEMPERATUUR:
+- Als er een temperatuur vermeld staat (oven, BBQ, airfryer), zet die in het "temperatuur" veld.
 
 Schema per recept:
 {
   "title": "string",
-  "subtitle": "string | null",
-  "tijd": "string | null",
+  "subtitle": "string | null (introductie/beschrijving)",
+  "tijd": "string | null (bijv. '25 min')",
+  "temperatuur": "string | null (bijv. '180°C', 'BBQ 130°C')",
   "bron": "${bron || "string | null"}",
   "basis_porties": "number | null",
-  "ingredients": [{"hoeveelheid": "string | null", "eenheid": "string | null", "naam": "string"}],
+  "page_number": "number | null (paginanummer in de PDF)",
+  "ingredients": [{"hoeveelheid": "string | null", "eenheid": "string | null", "naam": "string", "groep": "string | null"}],
   "steps": [{"titel": "string | null", "beschrijving": "string"}],
   "nutrition": {"energie_kcal":"string|null","vetten":"string|null","koolhydraten":"string|null","eiwitten":"string|null"} | null,
   "tags": ["string"] | null
@@ -173,10 +187,25 @@ export async function POST(request: NextRequest) {
 
           const recipes = await processWithAi(pages, bron);
 
-          // Assign images to recipes
-          const availableImages = pageImages.filter(Boolean);
-          for (let i = 0; i < recipes.length && i < availableImages.length; i++) {
-            if (availableImages[i]) recipes[i].image_data = availableImages[i];
+          // Assign images to recipes based on page_number
+          const pageImageMap = new Map<number, string>();
+          pages.forEach((p: any) => {
+            if (p.image) pageImageMap.set(p.pageNum, p.image);
+          });
+
+          for (const recipe of recipes) {
+            if (recipe.page_number && pageImageMap.has(recipe.page_number)) {
+              recipe.image_data = pageImageMap.get(recipe.page_number);
+            } else {
+              // Fallback: try adjacent pages
+              const pn = recipe.page_number || 0;
+              for (const offset of [0, -1, 1, -2, 2]) {
+                if (pageImageMap.has(pn + offset)) {
+                  recipe.image_data = pageImageMap.get(pn + offset);
+                  break;
+                }
+              }
+            }
           }
 
           send({ type: "done", recipes, total: recipes.length });
