@@ -7,6 +7,7 @@ import { useAuth } from '@/hooks/useAuth';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import BronInput from '@/components/ui/BronInput';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import RecipeForm, { RecipeFormData } from '@/components/recipes/RecipeForm';
 import type { Source, Difficulty } from '@/types';
 
@@ -222,6 +223,14 @@ export default function NieuwReceptPage() {
   const [extractError, setExtractError] = useState<string | null>(null);
   const [progressStep, setProgressStep] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [navBlockToast, setNavBlockToast] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState<{ title: string; message: string; resolve: (v: boolean) => void } | null>(null);
+
+  const showConfirm = (title: string, message: string): Promise<boolean> => {
+    return new Promise((resolve) => {
+      setConfirmDialog({ title, message, resolve });
+    });
+  };
 
 
   // Import inputs
@@ -394,7 +403,7 @@ export default function NieuwReceptPage() {
       if (anchor && anchor.href && !anchor.href.includes('/recepten/nieuw')) {
         e.preventDefault();
         e.stopPropagation();
-        alert('Er wordt nog een recept verwerkt. Wacht tot het klaar is.');
+        setNavBlockToast(true); setTimeout(() => setNavBlockToast(false), 3000);
       }
     };
 
@@ -612,7 +621,7 @@ export default function NieuwReceptPage() {
 
     if (res.status === 409) {
       const { message } = await res.json();
-      const proceed = window.confirm(`${message}\n\nWil je het toch opslaan?`);
+      const proceed = await showConfirm('Dubbel recept', `${message}\n\nWil je het toch opslaan?`);
       if (proceed) return saveRecipe(data, true);
       return null;
     }
@@ -1139,6 +1148,23 @@ export default function NieuwReceptPage() {
               </div>
             </div>
           )}
+        </div>
+      )}
+      {/* Confirm dialog */}
+      <ConfirmDialog
+        open={!!confirmDialog}
+        title={confirmDialog?.title || ''}
+        message={confirmDialog?.message || ''}
+        variant="primary"
+        confirmLabel="Ja, opslaan"
+        onConfirm={() => { confirmDialog?.resolve(true); setConfirmDialog(null); }}
+        onCancel={() => { confirmDialog?.resolve(false); setConfirmDialog(null); }}
+      />
+
+      {/* Nav block toast */}
+      {navBlockToast && (
+        <div className="fixed bottom-20 left-1/2 z-50 -translate-x-1/2 rounded-lg bg-amber-600 px-4 py-2 text-sm text-white shadow-lg">
+          Er wordt nog een recept verwerkt. Wacht tot het klaar is.
         </div>
       )}
     </div>

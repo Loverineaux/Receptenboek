@@ -23,6 +23,7 @@ import StarRating from '@/components/ui/StarRating';
 import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
 import CookMode from '@/components/recipes/CookMode';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import type { RecipeWithRelations, Comment as CommentType } from '@/types';
 
 // ── fraction parsing + formatting ────────────────
@@ -204,6 +205,8 @@ export default function RecipeDetailPage() {
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [editingComment, setEditingComment] = useState<string | null>(null);
   const [editCommentText, setEditCommentText] = useState('');
+  const [confirmAction, setConfirmAction] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [commentLikes, setCommentLikes] = useState<Set<string>>(new Set());
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -484,10 +487,16 @@ export default function RecipeDetailPage() {
               </button>
               <button
                 type="button"
-                onClick={async () => {
-                  if (!window.confirm('Reactie verwijderen?')) return;
-                  await supabase.from('comments').delete().eq('id', c.id);
-                  setComments((prev) => prev.filter((x) => x.id !== c.id && x.parent_id !== c.id));
+                onClick={() => {
+                  setConfirmAction({
+                    title: 'Reactie verwijderen',
+                    message: 'Weet je zeker dat je deze reactie wilt verwijderen?',
+                    onConfirm: async () => {
+                      await supabase.from('comments').delete().eq('id', c.id);
+                      setComments((prev) => prev.filter((x) => x.id !== c.id && x.parent_id !== c.id));
+                      setConfirmAction(null);
+                    },
+                  });
                 }}
                 className="text-xs text-text-muted hover:text-red-500"
               >
@@ -525,7 +534,8 @@ export default function RecipeDetailPage() {
       }
     } else {
       await navigator.clipboard.writeText(window.location.href);
-      alert('Link gekopieerd naar klembord!');
+      setToastMessage('Link gekopieerd naar klembord!');
+      setTimeout(() => setToastMessage(null), 3000);
     }
   };
 
@@ -1116,6 +1126,22 @@ export default function RecipeDetailPage() {
           worden gemaakt.
         </p>
       </Modal>
+
+      {/* ── Confirm dialog ─────────────────────────── */}
+      <ConfirmDialog
+        open={!!confirmAction}
+        title={confirmAction?.title || ''}
+        message={confirmAction?.message || ''}
+        onConfirm={() => confirmAction?.onConfirm()}
+        onCancel={() => setConfirmAction(null)}
+      />
+
+      {/* ── Toast ──────────────────────────────────── */}
+      {toastMessage && (
+        <div className="fixed bottom-20 left-1/2 z-50 -translate-x-1/2 rounded-lg bg-gray-800 px-4 py-2 text-sm text-white shadow-lg">
+          {toastMessage}
+        </div>
+      )}
     </div>
   );
 }
