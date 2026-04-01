@@ -217,6 +217,48 @@ export default function ReceptenPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recipes.length]);
 
+  const [userRatings, setUserRatings] = useState<Record<string, number>>({});
+
+  // Load user's ratings
+  useEffect(() => {
+    if (!user) return;
+    supabase.from('ratings').select('recipe_id, sterren').eq('user_id', user.id)
+      .then(({ data }) => {
+        if (data) {
+          const map: Record<string, number> = {};
+          data.forEach((r: any) => { map[r.recipe_id] = r.sterren; });
+          setUserRatings(map);
+        }
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
+  const handleRate = async (recipeId: string, rating: number) => {
+    if (!user) return;
+    setUserRatings((prev) => ({ ...prev, [recipeId]: rating }));
+
+    await fetch(`/api/recipes/${recipeId}/rate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sterren: rating }),
+    });
+
+    // Update average in local state
+    setRecipes((prev) => prev.map((r) => {
+      if (r.id !== recipeId) return r;
+      const oldRatings = r.ratings || [];
+      const existing = oldRatings.find((rt: any) => rt.user_id === user.id);
+      let newRatings;
+      if (existing) {
+        newRatings = oldRatings.map((rt: any) => rt.user_id === user.id ? { ...rt, sterren: rating } : rt);
+      } else {
+        newRatings = [...oldRatings, { user_id: user.id, sterren: rating }];
+      }
+      const avg = newRatings.reduce((s: number, rt: any) => s + rt.sterren, 0) / newRatings.length;
+      return { ...r, ratings: newRatings, average_rating: avg };
+    }));
+  };
+
   const handleFavoriteToggle = async (recipeId: string, isFavorited: boolean) => {
     if (!user) return;
 
@@ -352,6 +394,8 @@ export default function ReceptenPage() {
                 key={recipe.id}
                 recipe={recipe}
                 onFavoriteToggle={handleFavoriteToggle}
+                onRate={user ? handleRate : undefined}
+                userRating={userRatings[recipe.id]}
               />
             ))}
           </div>

@@ -10,6 +10,8 @@ import type { RecipeWithRelations } from '@/types';
 interface RecipeCardProps {
   recipe: RecipeWithRelations;
   onFavoriteToggle?: (recipeId: string, isFavorited: boolean) => void;
+  onRate?: (recipeId: string, rating: number) => void;
+  userRating?: number;
 }
 
 // Category tags that should be displayed as filter badges
@@ -18,7 +20,7 @@ const CATEGORY_TAGS = new Set([
   'pasta', 'salade', 'soep', 'dessert', 'ontbijt', 'lunch',
 ]);
 
-export default function RecipeCard({ recipe, onFavoriteToggle }: RecipeCardProps) {
+export default function RecipeCard({ recipe, onFavoriteToggle, onRate, userRating }: RecipeCardProps) {
   const router = useRouter();
 
   const handleClick = () => {
@@ -97,26 +99,29 @@ export default function RecipeCard({ recipe, onFavoriteToggle }: RecipeCardProps
           {recipe.title}
         </h3>
 
-        <div className="mt-2 flex items-center gap-3 text-xs text-text-muted">
-          {recipe.tijd && (
-            <div className="flex items-center gap-1">
-              <Clock className="h-3 w-3" />
-              <span>{recipe.tijd}</span>
-            </div>
+        {recipe.tijd && (
+          <div className="mt-2 flex items-center gap-1 text-xs text-text-muted">
+            <Clock className="h-3 w-3" />
+            <span>{recipe.tijd}</span>
+          </div>
+        )}
+        <div className="mt-1.5 flex items-center justify-between" onClick={(e) => e.stopPropagation()}>
+          {onRate ? (
+            <StarRating
+              value={userRating || 0}
+              onChange={(rating) => onRate(recipe.id, rating)}
+            />
+          ) : (
+            <StarRating
+              value={recipe.average_rating ?? 0}
+              readOnly
+              count={recipe.ratings?.length ?? 0}
+            />
           )}
-          {(recipe.comments?.length ?? 0) > 0 && (
-            <div className="flex items-center gap-1">
-              <MessageCircle className="h-3 w-3" />
-              <span>{recipe.comments.length}</span>
-            </div>
-          )}
-        </div>
-        <div className="mt-1.5">
-          <StarRating
-            value={recipe.average_rating ?? 0}
-            readOnly
-            count={recipe.ratings?.length ?? 0}
-          />
+          <div className="flex items-center gap-1 text-xs text-text-muted">
+            <MessageCircle className="h-3.5 w-3.5" />
+            <span>{recipe.comments?.length ?? 0}</span>
+          </div>
         </div>
       </div>
     </div>
