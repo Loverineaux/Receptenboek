@@ -201,6 +201,8 @@ export default function RecipeDetailPage() {
   const [comments, setComments] = useState<any[]>([]);
   const [commentText, setCommentText] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
+  const [replyTo, setReplyTo] = useState<string | null>(null);
+  const [commentLikes, setCommentLikes] = useState<Set<string>>(new Set());
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [scaledSteps, setScaledSteps] = useState<any[] | null>(null);
@@ -361,24 +363,85 @@ export default function RecipeDetailPage() {
     fetchRecipe();
   };
 
-  const handleComment = async () => {
+  const handleComment = async (parentId?: string) => {
     if (!commentText.trim() || !user) return;
     setSubmittingComment(true);
 
     const res = await fetch(`/api/recipes/${params.id}/comments`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tekst: commentText }),
+      body: JSON.stringify({ tekst: commentText, parent_id: parentId || null }),
     });
 
     if (res.ok) {
       const { comment } = await res.json();
       setComments((prev) => [...prev, comment]);
       setCommentText('');
+      setReplyTo(null);
     }
 
     setSubmittingComment(false);
   };
+
+  const handleLikeComment = async (commentId: string) => {
+    if (!user) return;
+    const isLiked = commentLikes.has(commentId);
+
+    if (isLiked) {
+      await supabase.from('comment_likes').delete()
+        .eq('comment_id', commentId).eq('user_id', user.id);
+      setCommentLikes((prev) => { const n = new Set(prev); n.delete(commentId); return n; });
+      setComments((prev) => prev.map((c) => c.id === commentId ? { ...c, likes_count: (c.likes_count || 1) - 1 } : c));
+    } else {
+      await supabase.from('comment_likes').insert({ comment_id: commentId, user_id: user.id });
+      setCommentLikes((prev) => new Set(prev).add(commentId));
+      setComments((prev) => prev.map((c) => c.id === commentId ? { ...c, likes_count: (c.likes_count || 0) + 1 } : c));
+    }
+  };
+
+  const renderComment = (c: any, isReply = false) => (
+    <div key={c.id} className="flex gap-3 rounded-lg border p-3">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-100">
+        {c.user?.avatar_url ? (
+          <img src={c.user.avatar_url} alt="" className="h-8 w-8 rounded-full object-cover" />
+        ) : (
+          <User className="h-4 w-4 text-text-muted" />
+        )}
+      </div>
+      <div className="flex-1">
+        <p className="text-xs font-medium text-text-primary">
+          {c.user?.display_name ?? 'Anoniem'}
+          <span className="ml-2 font-normal text-text-muted">
+            {new Date(c.created_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}
+          </span>
+        </p>
+        <p className="mt-0.5 text-sm text-text-secondary">{c.tekst}</p>
+        <div className="mt-1.5 flex items-center gap-3">
+          {user && (
+            <button
+              type="button"
+              onClick={() => handleLikeComment(c.id)}
+              className={`flex items-center gap-1 text-xs transition-colors ${
+                commentLikes.has(c.id) ? 'text-primary font-medium' : 'text-text-muted hover:text-primary'
+              }`}
+            >
+              <Heart className={`h-3 w-3 ${commentLikes.has(c.id) ? 'fill-primary' : ''}`} />
+              {(c.likes_count || 0) > 0 && <span>{c.likes_count}</span>}
+            </button>
+          )}
+          {user && !isReply && (
+            <button
+              type="button"
+              onClick={() => { setReplyTo(c.id); setCommentText(''); }}
+              className="text-xs text-text-muted hover:text-primary"
+            >
+              Reageer
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 
   const handleDelete = async () => {
     setDeleting(true);
@@ -870,68 +933,88 @@ export default function RecipeDetailPage() {
         </div>
       )}
 
-      {/* ── Comments ───────────────────────────────── */}
-      {(
-        <section className="space-y-4">
-          <h2 className="text-lg font-semibold text-text-primary">Reacties</h2>
+      {/* ── Comments with replies ────────────────── */}
+      <section className="space-y-4">
+        <h2 className="text-lg font-semibold text-text-primary">
+          Reacties {comments.length > 0 && <span className="text-text-muted font-normal">({comments.length})</span>}
+        </h2>
 
-          {comments.length === 0 && (
-            <p className="text-sm text-text-secondary">
-              Nog geen reacties. Wees de eerste!
-            </p>
-          )}
+        {/* Comment input */}
+        {user && !replyTo && (
+          <div className="flex gap-2">
+            <textarea
+              value={commentText}
+              onChange={(e) => setCommentText(e.target.value)}
+              placeholder="Schrijf een reactie..."
+              rows={2}
+              className="flex-1 rounded-lg border border-gray-300 bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+            />
+            <Button
+              variant="primary"
+              size="sm"
+              loading={submittingComment}
+              onClick={() => handleComment()}
+              className="self-end"
+            >
+              Plaatsen
+            </Button>
+          </div>
+        )}
 
-          <div className="space-y-3">
-            {comments.map((c: any) => (
-              <div
-                key={c.id}
-                className="flex gap-3 rounded-lg border p-3"
-              >
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-100">
-                  {c.user?.avatar_url ? (
-                    <img
-                      src={c.user.avatar_url}
-                      alt=""
-                      className="h-8 w-8 rounded-full object-cover"
-                    />
-                  ) : (
-                    <User className="h-4 w-4 text-text-muted" />
+        {comments.length === 0 && (
+          <p className="text-sm text-text-secondary">
+            Nog geen reacties. Wees de eerste!
+          </p>
+        )}
+
+        {/* Threaded comments */}
+        <div className="space-y-3">
+          {comments
+            .filter((c: any) => !c.parent_id)
+            .map((c: any) => {
+              const replies = comments.filter((r: any) => r.parent_id === c.id);
+              return (
+                <div key={c.id}>
+                  {renderComment(c)}
+                  {/* Replies */}
+                  {replies.length > 0 && (
+                    <div className="ml-10 mt-2 space-y-2 border-l-2 border-gray-100 pl-4">
+                      {replies.map((r: any) => renderComment(r, true))}
+                    </div>
+                  )}
+                  {/* Reply input */}
+                  {replyTo === c.id && user && (
+                    <div className="ml-10 mt-2 flex gap-2">
+                      <textarea
+                        value={commentText}
+                        onChange={(e) => setCommentText(e.target.value)}
+                        placeholder={`Reageer op ${c.user?.display_name || 'Anoniem'}...`}
+                        rows={1}
+                        autoFocus
+                        className="flex-1 rounded-lg border border-gray-300 bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                      />
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        loading={submittingComment}
+                        onClick={() => handleComment(c.id)}
+                      >
+                        Reageer
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => { setReplyTo(null); setCommentText(''); }}
+                      >
+                        Annuleer
+                      </Button>
+                    </div>
                   )}
                 </div>
-                <div className="flex-1">
-                  <p className="text-xs font-medium text-text-primary">
-                    {c.user?.display_name ?? 'Anoniem'}
-                  </p>
-                  <p className="mt-0.5 text-sm text-text-secondary">
-                    {c.tekst}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {user && (
-            <div className="flex gap-2">
-              <textarea
-                value={commentText}
-                onChange={(e) => setCommentText(e.target.value)}
-                placeholder="Schrijf een reactie..."
-                rows={2}
-                className="flex-1 rounded-lg border border-gray-300 bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-              />
-              <Button
-                variant="primary"
-                size="sm"
-                loading={submittingComment}
-                onClick={handleComment}
-                className="self-end"
-              >
-                Plaatsen
-              </Button>
-            </div>
-          )}
-        </section>
-      )}
+              );
+            })}
+        </div>
+      </section>
 
       {/* ── Cook mode ────────────────────────────── */}
       {cookMode && (

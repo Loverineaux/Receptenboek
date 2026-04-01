@@ -415,17 +415,6 @@ export default function RecipeForm({ initialData, onSubmit }: RecipeFormProps) {
             required
           />
 
-          <div className="flex items-end gap-3 pb-0.5">
-            <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-text-primary">
-              <input
-                type="checkbox"
-                checked={isPublic}
-                onChange={(e) => setIsPublic(e.target.checked)}
-                className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary/50"
-              />
-              Openbaar recept
-            </label>
-          </div>
         </div>
 
         <div>

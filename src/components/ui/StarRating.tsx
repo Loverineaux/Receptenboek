@@ -13,6 +13,7 @@ interface StarRatingReadOnlyProps {
   value: number;
   readOnly: true;
   count?: number;
+  small?: boolean;
   onChange?: never;
 }
 
@@ -20,9 +21,11 @@ type StarRatingProps = StarRatingInteractiveProps | StarRatingReadOnlyProps;
 
 export default function StarRating(props: StarRatingProps) {
   const { value, readOnly } = props;
+  const small = readOnly && (props as StarRatingReadOnlyProps).small;
   const [hovered, setHovered] = useState<number>(0);
 
   const displayValue = readOnly ? value : hovered || value;
+  const starSize = small ? 'h-3.5 w-3.5' : 'h-5 w-5';
 
   const handleClick = (star: number) => {
     if (!readOnly && props.onChange) {
@@ -49,7 +52,7 @@ export default function StarRating(props: StarRatingProps) {
             }`}
           >
             {/* Background (empty) star */}
-            <Star className="h-5 w-5 text-gray-300" />
+            <Star className={`${starSize} text-gray-300`} />
 
             {/* Filled overlay */}
             {(filled || halfFilled) && (
@@ -57,7 +60,7 @@ export default function StarRating(props: StarRatingProps) {
                 className="absolute inset-0.5 overflow-hidden"
                 style={{ width: halfFilled ? '50%' : '100%' }}
               >
-                <Star className="h-5 w-5 fill-warning text-warning" />
+                <Star className={`${starSize} fill-warning text-warning`} />
               </span>
             )}
           </button>
@@ -65,8 +68,8 @@ export default function StarRating(props: StarRatingProps) {
       })}
 
       {readOnly && props.count !== undefined && (
-        <span className="ml-1.5 text-sm text-text-secondary">
-          {value.toFixed(1)} ({props.count})
+        <span className="ml-1 text-xs text-text-muted">
+          ({props.count})
         </span>
       )}
     </div>

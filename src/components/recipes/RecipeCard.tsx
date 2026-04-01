@@ -97,29 +97,26 @@ export default function RecipeCard({ recipe, onFavoriteToggle }: RecipeCardProps
           {recipe.title}
         </h3>
 
-        <div className="mt-2 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            {recipe.tijd && (
-              <div className="flex items-center gap-1 text-xs text-text-secondary">
-                <Clock className="h-3.5 w-3.5" />
-                <span>{recipe.tijd}</span>
-              </div>
-            )}
-            {(recipe.comments?.length ?? 0) > 0 && (
-              <div className="flex items-center gap-1 text-xs text-text-secondary">
-                <MessageCircle className="h-3.5 w-3.5" />
-                <span>{recipe.comments.length}</span>
-              </div>
-            )}
-          </div>
-
-          {recipe.average_rating !== null && recipe.average_rating !== undefined && (
-            <StarRating
-              value={recipe.average_rating}
-              readOnly
-              count={recipe.ratings?.length ?? 0}
-            />
+        <div className="mt-2 flex items-center gap-3 text-xs text-text-muted">
+          {recipe.tijd && (
+            <div className="flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              <span>{recipe.tijd}</span>
+            </div>
           )}
+          {(recipe.comments?.length ?? 0) > 0 && (
+            <div className="flex items-center gap-1">
+              <MessageCircle className="h-3 w-3" />
+              <span>{recipe.comments.length}</span>
+            </div>
+          )}
+        </div>
+        <div className="mt-1.5">
+          <StarRating
+            value={recipe.average_rating ?? 0}
+            readOnly
+            count={recipe.ratings?.length ?? 0}
+          />
         </div>
       </div>
     </div>
