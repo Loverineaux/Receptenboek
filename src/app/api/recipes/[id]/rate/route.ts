@@ -17,6 +17,14 @@ export async function POST(
   const body = await request.json();
   const sterren = body.sterren;
 
+  if (sterren === 0) {
+    // Delete rating
+    await supabase.from('ratings').delete()
+      .eq('recipe_id', params.id)
+      .eq('user_id', user.id);
+    return NextResponse.json({ success: true });
+  }
+
   if (!sterren || sterren < 1 || sterren > 5) {
     return NextResponse.json(
       { error: 'Score moet tussen 1 en 5 liggen' },

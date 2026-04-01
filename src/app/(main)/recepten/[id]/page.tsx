@@ -356,12 +356,14 @@ export default function RecipeDetailPage() {
 
   const handleRate = async (score: number) => {
     if (!user) return;
-    setUserRating(score);
+    // Toggle: click same star to remove rating
+    const newScore = score === userRating ? 0 : score;
+    setUserRating(newScore);
 
     await fetch(`/api/recipes/${params.id}/rate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sterren: score }),
+      body: JSON.stringify({ sterren: newScore }),
     });
 
     // Refresh to update average
