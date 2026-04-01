@@ -21,13 +21,11 @@ INGREDIËNTEN:
 - Gewicht: "200 gram kipfilet" → hoeveelheid:"200", eenheid:"gram", naam:"kipfilet"
 - Lepels: "3 eetlepels ketjap" → hoeveelheid:"3", eenheid:"eetlepels", naam:"ketjap"
 - Zonder hoeveelheid: "Olie" → hoeveelheid:null, eenheid:null, naam:"olie"
-- "naar smaak" / "snufje" items: hoeveelheid:null
 - Bij "5x 80 gram carpaccio": bereken totaal → hoeveelheid:"400", eenheid:"gram", naam:"carpaccio (5 stuks)"
-- Bij "2x 200 ml room": bereken totaal → hoeveelheid:"400", eenheid:"ml", naam:"room"
-- Lees ELKE hoeveelheid ZORGVULDIG uit de tekst. Mis er GEEN.
-- ALLE tekst moet in het Nederlands zijn. Vertaal Engelstalige recepten volledig (titel, ingrediënten, stappen).
 - Secties: als er kopjes staan ("Voor de dressing:"), gebruik het "groep" veld.
 - Geef het paginanummer mee waarop de recepttekst staat (page_number).
+- Lees ELKE hoeveelheid ZORGVULDIG. Mis er GEEN.
+- ALLE tekst moet in het Nederlands zijn. Vertaal Engelstalige recepten volledig.
 
 Schema per recept:
 {
@@ -45,7 +43,6 @@ Schema per recept:
 }`;
 }
 
-// Try Python extraction (works locally, not on Vercel)
 async function tryPythonExtraction(file: File): Promise<any | null> {
   try {
     const { writeFile, unlink, mkdir } = await import("fs/promises");
@@ -66,7 +63,7 @@ async function tryPythonExtraction(file: File): Promise<any | null> {
       const { stdout, stderr } = await execFileAsync("python", [SCRIPT_PATH, tmpPath, file.name], {
         maxBuffer: 100 * 1024 * 1024,
         timeout: 120000,
-        env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+        env: { ...process.env, PYTHONIOENCODING: "utf-8" },
       });
       if (stderr) console.log("[PDF Extract] Python stderr:", stderr.substring(0, 200));
       return JSON.parse(stdout);
@@ -79,69 +76,112 @@ async function tryPythonExtraction(file: File): Promise<any | null> {
   }
 }
 
-// AI-based extraction for generic PDFs (works on Vercel)
-async function processWithAi(
-  pages: { pageNum: number; text: string }[],
-  bron: string | null
-): Promise<any[]> {
-  const client = new Anthropic();
-  const allRecipes: any[] = [];
-  const PAGES_PER_BATCH = 10;
-  const MAX_CONCURRENT = 3;
-
-  const batches: typeof pages[] = [];
-  for (let i = 0; i < pages.length; i += PAGES_PER_BATCH) {
-    batches.push(pages.slice(i, i + PAGES_PER_BATCH));
+function parseAiJson(text: string): any[] {
+  let jsonStr = text.trim();
+  const m = jsonStr.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
+  if (m) jsonStr = m[1].trim();
+  if (!jsonStr.startsWith("[")) {
+    const am = jsonStr.match(/\[[\s\S]*\]/);
+    if (am) jsonStr = am[0];
   }
+  try {
+    const parsed = JSON.parse(jsonStr);
+    return Array.isArray(parsed) ? parsed : [parsed];
+  } catch {
+    const lc = jsonStr.lastIndexOf("},");
+    if (lc > 0) {
+      try { return JSON.parse(jsonStr.substring(0, lc + 1) + "]"); } catch {}
+    }
+    return [];
+  }
+}
 
-  for (let i = 0; i < batches.length; i += MAX_CONCURRENT) {
-    const chunk = batches.slice(i, i + MAX_CONCURRENT);
-    const results = await Promise.all(
-      chunk.map(async (batch) => {
-        const pageText = batch.map(p => `--- PAGINA ${p.pageNum} ---\n${p.text}`).join("\n\n");
-        try {
-          const response = await client.messages.create({
-            model: "claude-haiku-4-5-20251001",
-            max_tokens: 16384,
-            system: buildAiPrompt(bron),
-            messages: [{ role: "user", content: `Vind alle recepten:\n\n${pageText}` }],
-          });
+async function matchImagesWithVision(
+  client: Anthropic,
+  recipes: any[],
+  pageImages: Map<number, string>,
+  send: (data: any) => void
+) {
+  const availImages = [...pageImages.entries()]
+    .filter(([_, img]) => img)
+    .sort(([a], [b]) => a - b);
 
-          const text = response.content.filter(b => b.type === "text").map(b => (b as any).text).join("\n");
-          let jsonStr = text.trim();
-          const m = jsonStr.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
-          if (m) jsonStr = m[1].trim();
-          if (!jsonStr.startsWith("[")) {
-            const am = jsonStr.match(/\[[\s\S]*\]/);
-            if (am) jsonStr = am[0];
-          }
+  if (availImages.length === 0 || recipes.length === 0) return;
 
-          let parsed;
-          try { parsed = JSON.parse(jsonStr); } catch {
-            const lastComplete = jsonStr.lastIndexOf('},');
-            if (lastComplete > 0) {
-              try { parsed = JSON.parse(jsonStr.substring(0, lastComplete + 1) + ']'); } catch { return []; }
-            } else { return []; }
-          }
+  send({ type: "status", message: `${availImages.length} foto's visueel matchen met ${recipes.length} recepten (Sonnet Vision)...` });
 
-          return (Array.isArray(parsed) ? parsed : [parsed]).filter((r: any) => r.title && r.ingredients?.length > 0);
-        } catch (err: any) {
-          console.error("[PDF Extract] AI batch error:", err.message);
-          return [];
+  try {
+    const contentBlocks: any[] = [];
+
+    for (const [pageNum, imgData] of availImages) {
+      const base64 = imgData.replace(/^data:image\/\w+;base64,/, "");
+      contentBlocks.push({ type: "text", text: `--- FOTO van pagina ${pageNum} ---` });
+      contentBlocks.push({
+        type: "image",
+        source: { type: "base64", media_type: "image/jpeg", data: base64 },
+      });
+    }
+
+    const recipeTitles = recipes.map((r, i) => `${i + 1}. "${r.title}"`).join("\n");
+    contentBlocks.push({
+      type: "text",
+      text: `Koppel elke foto aan het juiste recept op basis van wat je ZIET.
+
+Recepten:
+${recipeTitles}
+
+Antwoord als JSON array: [{"recipe_index": 0, "page": 6}, ...]
+recipe_index = 0-based index. page = paginanummer van de foto.
+Sla foto's over die niet bij een recept horen (logo's, decoratie).
+Alleen JSON.`,
+    });
+
+    const response = await client.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 2048,
+      messages: [{ role: "user", content: contentBlocks }],
+    });
+
+    const text = response.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n");
+    const matches = parseAiJson(text);
+
+    let matched = 0;
+    for (const match of matches) {
+      const idx = match.recipe_index;
+      const page = match.page;
+      if (typeof idx === "number" && idx >= 0 && idx < recipes.length && pageImages.has(page)) {
+        recipes[idx].image_data = pageImages.get(page);
+        matched++;
+      }
+    }
+
+    send({ type: "status", message: `${matched}/${recipes.length} recepten gekoppeld aan een foto` });
+    console.log(`[PDF Extract] Vision matched: ${matched}/${recipes.length}`);
+  } catch (err: any) {
+    console.error("[PDF Extract] Vision matching failed:", err.message);
+    send({ type: "status", message: "Foto-matching mislukt, fallback gebruikt..." });
+
+    // Fallback: simple offset matching
+    recipes.sort((a: any, b: any) => (a.page_number || 0) - (b.page_number || 0));
+    const used = new Set<number>();
+    for (const recipe of recipes) {
+      const pn = recipe.page_number || 0;
+      for (const off of [0, -1, 1, -2, 2]) {
+        const pg = pn + off;
+        if (pageImages.has(pg) && pageImages.get(pg) && !used.has(pg)) {
+          recipe.image_data = pageImages.get(pg);
+          used.add(pg);
+          break;
         }
-      })
-    );
-    for (const recipes of results) allRecipes.push(...recipes);
+      }
+    }
   }
-
-  return allRecipes;
 }
 
 export async function POST(request: NextRequest) {
   try {
     const contentType = request.headers.get("content-type") || "";
 
-    // Handle FormData (file upload) — try Python first
     if (contentType.includes("multipart/form-data")) {
       const formData = await request.formData();
       const file = formData.get("pdf") as File | null;
@@ -149,42 +189,58 @@ export async function POST(request: NextRequest) {
 
       console.log(`[PDF Extract] File: ${file.name}, ${(file.size / 1024 / 1024).toFixed(1)}MB`);
 
-      const pythonResult = await tryPythonExtraction(file);
-      if (pythonResult && !pythonResult.error) {
-        console.log(`[PDF Extract] Python: mode=${pythonResult.mode}, ${pythonResult.mode === 'broodje_dunner' ? pythonResult.total + ' recipes' : pythonResult.total_pages + ' pages'}`);
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream({
+        async start(controller) {
+          const send = (data: any) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
 
-        const encoder = new TextEncoder();
-        const stream = new ReadableStream({
-          async start(controller) {
-            const send = (data: any) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+          try {
+            send({ type: "status", message: `PDF inlezen: ${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB)...` });
+
+            const pythonResult = await tryPythonExtraction(file);
+            if (!pythonResult || pythonResult.error) {
+              send({ type: "error", error: pythonResult?.error || "PDF extractie mislukt" });
+              controller.close();
+              return;
+            }
+
+            send({ type: "status", message: "Tekst en afbeeldingen geëxtraheerd" });
 
             if (pythonResult.mode === "broodje_dunner") {
-              send({ type: "status", message: `${pythonResult.total} recepten gevonden (Broodje Dunner parser)` });
+              send({ type: "status", message: `${pythonResult.total} recepten gevonden (Broodje Dunner)` });
               send({ type: "done", recipes: pythonResult.recipes, total: pythonResult.total });
-            } else {
-              // Generic: use AI on pages with live progress
-              const allPages = pythonResult.pages;
-              const pageImages = new Map(allPages.map((p: any) => [p.pageNum, p.image]));
-              const bron = file.name.toLowerCase().includes("broodje") ? "Broodje Dunner" : null;
+              controller.close();
+              return;
+            }
 
-              // Only send text pages to AI
-              const textPages = allPages.filter((p: any) => p.text && p.text.length > 30);
-              const BATCH_SIZE = 10;
-              const batches: any[][] = [];
-              for (let b = 0; b < textPages.length; b += BATCH_SIZE) {
-                batches.push(textPages.slice(b, b + BATCH_SIZE));
-              }
+            // Generic PDF: AI extraction
+            const allPages = pythonResult.pages;
+            const pageImages = new Map(allPages.map((p: any) => [p.pageNum, p.image]));
+            const imgCount = [...pageImages.values()].filter(Boolean).length;
+            const textPages = allPages.filter((p: any) => p.text && p.text.length > 30);
+            const bron = file.name.toLowerCase().includes("broodje") ? "Broodje Dunner" : null;
 
-              send({ type: "status", message: `${textPages.length} pagina's in ${batches.length} batch(es) analyseren...`, total_batches: batches.length });
+            send({ type: "status", message: `${allPages.length} pagina's, ${textPages.length} met tekst, ${imgCount} met foto` });
 
-              const client = new Anthropic();
-              const allRecipes: any[] = [];
-              const globalUsedImages = new Set<number>();
-              let completed = 0;
+            // Batch processing with Haiku
+            const BATCH_SIZE = 10;
+            const batches: any[][] = [];
+            for (let i = 0; i < textPages.length; i += BATCH_SIZE) {
+              batches.push(textPages.slice(i, i + BATCH_SIZE));
+            }
 
-              for (let b = 0; b < batches.length; b += 3) {
-                const chunk = batches.slice(b, b + 3);
-                await Promise.all(chunk.map(async (batch, j) => {
+            const client = new Anthropic();
+            const allRecipes: any[] = [];
+            let completed = 0;
+
+            for (let b = 0; b < batches.length; b += 3) {
+              const chunk = batches.slice(b, b + 3);
+              const startPage = chunk[0][0]?.pageNum || "?";
+              const endPage = chunk[chunk.length - 1][chunk[chunk.length - 1].length - 1]?.pageNum || "?";
+              send({ type: "status", message: `Recepten herkennen: pagina ${startPage}-${endPage} (batch ${b / 3 + 1}/${Math.ceil(batches.length / 3)})...` });
+
+              await Promise.all(
+                chunk.map(async (batch, j) => {
                   const batchIdx = b + j;
                   try {
                     const pageText = batch.map((p: any) => `--- PAGINA ${p.pageNum} ---\n${p.text}`).join("\n\n");
@@ -196,141 +252,44 @@ export async function POST(request: NextRequest) {
                     });
 
                     const text = response.content.filter((bl: any) => bl.type === "text").map((bl: any) => bl.text).join("\n");
-                    let jsonStr = text.trim();
-                    const mm = jsonStr.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
-                    if (mm) jsonStr = mm[1].trim();
-                    if (!jsonStr.startsWith("[")) {
-                      const am = jsonStr.match(/\[[\s\S]*\]/);
-                      if (am) jsonStr = am[0];
-                    }
+                    const recipes = parseAiJson(text).filter((r: any) => r.title && r.ingredients?.length > 0);
 
-                    let parsed;
-                    try { parsed = JSON.parse(jsonStr); } catch {
-                      const lc = jsonStr.lastIndexOf('},');
-                      if (lc > 0) { try { parsed = JSON.parse(jsonStr.substring(0, lc + 1) + ']'); } catch { parsed = []; } }
-                      else parsed = [];
-                    }
-
-                    const recipes = (Array.isArray(parsed) ? parsed : [parsed]).filter((r: any) => r.title && r.ingredients?.length > 0);
-
-                    // Don't assign images here — done globally after all batches via Sonnet vision
                     completed++;
                     allRecipes.push(...recipes);
-                    const names = recipes.map((r: any) => r.title).join(', ');
-                    send({ type: "batch_done", batch: batchIdx + 1, total_batches: batches.length, completed, found: recipes.length, recipes });
+                    const names = recipes.map((r: any) => r.title).slice(0, 3).join(", ");
+                    send({
+                      type: "batch_done",
+                      batch: batchIdx + 1,
+                      total_batches: batches.length,
+                      completed,
+                      found: recipes.length,
+                      recipes,
+                    });
                   } catch (err: any) {
                     completed++;
                     send({ type: "batch_error", batch: batchIdx + 1, total_batches: batches.length, completed, error: err.message });
                   }
-                }));
-              }
-
-              // Step 2: Match images to recipes using Sonnet vision
-              const availImages = [...pageImages.entries()]
-                .filter(([_, img]) => img)
-                .sort(([a], [b]) => a - b);
-
-              if (availImages.length > 0 && allRecipes.length > 0) {
-                send({ type: "status", message: `Afbeeldingen koppelen aan ${allRecipes.length} recepten...` });
-
-                try {
-                  // Build content: all images + recipe titles
-                  const contentBlocks: any[] = [];
-
-                  for (const [pageNum, imgData] of availImages) {
-                    // Strip data URL prefix for API
-                    const base64 = imgData.replace(/^data:image\/\w+;base64,/, '');
-                    contentBlocks.push({
-                      type: "text",
-                      text: `--- FOTO van pagina ${pageNum} ---`,
-                    });
-                    contentBlocks.push({
-                      type: "image",
-                      source: { type: "base64", media_type: "image/jpeg", data: base64 },
-                    });
-                  }
-
-                  const recipeTitles = allRecipes.map((r, i) => `${i + 1}. "${r.title}"`).join('\n');
-                  contentBlocks.push({
-                    type: "text",
-                    text: `Hieronder staan ${allRecipes.length} recepten. Koppel elke foto aan het juiste recept op basis van wat je ZIET op de foto.
-
-Recepten:
-${recipeTitles}
-
-Antwoord als JSON array van objecten: [{"recipe_index": 0, "page": 6}, {"recipe_index": 1, "page": 8}, ...]
-recipe_index = 0-based index van het recept in de lijst hierboven.
-page = het paginanummer van de foto.
-Als een foto niet bij een recept hoort (bijv. logo, decoratie), sla die dan over.
-Alleen JSON.`,
-                  });
-
-                  const matchResponse = await client.messages.create({
-                    model: "claude-sonnet-4-6",
-                    max_tokens: 2048,
-                    messages: [{ role: "user", content: contentBlocks }],
-                  });
-
-                  const matchText = matchResponse.content
-                    .filter((b: any) => b.type === "text")
-                    .map((b: any) => b.text)
-                    .join("\n").trim();
-
-                  let matchJson = matchText;
-                  const cm = matchJson.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
-                  if (cm) matchJson = cm[1].trim();
-                  if (!matchJson.startsWith("[")) {
-                    const am = matchJson.match(/\[[\s\S]*\]/);
-                    if (am) matchJson = am[0];
-                  }
-
-                  const matches = JSON.parse(matchJson);
-                  for (const match of matches) {
-                    const idx = match.recipe_index;
-                    const page = match.page;
-                    if (idx >= 0 && idx < allRecipes.length && pageImages.has(page)) {
-                      allRecipes[idx].image_data = pageImages.get(page);
-                    }
-                  }
-
-                  const withImg = allRecipes.filter((r: any) => r.image_data).length;
-                  console.log(`[PDF Extract] Image matching: ${withImg}/${allRecipes.length} recipes got images`);
-                } catch (imgErr: any) {
-                  console.error("[PDF Extract] Image matching failed:", imgErr.message);
-                  // Fallback: simple offset matching
-                  allRecipes.sort((a: any, b: any) => (a.page_number || 0) - (b.page_number || 0));
-                  const usedImgs = new Set<number>();
-                  for (const recipe of allRecipes) {
-                    const pn = recipe.page_number || 0;
-                    for (const off of [0, -1, 1, -2, 2]) {
-                      const pg = pn + off;
-                      if (pageImages.has(pg) && pageImages.get(pg) && !usedImgs.has(pg)) {
-                        recipe.image_data = pageImages.get(pg);
-                        usedImgs.add(pg);
-                        break;
-                      }
-                    }
-                  }
-                }
-              }
-
-              send({ type: "done", recipes: allRecipes, total: allRecipes.length });
+                })
+              );
             }
-            controller.close();
-          },
-        });
 
-        return new Response(stream, {
-          headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" },
-        });
-      }
+            // Match images with Sonnet Vision
+            await matchImagesWithVision(client, allRecipes, pageImages, send);
 
-      // Python failed — fall through to client-side approach
-      console.log("[PDF Extract] Python unavailable, need client-side extraction");
-      return Response.json({ error: "Python niet beschikbaar. Gebruik de client-side PDF upload." }, { status: 422 });
+            send({ type: "done", recipes: allRecipes, total: allRecipes.length });
+          } catch (err: any) {
+            send({ type: "error", error: err.message });
+          }
+          controller.close();
+        },
+      });
+
+      return new Response(stream, {
+        headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" },
+      });
     }
 
-    // Handle JSON (client-side extracted pages) — AI processing
+    // Handle JSON (client-side extracted pages)
     const body = await request.json();
     const { pages, images, filename, bron: userBron } = body;
 
@@ -344,22 +303,19 @@ Alleen JSON.`,
       if (fn.includes("broodje") && fn.includes("dunner")) bron = "Broodje Dunner";
     }
 
-    console.log(`[PDF Extract] Client-side: ${pages.length} pages, bron: ${bron || 'auto'}`);
-
-    // Build page image map
     const pageImageMap = new Map<number, string>();
     if (Array.isArray(images)) {
       images.forEach((img: string | null, idx: number) => {
         if (img) {
-          const pageNum = typeof pages[idx] === 'object' ? pages[idx].pageNum : idx + 1;
+          const pageNum = typeof pages[idx] === "object" ? pages[idx].pageNum : idx + 1;
           pageImageMap.set(pageNum, img);
         }
       });
     }
 
     const pageData = pages.map((p: any, idx: number) => ({
-      pageNum: typeof p === 'object' ? p.pageNum : idx + 1,
-      text: typeof p === 'string' ? p : p.text || '',
+      pageNum: typeof p === "object" ? p.pageNum : idx + 1,
+      text: typeof p === "string" ? p : p.text || "",
     }));
 
     const encoder = new TextEncoder();
@@ -368,43 +324,48 @@ Alleen JSON.`,
         const send = (data: any) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
 
         try {
+          const BATCH_SIZE = 10;
           const batches: typeof pageData[] = [];
-          for (let i = 0; i < pageData.length; i += 6) {
-            batches.push(pageData.slice(i, i + 6));
+          for (let i = 0; i < pageData.length; i += BATCH_SIZE) {
+            batches.push(pageData.slice(i, i + BATCH_SIZE));
           }
 
-          send({ type: "status", message: `${batches.length} batches (${pageData.length} pagina's)`, total_batches: batches.length });
+          send({ type: "status", message: `${pageData.length} pagina's in ${batches.length} batch(es)` });
 
+          const client = new Anthropic();
           const allRecipes: any[] = [];
           let completed = 0;
 
-          for (let i = 0; i < batches.length; i += 3) {
-            const chunk = batches.slice(i, i + 3);
-            const results = await Promise.all(
+          for (let b = 0; b < batches.length; b += 3) {
+            const chunk = batches.slice(b, b + 3);
+            await Promise.all(
               chunk.map(async (batch, j) => {
-                const batchIdx = i + j;
+                const batchIdx = b + j;
                 try {
-                  const recipes = await processWithAi(batch, bron);
-                  for (const r of recipes) {
-                    const pn = r.page_number;
-                    if (pn) {
-                      for (const off of [0, -1, 1, -2, 2]) {
-                        if (pageImageMap.has(pn + off)) { r.image_data = pageImageMap.get(pn + off); break; }
-                      }
-                    }
-                  }
+                  const pageText = batch.map((p) => `--- PAGINA ${p.pageNum} ---\n${p.text}`).join("\n\n");
+                  const response = await client.messages.create({
+                    model: "claude-haiku-4-5-20251001",
+                    max_tokens: 16384,
+                    system: buildAiPrompt(bron),
+                    messages: [{ role: "user", content: `Vind alle recepten:\n\n${pageText}` }],
+                  });
+
+                  const text = response.content.filter((bl) => bl.type === "text").map((bl) => (bl as any).text).join("\n");
+                  const recipes = parseAiJson(text).filter((r: any) => r.title && r.ingredients?.length > 0);
+
                   completed++;
                   allRecipes.push(...recipes);
                   send({ type: "batch_done", batch: batchIdx + 1, total_batches: batches.length, completed, found: recipes.length, recipes });
-                  return recipes;
                 } catch (err: any) {
                   completed++;
                   send({ type: "batch_error", batch: batchIdx + 1, error: err.message });
-                  return [];
                 }
               })
             );
           }
+
+          // Match images with Sonnet Vision
+          await matchImagesWithVision(client, allRecipes, pageImageMap, send);
 
           send({ type: "done", recipes: allRecipes, total: allRecipes.length });
         } catch (err: any) {
