@@ -27,7 +27,8 @@ INGREDIËNTEN:
 - Lees ELKE hoeveelheid ZORGVULDIG uit de tekst. Mis er GEEN.
 - ALLE tekst moet in het Nederlands zijn. Vertaal Engelstalige recepten volledig (titel, ingrediënten, stappen).
 - Secties: als er kopjes staan ("Voor de dressing:"), gebruik het "groep" veld.
-- Geef het paginanummer mee (page_number).
+- Geef het paginanummer mee waarop de receptTEKST staat (page_number).
+- Geef ook het paginanummer van de bijbehorende FOTO mee als die op een andere pagina staat (image_page). De foto staat meestal op de pagina VOOR of NA de tekst.
 
 Schema per recept:
 {
@@ -37,7 +38,8 @@ Schema per recept:
   "temperatuur": "string | null (bijv. '180°C')",
   "bron": "${bron || "string | null"}",
   "basis_porties": "number | null",
-  "page_number": "number | null",
+  "page_number": "number | null (pagina met de recepttekst)",
+  "image_page": "number | null (pagina met de receptfoto, als die op een andere pagina staat)",
   "ingredients": [{"hoeveelheid": "string|null", "eenheid": "string|null", "naam": "string", "groep": "string|null"}],
   "steps": [{"titel": "string|null", "beschrijving": "string"}],
   "nutrition": {"energie_kcal":"string|null","vetten":"string|null","koolhydraten":"string|null","eiwitten":"string|null"} | null,
@@ -213,23 +215,30 @@ export async function POST(request: NextRequest) {
 
                     const recipes = (Array.isArray(parsed) ? parsed : [parsed]).filter((r: any) => r.title && r.ingredients?.length > 0);
 
-                    // Assign images using global used-set
+                    // Assign images: detect pattern first, then match
                     recipes.sort((a: any, b: any) => (a.page_number || 0) - (b.page_number || 0));
+
+                    // Assign images
+                    recipes.sort((a: any, b: any) => (a.page_number || 0) - (b.page_number || 0));
+
                     for (const recipe of recipes) {
-                      const pn = recipe.page_number || 0;
-                      let bestPage = -1;
-                      let bestDist = Infinity;
-                      for (const [imgPage, img] of pageImages.entries()) {
-                        if (!img || globalUsedImages.has(imgPage)) continue;
-                        const dist = Math.abs(pn - imgPage);
-                        if (dist < bestDist) {
-                          bestDist = dist;
-                          bestPage = imgPage;
-                        }
+                      // 1. Use AI-specified image_page if available
+                      const ip = recipe.image_page;
+                      if (ip && pageImages.has(ip) && pageImages.get(ip) && !globalUsedImages.has(ip)) {
+                        recipe.image_data = pageImages.get(ip);
+                        globalUsedImages.add(ip);
+                        continue;
                       }
-                      if (bestPage >= 0 && bestDist <= 2) {
-                        recipe.image_data = pageImages.get(bestPage);
-                        globalUsedImages.add(bestPage);
+
+                      // 2. Fallback: try same page, then nearby pages
+                      const pn = recipe.page_number || 0;
+                      for (const offset of [0, -1, 1, -2, 2]) {
+                        const pg = pn + offset;
+                        if (pageImages.has(pg) && pageImages.get(pg) && !globalUsedImages.has(pg)) {
+                          recipe.image_data = pageImages.get(pg);
+                          globalUsedImages.add(pg);
+                          break;
+                        }
                       }
                     }
 
