@@ -27,8 +27,7 @@ INGREDIËNTEN:
 - Lees ELKE hoeveelheid ZORGVULDIG uit de tekst. Mis er GEEN.
 - ALLE tekst moet in het Nederlands zijn. Vertaal Engelstalige recepten volledig (titel, ingrediënten, stappen).
 - Secties: als er kopjes staan ("Voor de dressing:"), gebruik het "groep" veld.
-- Geef het paginanummer mee waarop de receptTEKST staat (page_number).
-- Geef ook het paginanummer van de bijbehorende FOTO mee als die op een andere pagina staat (image_page). De foto staat meestal op de pagina VOOR of NA de tekst.
+- Geef het paginanummer mee waarop de recepttekst staat (page_number).
 
 Schema per recept:
 {
@@ -38,8 +37,7 @@ Schema per recept:
   "temperatuur": "string | null (bijv. '180°C')",
   "bron": "${bron || "string | null"}",
   "basis_porties": "number | null",
-  "page_number": "number | null (pagina met de recepttekst)",
-  "image_page": "number | null (pagina met de receptfoto, als die op een andere pagina staat)",
+  "page_number": "number | null",
   "ingredients": [{"hoeveelheid": "string|null", "eenheid": "string|null", "naam": "string", "groep": "string|null"}],
   "steps": [{"titel": "string|null", "beschrijving": "string"}],
   "nutrition": {"energie_kcal":"string|null","vetten":"string|null","koolhydraten":"string|null","eiwitten":"string|null"} | null,
@@ -215,33 +213,7 @@ export async function POST(request: NextRequest) {
 
                     const recipes = (Array.isArray(parsed) ? parsed : [parsed]).filter((r: any) => r.title && r.ingredients?.length > 0);
 
-                    // Assign images: detect pattern first, then match
-                    recipes.sort((a: any, b: any) => (a.page_number || 0) - (b.page_number || 0));
-
-                    // Assign images
-                    recipes.sort((a: any, b: any) => (a.page_number || 0) - (b.page_number || 0));
-
-                    for (const recipe of recipes) {
-                      // 1. Use AI-specified image_page if available
-                      const ip = recipe.image_page;
-                      if (ip && pageImages.has(ip) && pageImages.get(ip) && !globalUsedImages.has(ip)) {
-                        recipe.image_data = pageImages.get(ip);
-                        globalUsedImages.add(ip);
-                        continue;
-                      }
-
-                      // 2. Fallback: try same page, then nearby pages
-                      const pn = recipe.page_number || 0;
-                      for (const offset of [0, -1, 1, -2, 2]) {
-                        const pg = pn + offset;
-                        if (pageImages.has(pg) && pageImages.get(pg) && !globalUsedImages.has(pg)) {
-                          recipe.image_data = pageImages.get(pg);
-                          globalUsedImages.add(pg);
-                          break;
-                        }
-                      }
-                    }
-
+                    // Don't assign images here — done globally after all batches via Sonnet vision
                     completed++;
                     allRecipes.push(...recipes);
                     const names = recipes.map((r: any) => r.title).join(', ');
@@ -251,6 +223,95 @@ export async function POST(request: NextRequest) {
                     send({ type: "batch_error", batch: batchIdx + 1, total_batches: batches.length, completed, error: err.message });
                   }
                 }));
+              }
+
+              // Step 2: Match images to recipes using Sonnet vision
+              const availImages = [...pageImages.entries()]
+                .filter(([_, img]) => img)
+                .sort(([a], [b]) => a - b);
+
+              if (availImages.length > 0 && allRecipes.length > 0) {
+                send({ type: "status", message: `Afbeeldingen koppelen aan ${allRecipes.length} recepten...` });
+
+                try {
+                  // Build content: all images + recipe titles
+                  const contentBlocks: any[] = [];
+
+                  for (const [pageNum, imgData] of availImages) {
+                    // Strip data URL prefix for API
+                    const base64 = imgData.replace(/^data:image\/\w+;base64,/, '');
+                    contentBlocks.push({
+                      type: "text",
+                      text: `--- FOTO van pagina ${pageNum} ---`,
+                    });
+                    contentBlocks.push({
+                      type: "image",
+                      source: { type: "base64", media_type: "image/jpeg", data: base64 },
+                    });
+                  }
+
+                  const recipeTitles = allRecipes.map((r, i) => `${i + 1}. "${r.title}"`).join('\n');
+                  contentBlocks.push({
+                    type: "text",
+                    text: `Hieronder staan ${allRecipes.length} recepten. Koppel elke foto aan het juiste recept op basis van wat je ZIET op de foto.
+
+Recepten:
+${recipeTitles}
+
+Antwoord als JSON array van objecten: [{"recipe_index": 0, "page": 6}, {"recipe_index": 1, "page": 8}, ...]
+recipe_index = 0-based index van het recept in de lijst hierboven.
+page = het paginanummer van de foto.
+Als een foto niet bij een recept hoort (bijv. logo, decoratie), sla die dan over.
+Alleen JSON.`,
+                  });
+
+                  const matchResponse = await client.messages.create({
+                    model: "claude-sonnet-4-6",
+                    max_tokens: 2048,
+                    messages: [{ role: "user", content: contentBlocks }],
+                  });
+
+                  const matchText = matchResponse.content
+                    .filter((b: any) => b.type === "text")
+                    .map((b: any) => b.text)
+                    .join("\n").trim();
+
+                  let matchJson = matchText;
+                  const cm = matchJson.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
+                  if (cm) matchJson = cm[1].trim();
+                  if (!matchJson.startsWith("[")) {
+                    const am = matchJson.match(/\[[\s\S]*\]/);
+                    if (am) matchJson = am[0];
+                  }
+
+                  const matches = JSON.parse(matchJson);
+                  for (const match of matches) {
+                    const idx = match.recipe_index;
+                    const page = match.page;
+                    if (idx >= 0 && idx < allRecipes.length && pageImages.has(page)) {
+                      allRecipes[idx].image_data = pageImages.get(page);
+                    }
+                  }
+
+                  const withImg = allRecipes.filter((r: any) => r.image_data).length;
+                  console.log(`[PDF Extract] Image matching: ${withImg}/${allRecipes.length} recipes got images`);
+                } catch (imgErr: any) {
+                  console.error("[PDF Extract] Image matching failed:", imgErr.message);
+                  // Fallback: simple offset matching
+                  allRecipes.sort((a: any, b: any) => (a.page_number || 0) - (b.page_number || 0));
+                  const usedImgs = new Set<number>();
+                  for (const recipe of allRecipes) {
+                    const pn = recipe.page_number || 0;
+                    for (const off of [0, -1, 1, -2, 2]) {
+                      const pg = pn + off;
+                      if (pageImages.has(pg) && pageImages.get(pg) && !usedImgs.has(pg)) {
+                        recipe.image_data = pageImages.get(pg);
+                        usedImgs.add(pg);
+                        break;
+                      }
+                    }
+                  }
+                }
               }
 
               send({ type: "done", recipes: allRecipes, total: allRecipes.length });
