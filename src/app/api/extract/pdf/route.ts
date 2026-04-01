@@ -223,7 +223,7 @@ export async function POST(request: NextRequest) {
             send({ type: "status", message: `${allPages.length} pagina's, ${textPages.length} met tekst, ${imgCount} met foto` });
 
             // Batch processing with Haiku
-            const BATCH_SIZE = 10;
+            const BATCH_SIZE = 4;
             const batches: any[][] = [];
             for (let i = 0; i < textPages.length; i += BATCH_SIZE) {
               batches.push(textPages.slice(i, i + BATCH_SIZE));

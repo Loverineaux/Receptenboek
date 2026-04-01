@@ -78,9 +78,10 @@ export default function TestPdfPage() {
             if (event.type === 'status') {
               addLog(event.message);
             } else if (event.type === 'batch_done') {
-              const names = event.recipes.map((r: any) => r.title).join(', ');
-              addLog(`Batch ${event.completed}/${event.total_batches} klaar: ${event.found} recept(en) — ${names}`);
-              found.push(...event.recipes);
+              for (const r of event.recipes) {
+                found.push(r);
+                addLog(`Recept ${found.length}: ${r.title}`);
+              }
               setRecipes([...found]);
             } else if (event.type === 'batch_error') {
               addLog(`Batch ${event.batch} mislukt: ${event.error}`);
