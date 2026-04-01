@@ -202,6 +202,8 @@ export default function RecipeDetailPage() {
   const [commentText, setCommentText] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
   const [replyTo, setReplyTo] = useState<string | null>(null);
+  const [editingComment, setEditingComment] = useState<string | null>(null);
+  const [editCommentText, setEditCommentText] = useState('');
   const [commentLikes, setCommentLikes] = useState<Set<string>>(new Set());
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -412,10 +414,40 @@ export default function RecipeDetailPage() {
         <p className="text-xs font-medium text-text-primary">
           {c.user?.display_name ?? 'Anoniem'}
           <span className="ml-2 font-normal text-text-muted">
-            {new Date(c.created_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}
+            {new Date(c.created_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' })}
+            {' '}
+            {new Date(c.created_at).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}
           </span>
         </p>
-        <p className="mt-0.5 text-sm text-text-secondary">{c.tekst}</p>
+        {editingComment === c.id ? (
+          <div className="mt-1 flex gap-2">
+            <textarea
+              value={editCommentText}
+              onChange={(e) => setEditCommentText(e.target.value)}
+              rows={2}
+              className="flex-1 rounded-lg border border-gray-300 bg-surface px-3 py-1.5 text-sm text-text-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+            />
+            <div className="flex flex-col gap-1">
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={async () => {
+                  if (!editCommentText.trim()) return;
+                  await supabase.from('comments').update({ tekst: editCommentText.trim() }).eq('id', c.id);
+                  setComments((prev) => prev.map((x) => x.id === c.id ? { ...x, tekst: editCommentText.trim() } : x));
+                  setEditingComment(null);
+                }}
+              >
+                Opslaan
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setEditingComment(null)}>
+                Annuleer
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <p className="mt-0.5 text-sm text-text-secondary">{c.tekst}</p>
+        )}
         <div className="mt-1.5 flex items-center gap-3">
           {user && (
             <button
@@ -437,6 +469,31 @@ export default function RecipeDetailPage() {
             >
               Reageer
             </button>
+          )}
+          {user && c.user_id === user.id && (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingComment(c.id);
+                  setEditCommentText(c.tekst);
+                }}
+                className="text-xs text-text-muted hover:text-primary"
+              >
+                Bewerk
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!window.confirm('Reactie verwijderen?')) return;
+                  await supabase.from('comments').delete().eq('id', c.id);
+                  setComments((prev) => prev.filter((x) => x.id !== c.id && x.parent_id !== c.id));
+                }}
+                className="text-xs text-text-muted hover:text-red-500"
+              >
+                Verwijder
+              </button>
+            </>
           )}
         </div>
       </div>

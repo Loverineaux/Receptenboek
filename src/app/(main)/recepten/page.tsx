@@ -76,7 +76,7 @@ export default function ReceptenPage() {
             id, title, subtitle, image_url, bron, tijd, moeilijkheid, categorie, created_at,
             ingredients(naam),
             tags:recipe_tags(tag:tags(id, name)),
-            ratings(sterren),
+            ratings(sterren, user_id),
             comments(id),
             user:profiles!recipes_user_id_fkey(id, display_name, avatar_url)
           `
@@ -235,28 +235,39 @@ export default function ReceptenPage() {
 
   const handleRate = async (recipeId: string, rating: number) => {
     if (!user) return;
-    setUserRatings((prev) => ({ ...prev, [recipeId]: rating }));
 
-    await fetch(`/api/recipes/${recipeId}/rate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sterren: rating }),
-    });
-
-    // Update average in local state
-    setRecipes((prev) => prev.map((r) => {
-      if (r.id !== recipeId) return r;
-      const oldRatings = r.ratings || [];
-      const existing = oldRatings.find((rt: any) => rt.user_id === user.id);
-      let newRatings;
-      if (existing) {
-        newRatings = oldRatings.map((rt: any) => rt.user_id === user.id ? { ...rt, sterren: rating } : rt);
-      } else {
-        newRatings = [...oldRatings, { user_id: user.id, sterren: rating }];
-      }
-      const avg = newRatings.reduce((s: number, rt: any) => s + rt.sterren, 0) / newRatings.length;
-      return { ...r, ratings: newRatings, average_rating: avg };
-    }));
+    if (rating === 0) {
+      // Remove rating — update UI first, then DB
+      setUserRatings((prev) => { const n = { ...prev }; delete n[recipeId]; return n; });
+      setRecipes((prev) => prev.map((r) => {
+        if (r.id !== recipeId) return r;
+        const newRatings = (r.ratings || []).filter((rt: any) => rt.user_id !== user.id);
+        const avg = newRatings.length > 0 ? newRatings.reduce((s: number, rt: any) => s + rt.sterren, 0) / newRatings.length : null;
+        return { ...r, ratings: newRatings, average_rating: avg };
+      }));
+      supabase.from('ratings').delete().eq('recipe_id', recipeId).eq('user_id', user.id);
+    } else {
+      // Set/update rating
+      setUserRatings((prev) => ({ ...prev, [recipeId]: rating }));
+      await fetch(`/api/recipes/${recipeId}/rate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sterren: rating }),
+      });
+      setRecipes((prev) => prev.map((r) => {
+        if (r.id !== recipeId) return r;
+        const oldRatings = r.ratings || [];
+        const existing = oldRatings.find((rt: any) => rt.user_id === user.id);
+        let newRatings;
+        if (existing) {
+          newRatings = oldRatings.map((rt: any) => rt.user_id === user.id ? { ...rt, sterren: rating } : rt);
+        } else {
+          newRatings = [...oldRatings, { user_id: user.id, sterren: rating }];
+        }
+        const avg = newRatings.reduce((s: number, rt: any) => s + rt.sterren, 0) / newRatings.length;
+        return { ...r, ratings: newRatings, average_rating: avg };
+      }));
+    }
   };
 
   const handleFavoriteToggle = async (recipeId: string, isFavorited: boolean) => {

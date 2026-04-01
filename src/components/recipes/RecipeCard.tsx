@@ -107,10 +107,13 @@ export default function RecipeCard({ recipe, onFavoriteToggle, onRate, userRatin
         )}
         <div className="mt-1.5 flex items-center justify-between" onClick={(e) => e.stopPropagation()}>
           {onRate ? (
-            <StarRating
-              value={userRating || 0}
-              onChange={(rating) => onRate(recipe.id, rating)}
-            />
+            <div className="flex items-center gap-1.5">
+              <StarRating
+                value={userRating || 0}
+                onChange={(rating) => onRate(recipe.id, rating === userRating ? 0 : rating)}
+              />
+              <span className="text-xs text-text-muted">({recipe.ratings?.length ?? 0})</span>
+            </div>
           ) : (
             <StarRating
               value={recipe.average_rating ?? 0}
