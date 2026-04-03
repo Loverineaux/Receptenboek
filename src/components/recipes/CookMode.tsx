@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { X, ChevronLeft, ChevronRight, ChefHat } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, ChefHat, Bot } from 'lucide-react';
+import RecipeChat, { type ChatMessage } from '@/components/recipes/RecipeChat';
+import type { RecipeWithRelations } from '@/types';
 
 interface CookModeProps {
   title: string;
@@ -9,10 +11,14 @@ interface CookModeProps {
   ingredients: Array<{ hoeveelheid?: string | null; eenheid?: string | null; naam: string }>;
   portions: number;
   onClose: () => void;
+  recipe?: RecipeWithRelations;
+  chatMessages?: ChatMessage[];
+  onChatMessagesChange?: (messages: ChatMessage[]) => void;
 }
 
-export default function CookMode({ title, steps, ingredients, portions, onClose }: CookModeProps) {
+export default function CookMode({ title, steps, ingredients, portions, onClose, recipe, chatMessages, onChatMessagesChange }: CookModeProps) {
   const [currentStep, setCurrentStep] = useState(-1); // -1 = ingredients overview
+  const [chatOpen, setChatOpen] = useState(false);
   const totalSteps = steps.length;
 
   // Keep screen awake
@@ -39,15 +45,17 @@ export default function CookMode({ title, steps, ingredients, portions, onClose 
         e.preventDefault();
         setCurrentStep((prev) => Math.max(prev - 1, -1));
       } else if (e.key === 'Escape') {
-        onClose();
+        if (chatOpen) setChatOpen(false);
+        else onClose();
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [totalSteps, onClose]);
+  }, [totalSteps, onClose, chatOpen]);
 
-  // Swipe support
+  // Swipe support — only when chat is closed
   useEffect(() => {
+    if (chatOpen) return;
     let startX = 0;
     const handleTouchStart = (e: TouchEvent) => { startX = e.touches[0].clientX; };
     const handleTouchEnd = (e: TouchEvent) => {
@@ -63,7 +71,7 @@ export default function CookMode({ title, steps, ingredients, portions, onClose 
       window.removeEventListener('touchstart', handleTouchStart);
       window.removeEventListener('touchend', handleTouchEnd);
     };
-  }, [totalSteps]);
+  }, [totalSteps, chatOpen]);
 
   const isIngredients = currentStep === -1;
   const isLastStep = currentStep === totalSteps - 1;
@@ -176,6 +184,63 @@ export default function CookMode({ title, steps, ingredients, portions, onClose 
           </button>
         )}
       </div>
+
+      {/* FAB — floating assistant button */}
+      {recipe && !chatOpen && (
+        <button
+          onClick={() => setChatOpen(true)}
+          className="absolute bottom-24 right-4 z-20 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-white shadow-lg transition-transform active:scale-95"
+        >
+          <Bot className="h-6 w-6" />
+        </button>
+      )}
+
+      {/* Chat slide-in panel from right */}
+      {recipe && (
+        <>
+          {/* Backdrop */}
+          <div
+            className={`absolute inset-0 z-20 bg-black/30 transition-opacity duration-200 ${
+              chatOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+            }`}
+            onClick={() => setChatOpen(false)}
+          />
+          {/* Panel */}
+          <div
+            className={`absolute top-0 bottom-0 right-0 z-30 flex w-full max-w-md flex-col bg-surface shadow-2xl transition-transform duration-300 ease-out ${
+              chatOpen ? 'translate-x-0' : 'translate-x-full'
+            }`}
+          >
+            {/* Panel header */}
+            <div className="flex items-center justify-between border-b px-4 py-3">
+              <div className="flex items-center gap-2">
+                <Bot className="h-5 w-5 text-primary" />
+                <span className="text-sm font-semibold text-text-primary">Kookassistent</span>
+              </div>
+              <button
+                onClick={() => setChatOpen(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-gray-100"
+              >
+                <X className="h-5 w-5 text-text-secondary" />
+              </button>
+            </div>
+            {/* Chat content */}
+            <div className="flex-1 overflow-hidden">
+              <RecipeChat
+                recipe={recipe}
+                compact
+                cookModeContext={{
+                  currentStep,
+                  stepText: step?.beschrijving,
+                  stepTitle: step?.titel ?? undefined,
+                }}
+                messages={chatMessages}
+                onMessagesChange={onChatMessagesChange}
+              />
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

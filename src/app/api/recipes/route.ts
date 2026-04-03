@@ -26,12 +26,13 @@ Titel: "${title}"
 Ingrediënten:
 ${ingList || '(geen)'}
 
-EIWIT — kies PRECIES ÉÉN op basis van de ingrediënten:
-- "Kip" = bevat kip/chicken/kipfilet/kippendij/kipgehakt
-- "Vlees" = bevat rood vlees (biefstuk, rundergehakt, gehakt, worst, boerenworst, spek, bacon, ossenhaas, filet americain, rosbief, hamburger). Carbonara = spek = Vlees. NIET kip.
-- "Vis" = bevat vis/zeevruchten (zalm, tonijn, garnaal, gamba, kabeljauw, koolvis)
-- "Vegetarisch" = GEEN vlees, kip of vis aanwezig. Ei/kaas/zuivel mag.
-- "Veganistisch" = GEEN dierlijke producten (geen vlees/kip/vis/ei/zuivel/boter/room/honing)
+EIWIT — kies PRECIES ÉÉN op basis van titel + ingrediënten. Analyseer BEIDE!
+BELANGRIJK: wijs GEEN eiwit-categorie toe bij desserts, ontbijt, lunch of soepen. Eiwit is alleen relevant voor warme hoofd-/bijgerechten.
+- "Kip" = bevat kip/chicken/kipfilet/kippendij/kipgehakt/kippenpoot/drumstick
+- "Vlees" = bevat rood vlees of gehakt (biefstuk, rundergehakt, gehakt, worst, boerenworst, spek, bacon, ossenhaas, filet americain, rosbief, hamburger, bifteki, köfte, lam, lamsvlees, varkenshaas, ribs, pulled pork, chorizo, salami, prosciutto, shoarma). Carbonara = spek = Vlees. BBQ met gehakt = Vlees. NIET kip.
+- "Vis" = bevat vis of zeevruchten (zalm, tonijn, garnaal, gamba's, kabeljauw, koolvis, pangasius, forel, makreel, haring, sardines, mosselen, calamaris, scampi, kreeft, sushi). OOK als vis alleen in de titel staat (bijv. "met zalm", "tonijnsalade").
+- "Vegetarisch" = GEEN vlees, kip of vis aanwezig. Ei/kaas/zuivel mag. NIET toewijzen bij desserts/ontbijt/lunch/soepen.
+- "Veganistisch" = GEEN dierlijke producten. NIET toewijzen bij desserts/ontbijt/lunch/soepen.
 
 GERECHT TYPE — wijs toe wat past. Denk als een kok: wat IS dit gerecht?
 - "Pasta" = een pastagerecht (spaghetti, noedels, bami, penne, casarecce, fusilli, noodles, lasagne, cannelloni)
@@ -62,7 +63,7 @@ Antwoord ALLEEN als JSON array, bijv. ["Kip", "Pasta"]. Geen tekst.`
     }
 
     cats = rawCats
-      .map((c: string) => CATEGORY_TAGS.find((k) => k.toLowerCase() === c.toLowerCase()))
+      .map((c: string) => CATEGORY_TAGS.find((k) => k.toLowerCase() === c.trim().toLowerCase()))
       .filter(Boolean) as string[];
   } catch {
     console.error('[Auto-categorize] Parse error:', text.substring(0, 60));
@@ -79,13 +80,22 @@ Antwoord ALLEEN als JSON array, bijv. ["Kip", "Pasta"]. Geen tekst.`
 
   if (cats.length === 0) return;
 
-  // Upsert tags and link (use admin client to bypass RLS)
+  // Find or create tags and link (use admin client to bypass RLS)
   for (const cat of cats) {
-    const { data: tag } = await supabaseAdmin
+    let { data: tag } = await supabaseAdmin
       .from('tags')
-      .upsert({ name: cat }, { onConflict: 'name' })
       .select()
-      .single();
+      .ilike('name', cat)
+      .maybeSingle();
+
+    if (!tag) {
+      const { data: newTag } = await supabaseAdmin
+        .from('tags')
+        .insert({ name: cat })
+        .select()
+        .single();
+      tag = newTag;
+    }
 
     if (tag) {
       await supabaseAdmin.from('recipe_tags').upsert(
@@ -330,26 +340,39 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Tags — upsert all at once, then link
+  // Tags — find or create, then link
   if (body.tags?.length) {
-    console.log(`[POST /api/recipes] Upserting ${body.tags.length} tags`);
+    console.log(`[POST /api/recipes] Processing ${body.tags.length} tags`);
     promises.push(
       (async () => {
-        const tagRows = body.tags.map((name: string) => ({ name }));
-        const { data: tags, error: tagError } = await supabaseAdmin
-          .from('tags')
-          .upsert(tagRows, { onConflict: 'name' })
-          .select();
+        const normalizedNames = body.tags.map((name: string) =>
+          name.charAt(0).toUpperCase() + name.slice(1).toLowerCase()
+        );
 
-        if (tagError) {
-          console.error('[POST /api/recipes] Tags upsert error:', tagError.message);
-          return;
+        const tagIds: string[] = [];
+        for (const name of normalizedNames) {
+          let { data: tag } = await supabaseAdmin
+            .from('tags')
+            .select()
+            .ilike('name', name)
+            .maybeSingle();
+
+          if (!tag) {
+            const { data: newTag } = await supabaseAdmin
+              .from('tags')
+              .insert({ name })
+              .select()
+              .single();
+            tag = newTag;
+          }
+          if (tag) tagIds.push(tag.id);
         }
-        console.log(`[POST /api/recipes] Tags upserted: ${tags?.length}`);
 
-        if (tags?.length) {
+        console.log(`[POST /api/recipes] Tags resolved: ${tagIds.length}`);
+
+        if (tagIds.length) {
           const { error: linkError } = await supabaseAdmin.from('recipe_tags').insert(
-            tags.map((t: any) => ({ recipe_id: recipeId, tag_id: t.id }))
+            tagIds.map((tagId) => ({ recipe_id: recipeId, tag_id: tagId }))
           );
           if (linkError) console.error('[POST /api/recipes] recipe_tags error:', linkError.message);
           else console.log('[POST /api/recipes] recipe_tags OK');

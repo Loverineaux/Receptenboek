@@ -10,12 +10,17 @@ import SearchBar from '@/components/ui/SearchBar';
 import CategoryFilter from '@/components/ui/CategoryFilter';
 import Button from '@/components/ui/Button';
 import RecipeCard from '@/components/recipes/RecipeCard';
+import AddToCollectionModal from '@/components/recipes/AddToCollectionModal';
+import PullToRefresh from '@/components/ui/PullToRefresh';
+import MobileFilterSheet from '@/components/ui/MobileFilterSheet';
+import { useCollectionRecipeIds } from '@/hooks/useCollectionRecipeIds';
 import type { RecipeWithRelations, Source } from '@/types';
 
-type SortOption = 'newest' | 'rating' | 'time';
+type SortOption = 'newest' | 'rating' | 'time' | 'az' | 'za';
 
 export default function ReceptenPage() {
   const { user } = useAuth();
+  const collectionRecipeIds = useCollectionRecipeIds();
   const supabase = createClient();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -156,11 +161,13 @@ export default function ReceptenPage() {
           );
         }
 
-        // Client-side rating sort
+        // Client-side sorting
         if (sort === 'rating') {
-          filtered.sort(
-            (a, b) => (b.average_rating ?? 0) - (a.average_rating ?? 0)
-          );
+          filtered.sort((a, b) => (b.average_rating ?? 0) - (a.average_rating ?? 0));
+        } else if (sort === 'az') {
+          filtered.sort((a, b) => a.title.localeCompare(b.title, 'nl'));
+        } else if (sort === 'za') {
+          filtered.sort((a, b) => b.title.localeCompare(a.title, 'nl'));
         }
 
         // Check favorites
@@ -218,6 +225,8 @@ export default function ReceptenPage() {
   }, [recipes.length]);
 
   const [userRatings, setUserRatings] = useState<Record<string, number>>({});
+  const [initialUserRatings, setInitialUserRatings] = useState<Record<string, number>>({});
+  const [collectionRecipeId, setCollectionRecipeId] = useState<string | null>(null);
 
   // Load user's ratings
   useEffect(() => {
@@ -228,6 +237,7 @@ export default function ReceptenPage() {
           const map: Record<string, number> = {};
           data.forEach((r: any) => { map[r.recipe_id] = r.sterren; });
           setUserRatings(map);
+          setInitialUserRatings(map);
         }
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -236,30 +246,10 @@ export default function ReceptenPage() {
   const handleRate = async (recipeId: string, rating: number) => {
     if (!user) return;
 
-    // Update UI immediately (optimistic)
     if (rating === 0) {
       setUserRatings((prev) => { const n = { ...prev }; delete n[recipeId]; return n; });
-      setRecipes((prev) => prev.map((r) => {
-        if (r.id !== recipeId) return r;
-        const newRatings = (r.ratings || []).filter((rt: any) => rt.user_id !== user.id);
-        const avg = newRatings.length > 0 ? newRatings.reduce((s: number, rt: any) => s + rt.sterren, 0) / newRatings.length : null;
-        return { ...r, ratings: newRatings, average_rating: avg };
-      }));
     } else {
       setUserRatings((prev) => ({ ...prev, [recipeId]: rating }));
-      setRecipes((prev) => prev.map((r) => {
-        if (r.id !== recipeId) return r;
-        const oldRatings = r.ratings || [];
-        const existing = oldRatings.find((rt: any) => rt.user_id === user.id);
-        let newRatings;
-        if (existing) {
-          newRatings = oldRatings.map((rt: any) => rt.user_id === user.id ? { ...rt, sterren: rating } : rt);
-        } else {
-          newRatings = [...oldRatings, { user_id: user.id, sterren: rating }];
-        }
-        const avg = newRatings.reduce((s: number, rt: any) => s + rt.sterren, 0) / newRatings.length;
-        return { ...r, ratings: newRatings, average_rating: avg };
-      }));
     }
 
     // Persist to DB
@@ -294,6 +284,7 @@ export default function ReceptenPage() {
   };
 
   return (
+    <PullToRefresh onRefresh={fetchRecipes}>
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-text-primary">Mijn recepten</h1>
 
@@ -308,56 +299,35 @@ export default function ReceptenPage() {
       {/* Category filter */}
       <CategoryFilter selected={category} onChange={setCategory} />
 
-      {/* Source + Sort row */}
-      <div className="flex flex-wrap items-center gap-3">
-        <select
-          value={source}
-          onChange={(e) => setSource(e.target.value)}
-          className="rounded-lg border border-gray-300 bg-surface px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-        >
-          <option value="">Alle bronnen</option>
-          {sourceOptions.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
+      {/* Source + Sort filters */}
+      <MobileFilterSheet
+        source={source}
+        onSourceChange={(v) => { setSource(v); if (v) setExcludedSources(new Set()); }}
+        sourceOptions={sourceOptions.map((s) => ({ value: s, label: s }))}
+        excludedSources={excludedSources}
+        onExcludedSourceToggle={(s) => {
+          setExcludedSources((prev) => {
+            const next = new Set(prev);
+            if (next.has(s)) next.delete(s); else next.add(s);
+            return next;
+          });
+          setSource('');
+        }}
+        onClearExcluded={() => setExcludedSources(new Set())}
+        sort={sort}
+        onSortChange={(v) => setSort(v as SortOption)}
+        sortOptions={[
+          { value: 'newest', label: 'Nieuwste' },
+          { value: 'rating', label: 'Beoordeling' },
+          { value: 'time', label: 'Bereidingstijd' },
+          { value: 'az', label: 'A → Z' },
+          { value: 'za', label: 'Z → A' },
+        ]}
+      />
 
-        {/* Exclude sources dropdown */}
-        <div className="relative">
-          <select
-            value=""
-            onChange={(e) => {
-              if (e.target.value) {
-                setExcludedSources((prev) => new Set(prev).add(e.target.value));
-                setSource(''); // Clear include filter when excluding
-              }
-            }}
-            className="rounded-lg border border-gray-300 bg-surface px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-          >
-            <option value="" className="text-text-muted">Verberg bron...</option>
-            {sourceOptions
-              .filter((s) => !excludedSources.has(s))
-              .map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-          </select>
-        </div>
-
-        <select
-          value={sort}
-          onChange={(e) => setSort(e.target.value as SortOption)}
-          className="rounded-lg border border-gray-300 bg-surface px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-        >
-          <option value="newest">Nieuwste</option>
-          <option value="rating">Beoordeling</option>
-          <option value="time">Bereidingstijd</option>
-        </select>
-      </div>
-
-      {/* Excluded source chips */}
+      {/* Excluded source chips (mobile) */}
       {excludedSources.size > 0 && (
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 md:hidden">
           <span className="text-xs text-text-muted">Verborgen:</span>
           {[...excludedSources].map((s) => (
             <button
@@ -374,13 +344,6 @@ export default function ReceptenPage() {
               <span className="text-red-400">&times;</span>
             </button>
           ))}
-          <button
-            type="button"
-            onClick={() => setExcludedSources(new Set())}
-            className="text-xs text-text-muted hover:text-text-secondary"
-          >
-            Alles tonen
-          </button>
         </div>
       )}
 
@@ -407,6 +370,9 @@ export default function ReceptenPage() {
                 onFavoriteToggle={handleFavoriteToggle}
                 onRate={user ? handleRate : undefined}
                 userRating={userRatings[recipe.id]}
+                initialUserRating={initialUserRatings[recipe.id] ?? 0}
+                onAddToCollection={user ? (id) => setCollectionRecipeId(id) : undefined}
+                isInCollection={collectionRecipeIds.has(recipe.id)}
               />
             ))}
           </div>
@@ -433,6 +399,15 @@ export default function ReceptenPage() {
         </div>
       )}
 
+      {/* Add to collection modal */}
+      {collectionRecipeId && (
+        <AddToCollectionModal
+          recipeId={collectionRecipeId}
+          open={!!collectionRecipeId}
+          onClose={() => setCollectionRecipeId(null)}
+        />
+      )}
     </div>
+    </PullToRefresh>
   );
 }

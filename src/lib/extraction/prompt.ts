@@ -55,18 +55,18 @@ JSON SCHEMA:
   "categorieen": ["string"] | null
 }
 
-BELANGRIJK voor categorieen: Wijs een of meerdere van deze categorieën toe op basis van de ingrediënten:
-- "Kip" — bevat kip/chicken
-- "Vlees" — bevat rood vlees, gehakt, worst, etc. (niet kip)
-- "Vis" — bevat vis, garnalen, etc.
-- "Vegetarisch" — geen vlees en geen vis
-- "Veganistisch" — geen vlees, vis, zuivel of eieren
+BELANGRIJK voor categorieen: Wijs een of meerdere van deze categorieën toe op basis van TITEL + INGREDIËNTEN:
+- "Kip" — bevat kip/chicken/kipfilet/kippendij/drumstick
+- "Vlees" — bevat rood vlees, gehakt, worst, spek, bacon, lam, shoarma, bifteki, köfte, chorizo, pulled pork (NIET kip)
+- "Vis" — bevat vis of zeevruchten: zalm, tonijn, garnaal, kabeljauw, pangasius, forel, makreel, mosselen, calamaris. OOK als vis alleen in de titel staat!
+- "Vegetarisch" — geen vlees, kip of vis. NIET toewijzen bij desserts/ontbijt/lunch/soepen.
+- "Veganistisch" — geen dierlijke producten. NIET toewijzen bij desserts/ontbijt/lunch/soepen.
 - "Pasta" — hoofdgerecht met pasta/noedels
-- "Salade" — hoofdzakelijk een salade
+- "Salade" — hoofdzakelijk een salade met sla/bladgroente als basis
 - "Soep" — een soep
 - "Dessert" — een zoet nagerecht
 - "Ontbijt" — een ontbijtgerecht (bowl, overnight oats, etc.)
-- "Lunch" — een lunchgerecht (broodje, wrap, tosti, sandwich, etc.)
+- "Lunch" — een lichte maaltijd (broodje, wrap, tosti, sandwich). GEEN warme maaltijden.
 Wijs ALLE categorieën toe die van toepassing zijn. Een kipgerecht is zowel "Kip" als eventueel "Pasta" als het een pasta met kip is.
 
 Retourneer ALLEEN het JSON-object. Geen andere tekst.`;

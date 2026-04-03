@@ -468,6 +468,12 @@ export default function NieuwReceptPage() {
   };
 
   const [pdfProgress, setPdfProgress] = useState('');
+  const [pdfLogs, setPdfLogs] = useState<string[]>([]);
+
+  const addPdfLog = (msg: string) => {
+    setPdfLogs(prev => [...prev, `${new Date().toLocaleTimeString()} — ${msg}`]);
+    setPdfProgress(msg);
+  };
 
   const handleExtractPdf = async () => {
     if (!pdfFile) return;
@@ -476,10 +482,11 @@ export default function NieuwReceptPage() {
     setExtractError(null);
     setPdfRecipes([]);
     setPdfSaved(new Set());
-    setPdfProgress('PDF inlezen...');
+    setPdfLogs([]);
+    addPdfLog('PDF inlezen...');
 
     try {
-      setPdfProgress('PDF uploaden en analyseren...');
+      addPdfLog('PDF uploaden en analyseren...');
       const formData = new FormData();
       formData.append('pdf', pdfFile);
 
@@ -513,31 +520,31 @@ export default function NieuwReceptPage() {
             const event = JSON.parse(line.slice(6));
 
             if (event.type === 'status') {
-              setPdfProgress(event.message);
+              addPdfLog(event.message);
             } else if (event.type === 'batch_done') {
-              foundRecipes.push(...event.recipes);
+              for (const r of event.recipes) {
+                foundRecipes.push(r);
+                addPdfLog(`Recept ${foundRecipes.length}: ${r.title}`);
+              }
               setPdfRecipes([...foundRecipes]);
-              setPdfProgress(`Batch ${event.completed}/${event.total_batches} klaar — ${foundRecipes.length} recepten gevonden`);
             } else if (event.type === 'batch_error') {
-              setPdfProgress(`Batch ${event.batch} mislukt, doorgaan...`);
+              addPdfLog(`Batch ${event.batch} mislukt: ${event.error}`);
             } else if (event.type === 'done') {
-              console.log(`[PDF Import] Done: ${event.total} recipes`);
+              addPdfLog(`Klaar! ${event.total} recepten gevonden`);
               setPdfRecipes(event.recipes);
             } else if (event.type === 'error') {
               throw new Error(event.error);
             }
           } catch (parseErr: any) {
-            if (parseErr.message !== event?.error) continue;
-            throw parseErr;
+            if (parseErr.message && !parseErr.message.includes('JSON')) throw parseErr;
           }
         }
       }
     } catch (err: any) {
-      console.error('[PDF Import] Error:', err.message);
+      addPdfLog(`Fout: ${err.message}`);
       setExtractError(err.message);
     } finally {
       setExtracting(false);
-      setPdfProgress('');
     }
   };
 
@@ -1068,13 +1075,41 @@ export default function NieuwReceptPage() {
             </p>
           )}
 
-          {/* Progress */}
-          {extracting && (
-            <div className="flex items-center gap-3 rounded-lg bg-primary/5 p-4 text-sm">
-              <Loader2 className="h-5 w-5 animate-spin text-primary" />
-              <span className="font-medium text-text-primary">
-                {pdfProgress || 'Bezig...'}
-              </span>
+          {/* Progress logs */}
+          {(extracting || pdfLogs.length > 0) && (
+            <div className="rounded-xl border bg-surface p-4 space-y-3">
+              {extracting && (
+                <div className="flex items-center gap-3">
+                  <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                  <span className="text-sm font-medium text-text-primary">{pdfProgress || 'Bezig...'}</span>
+                </div>
+              )}
+
+              {pdfLogs.length > 0 && (
+                <div className="space-y-1.5">
+                  {pdfLogs.map((line, i) => {
+                    const msg = line.split(' — ')[1] || line;
+                    const isDone = msg.includes('Klaar') || msg.includes('Recept ');
+                    const isError = msg.includes('mislukt') || msg.includes('Fout');
+                    return (
+                      <div key={i} className="flex items-center gap-2 text-xs">
+                        {isDone ? (
+                          <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] text-white">✓</span>
+                        ) : isError ? (
+                          <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-red-500 text-[10px] text-white">!</span>
+                        ) : i === pdfLogs.length - 1 && extracting ? (
+                          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" />
+                        ) : (
+                          <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-gray-200 text-[10px] text-gray-500">✓</span>
+                        )}
+                        <span className={i === pdfLogs.length - 1 && extracting ? 'text-text-primary font-medium' : 'text-text-muted'}>
+                          {msg}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 

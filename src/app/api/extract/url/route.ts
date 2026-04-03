@@ -8,6 +8,16 @@ import { scrapePage, jsonLdToRecipe, detectBronFromUrl } from "@/lib/extraction/
 import { getCachedRecipe, setCachedRecipe } from "@/lib/extraction/cache";
 import { validateRecipe } from "@/lib/extraction/validate";
 
+function detectSocialPlatform(url: string): string | null {
+  const hostname = new URL(url).hostname.replace('www.', '');
+  if (hostname.includes('instagram.com') || hostname.includes('instagr.am')) return 'instagram';
+  if (hostname.includes('tiktok.com')) return 'tiktok';
+  if (hostname.includes('facebook.com') || hostname.includes('fb.com') || hostname.includes('fb.watch')) return 'facebook';
+  if (hostname.includes('pinterest.com') || hostname.includes('pin.it')) return 'pinterest';
+  if (hostname.includes('youtube.com') || hostname.includes('youtu.be')) return 'youtube';
+  return null;
+}
+
 function respondWithValidation(recipe: any) {
   const validation = validateRecipe(recipe);
   console.log(`[URL Extract] Validation score: ${validation.score}/100, issues: ${validation.issues.length}`);
@@ -40,6 +50,16 @@ export async function POST(request: NextRequest) {
     if (cached) {
       console.log("[URL Extract] Cache hit for:", url);
       return NextResponse.json(cached);
+    }
+
+    // Social media detection — skip scrape, go straight to web search
+    const socialPlatform = detectSocialPlatform(url);
+    if (socialPlatform) {
+      console.log(`[URL Extract] Social media detected (${socialPlatform}), skipping scrape, using web search`);
+      const recipe = await fallbackWebSearch(url);
+      if (!recipe.bron) recipe.bron = detectBronFromUrl(url);
+      setCachedRecipe(url, recipe);
+      return respondWithValidation(recipe);
     }
 
     console.log("[URL Extract] Scraping:", url);

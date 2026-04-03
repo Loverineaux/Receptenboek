@@ -5,14 +5,18 @@ import { Heart } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import RecipeCard from '@/components/recipes/RecipeCard';
+import AddToCollectionModal from '@/components/recipes/AddToCollectionModal';
+import { useCollectionRecipeIds } from '@/hooks/useCollectionRecipeIds';
 import type { RecipeWithRelations } from '@/types';
 
 export default function FavorietenPage() {
   const { user } = useAuth();
+  const collectionRecipeIds = useCollectionRecipeIds();
   const supabase = createClient();
 
   const [recipes, setRecipes] = useState<RecipeWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
+  const [collectionRecipeId, setCollectionRecipeId] = useState<string | null>(null);
 
   const fetchFavorites = useCallback(async () => {
     if (!user) {
@@ -120,6 +124,8 @@ export default function FavorietenPage() {
               key={recipe.id}
               recipe={recipe}
               onFavoriteToggle={handleFavoriteToggle}
+              onAddToCollection={(id) => setCollectionRecipeId(id)}
+              isInCollection={collectionRecipeIds.has(recipe.id)}
             />
           ))}
         </div>
@@ -133,6 +139,14 @@ export default function FavorietenPage() {
             Klik op het hartje bij een recept om het als favoriet op te slaan.
           </p>
         </div>
+      )}
+
+      {collectionRecipeId && (
+        <AddToCollectionModal
+          recipeId={collectionRecipeId}
+          open={!!collectionRecipeId}
+          onClose={() => setCollectionRecipeId(null)}
+        />
       )}
     </div>
   );

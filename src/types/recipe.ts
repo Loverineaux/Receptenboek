@@ -118,6 +118,32 @@ export interface RecipeWithRelations extends Recipe {
 }
 
 // ──────────────────────────────────────────────
+// Collections
+// ──────────────────────────────────────────────
+
+export interface Collection {
+  id: string;
+  user_id: string;
+  title: string;
+  description: string | null;
+  image_url: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CollectionWithDetails extends Collection {
+  user: UserProfile | null;
+  recipe_count: number;
+  preview_images: string[];
+  is_following?: boolean;
+  is_collaborator?: boolean;
+  collaborators?: UserProfile[];
+  follower_count?: number;
+  average_rating?: number | null;
+  rating_count?: number;
+}
+
+// ──────────────────────────────────────────────
 // AI extraction
 // ──────────────────────────────────────────────
 

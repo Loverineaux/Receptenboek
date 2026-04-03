@@ -24,7 +24,7 @@ export default function StarRating(props: StarRatingProps) {
   const small = readOnly && (props as StarRatingReadOnlyProps).small;
   const [hovered, setHovered] = useState<number>(0);
 
-  const displayValue = readOnly ? value : hovered || value;
+  const displayValue = hovered || value;
   const starSize = small ? 'h-3.5 w-3.5' : 'h-5 w-5';
 
   const handleClick = (star: number) => {
@@ -37,7 +37,7 @@ export default function StarRating(props: StarRatingProps) {
     <div className="inline-flex items-center gap-0.5">
       {[1, 2, 3, 4, 5].map((star) => {
         const filled = displayValue >= star;
-        const halfFilled = !filled && readOnly && displayValue >= star - 0.5;
+        const halfFilled = !filled && !hovered && displayValue >= star - 0.5;
 
         return (
           <button

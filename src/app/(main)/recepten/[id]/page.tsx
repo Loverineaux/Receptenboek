@@ -14,6 +14,7 @@ import {
   AlertTriangle,
   Lightbulb,
   User,
+  FolderPlus,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -23,6 +24,8 @@ import StarRating from '@/components/ui/StarRating';
 import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
 import CookMode from '@/components/recipes/CookMode';
+import RecipeChat, { type ChatMessage } from '@/components/recipes/RecipeChat';
+import AddToCollectionModal from '@/components/recipes/AddToCollectionModal';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import type { RecipeWithRelations, Comment as CommentType } from '@/types';
 
@@ -209,6 +212,8 @@ export default function RecipeDetailPage() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [commentLikes, setCommentLikes] = useState<Set<string>>(new Set());
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [collectionModalOpen, setCollectionModalOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [deleting, setDeleting] = useState(false);
   const [scaledSteps, setScaledSteps] = useState<any[] | null>(null);
   const [scalingSteps, setScalingSteps] = useState(false);
@@ -629,6 +634,15 @@ export default function RecipeDetailPage() {
           >
             <Share2 className="h-5 w-5 text-gray-600" />
           </button>
+          {user && (
+            <button
+              onClick={() => setCollectionModalOpen(true)}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-white/80 backdrop-blur-sm transition-colors hover:bg-white"
+              title="Toevoegen aan collectie"
+            >
+              <FolderPlus className="h-5 w-5 text-gray-600" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -1085,6 +1099,9 @@ export default function RecipeDetailPage() {
         </div>
       </section>
 
+      {/* ── AI Kookassistent ────────────────────── */}
+      {user && <RecipeChat recipe={recipe} messages={chatMessages} onMessagesChange={setChatMessages} />}
+
       {/* ── Cook mode ────────────────────────────── */}
       {cookMode && (
         <CookMode
@@ -1104,6 +1121,9 @@ export default function RecipeDetailPage() {
           })}
           portions={portions}
           onClose={() => setCookMode(false)}
+          recipe={recipe}
+          chatMessages={chatMessages}
+          onChatMessagesChange={setChatMessages}
         />
       )}
 
@@ -1137,6 +1157,15 @@ export default function RecipeDetailPage() {
         onConfirm={() => confirmAction?.onConfirm()}
         onCancel={() => setConfirmAction(null)}
       />
+
+      {/* ── Add to collection modal ─────────────── */}
+      {user && (
+        <AddToCollectionModal
+          recipeId={recipe.id}
+          open={collectionModalOpen}
+          onClose={() => setCollectionModalOpen(false)}
+        />
+      )}
 
       {/* ── Toast ──────────────────────────────────── */}
       {toastMessage && (

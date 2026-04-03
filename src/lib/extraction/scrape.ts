@@ -382,6 +382,10 @@ function parseIngredientString(text: any) {
   return { hoeveelheid: null, eenheid: null, naam: text.trim() };
 }
 
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]*>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 function parseInstructions(instructions: any): Array<{ titel: string | null; beschrijving: string }> {
   if (!instructions) return [];
 
@@ -390,7 +394,7 @@ function parseInstructions(instructions: any): Array<{ titel: string | null; bes
     return instructions
       .split(/\n+/)
       .filter(Boolean)
-      .map((s) => ({ titel: null, beschrijving: s.trim() }));
+      .map((s) => ({ titel: null, beschrijving: stripHtml(s) }));
   }
 
   // Array
@@ -399,20 +403,20 @@ function parseInstructions(instructions: any): Array<{ titel: string | null; bes
 
     for (const item of instructions) {
       if (typeof item === "string") {
-        result.push({ titel: null, beschrijving: item.trim() });
+        result.push({ titel: null, beschrijving: stripHtml(item) });
       } else if (item["@type"] === "HowToStep") {
         result.push({
-          titel: item.name || null,
-          beschrijving: item.text || item.description || "",
+          titel: item.name ? stripHtml(item.name) : null,
+          beschrijving: stripHtml(item.text || item.description || ""),
         });
       } else if (item["@type"] === "HowToSection") {
         // Section with sub-steps
-        const sectionName = item.name || null;
+        const sectionName = item.name ? stripHtml(item.name) : null;
         const subSteps = item.itemListElement || [];
         for (const sub of subSteps) {
           result.push({
             titel: sectionName,
-            beschrijving: typeof sub === "string" ? sub : sub.text || sub.description || "",
+            beschrijving: stripHtml(typeof sub === "string" ? sub : sub.text || sub.description || ""),
           });
         }
       }
@@ -460,6 +464,17 @@ const HOSTNAME_MAP: Record<string, string> = {
   "24kitchen.nl": "24Kitchen",
   "eatertainment.nl": "Eatertainment",
   "lekkermakkelijk.nl": "Lekkermakkelijk",
+  // Social media platforms
+  "instagram.com": "Instagram",
+  "instagr.am": "Instagram",
+  "tiktok.com": "TikTok",
+  "facebook.com": "Facebook",
+  "fb.com": "Facebook",
+  "fb.watch": "Facebook",
+  "pinterest.com": "Pinterest",
+  "pin.it": "Pinterest",
+  "youtube.com": "YouTube",
+  "youtu.be": "YouTube",
 };
 
 export function detectBronFromUrl(url: string): string {

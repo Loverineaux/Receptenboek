@@ -34,7 +34,7 @@ export default function RegisterPage() {
 
     setSubmitting(true)
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -46,7 +46,15 @@ export default function RegisterPage() {
     })
 
     if (error) {
-      setError(error.message)
+      // Map common English errors to Dutch
+      if (error.message.toLowerCase().includes('rate limit')) {
+        setError('Te veel pogingen. Probeer het later opnieuw.')
+      } else {
+        setError(error.message)
+      }
+    } else if (data.user && data.user.identities?.length === 0) {
+      // Supabase returns a fake success when email already exists
+      setError('Er bestaat al een account met dit e-mailadres. Probeer in te loggen.')
     } else {
       setSuccess(true)
     }
