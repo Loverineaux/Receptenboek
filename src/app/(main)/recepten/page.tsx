@@ -32,6 +32,10 @@ export default function ReceptenPage() {
   const [search, setSearch] = useState(searchParams.get('q') || '');
   const [category, setCategory] = useState<string | null>(searchParams.get('cat') || null);
   const [source, setSource] = useState(searchParams.get('bron') || '');
+  const [includedSources, setIncludedSources] = useState<Set<string>>(() => {
+    const inc = searchParams.get('inbron');
+    return inc ? new Set(inc.split(',')) : new Set();
+  });
   const [excludedSources, setExcludedSources] = useState<Set<string>>(() => {
     const ex = searchParams.get('exbron');
     return ex ? new Set(ex.split(',')) : new Set();
@@ -46,12 +50,13 @@ export default function ReceptenPage() {
     if (search) params.set('q', search);
     if (category) params.set('cat', category);
     if (source) params.set('bron', source);
+    if (includedSources.size > 0) params.set('inbron', [...includedSources].join(','));
     if (excludedSources.size > 0) params.set('exbron', [...excludedSources].join(','));
     if (sort !== 'newest') params.set('sort', sort);
     if (searchIngredients) params.set('ing', '1');
     const qs = params.toString();
     router.replace(`/recepten${qs ? `?${qs}` : ''}`, { scroll: false });
-  }, [search, category, source, excludedSources, sort, searchIngredients, router]);
+  }, [search, category, source, includedSources, excludedSources, sort, searchIngredients, router]);
 
   // Fetch unique sources from DB
   useEffect(() => {
@@ -149,6 +154,9 @@ export default function ReceptenPage() {
         if (source) {
           filtered = filtered.filter((r) => (r.bron || '') === source);
         }
+        if (includedSources.size > 0) {
+          filtered = filtered.filter((r) => includedSources.has(r.bron || ''));
+        }
         if (excludedSources.size > 0) {
           filtered = filtered.filter((r) => !excludedSources.has(r.bron || ''));
         }
@@ -189,14 +197,14 @@ export default function ReceptenPage() {
         setLoading(false);
       }
     },
-    [supabase, user, search, searchIngredients, category, source, excludedSources, sort]
+    [supabase, user, search, searchIngredients, category, source, includedSources, excludedSources, sort]
   );
 
   // Re-fetch when filters change
   useEffect(() => {
     fetchRecipes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, searchIngredients, category, source, excludedSources, sort, user?.id]);
+  }, [search, searchIngredients, category, source, includedSources, excludedSources, sort, user?.id]);
 
   // Silently refresh tags after 5s to pick up auto-categorize results
   useEffect(() => {
@@ -288,7 +296,8 @@ export default function ReceptenPage() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-text-primary">Mijn recepten</h1>
 
-      {/* Search */}
+      {/* Sticky filter bar */}
+      <div className="sticky top-0 z-30 -mx-4 space-y-3 bg-background px-4 pb-3 pt-1 shadow-sm md:-mx-6 md:px-6">
       <SearchBar
         value={search}
         onChange={setSearch}
@@ -296,14 +305,22 @@ export default function ReceptenPage() {
         onSearchIngredientsChange={setSearchIngredients}
       />
 
-      {/* Category filter */}
       <CategoryFilter selected={category} onChange={setCategory} />
 
-      {/* Source + Sort filters */}
       <MobileFilterSheet
         source={source}
-        onSourceChange={(v) => { setSource(v); if (v) setExcludedSources(new Set()); }}
+        onSourceChange={(v) => { setSource(v); if (v) { setIncludedSources(new Set()); setExcludedSources(new Set()); } }}
         sourceOptions={sourceOptions.map((s) => ({ value: s, label: s }))}
+        includedSources={includedSources}
+        onIncludedSourceToggle={(s) => {
+          setIncludedSources((prev) => {
+            const next = new Set(prev);
+            if (next.has(s)) next.delete(s); else next.add(s);
+            return next;
+          });
+          setSource('');
+        }}
+        onClearIncluded={() => setIncludedSources(new Set())}
         excludedSources={excludedSources}
         onExcludedSourceToggle={(s) => {
           setExcludedSources((prev) => {
@@ -311,6 +328,8 @@ export default function ReceptenPage() {
             if (next.has(s)) next.delete(s); else next.add(s);
             return next;
           });
+          // Remove from included if it was there
+          setIncludedSources((prev) => { const next = new Set(prev); next.delete(s); return next; });
           setSource('');
         }}
         onClearExcluded={() => setExcludedSources(new Set())}
@@ -325,27 +344,26 @@ export default function ReceptenPage() {
         ]}
       />
 
-      {/* Excluded source chips (mobile) */}
-      {excludedSources.size > 0 && (
-        <div className="flex flex-wrap items-center gap-2 md:hidden">
-          <span className="text-xs text-text-muted">Verborgen:</span>
+      {/* Active source filter chips (mobile) */}
+      {(includedSources.size > 0 || excludedSources.size > 0) && (
+        <div className="flex flex-wrap items-center gap-1.5 md:hidden">
+          {[...includedSources].map((s) => (
+            <button key={`i-${s}`} type="button"
+              onClick={() => setIncludedSources((prev) => { const next = new Set(prev); next.delete(s); return next; })}
+              className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700">
+              {s} <span className="text-green-400">&times;</span>
+            </button>
+          ))}
           {[...excludedSources].map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setExcludedSources((prev) => {
-                const next = new Set(prev);
-                next.delete(s);
-                return next;
-              })}
-              className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-100"
-            >
-              {s}
-              <span className="text-red-400">&times;</span>
+            <button key={`e-${s}`} type="button"
+              onClick={() => setExcludedSources((prev) => { const next = new Set(prev); next.delete(s); return next; })}
+              className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-700 line-through">
+              {s} <span className="text-red-400">&times;</span>
             </button>
           ))}
         </div>
       )}
+      </div>
 
       {/* Loading skeleton */}
       {loading && (

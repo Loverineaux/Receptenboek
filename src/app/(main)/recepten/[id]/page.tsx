@@ -934,8 +934,10 @@ export default function RecipeDetailPage() {
       )}
 
       {tab === 'voeding' && (() => {
-        // Auto-calculate when voeding tab is opened
-        if (!calculation && !calculating && !nutritionFetched.current) {
+        const hasSourceNutrition = !!recipe.nutrition;
+
+        // Auto-calculate only when NO source nutrition exists
+        if (!hasSourceNutrition && !calculation && !calculating && !nutritionFetched.current) {
           nutritionFetched.current = true;
           setCalculating(true);
           fetch(`/api/recipes/${params.id}/calculate-nutrition`, {
@@ -949,23 +951,27 @@ export default function RecipeDetailPage() {
 
         return (
           <div className="space-y-4">
-            {/* Existing manual nutrition from recipe source */}
-            {recipe.nutrition && (
+            {/* Source nutrition from recipe (AH, HelloFresh, etc.) */}
+            {hasSourceNutrition && (
               <div className="overflow-hidden rounded-lg border">
-                <div className="bg-gray-50 px-4 py-2">
-                  <span className="text-xs font-medium uppercase tracking-wide text-text-muted">Van receptbron</span>
-                </div>
                 <table className="w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left font-medium text-text-secondary">Voedingswaarde</th>
+                      <th className="px-4 py-2 text-right font-medium text-text-secondary">Per portie</th>
+                    </tr>
+                  </thead>
                   <tbody className="divide-y">
                     {[
-                      ['Energie', recipe.nutrition.energie_kcal, 'kcal'],
-                      ['Vetten', recipe.nutrition.vetten, 'g'],
-                      ['  waarvan verzadigd', recipe.nutrition.verzadigd, 'g'],
-                      ['Koolhydraten', recipe.nutrition.koolhydraten, 'g'],
-                      ['  waarvan suikers', recipe.nutrition.suikers, 'g'],
-                      ['Vezels', recipe.nutrition.vezels, 'g'],
-                      ['Eiwitten', recipe.nutrition.eiwitten, 'g'],
-                      ['Zout', recipe.nutrition.zout, 'g'],
+                      ['Energie', recipe.nutrition!.energie_kcal, 'kcal'],
+                      ['Energie', recipe.nutrition!.energie_kj, 'kJ'],
+                      ['Vetten', recipe.nutrition!.vetten, 'g'],
+                      ['  waarvan verzadigd', recipe.nutrition!.verzadigd, 'g'],
+                      ['Koolhydraten', recipe.nutrition!.koolhydraten, 'g'],
+                      ['  waarvan suikers', recipe.nutrition!.suikers, 'g'],
+                      ['Vezels', recipe.nutrition!.vezels, 'g'],
+                      ['Eiwitten', recipe.nutrition!.eiwitten, 'g'],
+                      ['Zout', recipe.nutrition!.zout, 'g'],
                     ].map(([label, value, unit], idx) =>
                       value != null && value !== '' ? (
                         <tr key={`${label}-${idx}`}>
@@ -979,23 +985,18 @@ export default function RecipeDetailPage() {
               </div>
             )}
 
-            {/* Calculated nutrition */}
-            {calculating && (
+            {/* Calculated nutrition — only when no source nutrition */}
+            {!hasSourceNutrition && calculating && (
               <div className="flex items-center justify-center gap-2 py-8 text-sm text-text-muted">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Voedingswaarden berekenen...
               </div>
             )}
 
-            {calculation && (
+            {!hasSourceNutrition && calculation && (
               <>
                 <div className="rounded-lg border bg-surface p-4">
-                  {!recipe.nutrition && (
-                    <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-text-muted">Berekend uit ingrediënten</div>
-                  )}
-                  {recipe.nutrition && (
-                    <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-text-muted">Berekend uit ingrediëntendatabase</div>
-                  )}
+                  <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-text-muted">Berekend uit ingrediënten</div>
                   <div className="mb-3 text-center">
                     <div className="text-3xl font-bold text-text-primary">{Math.round(calculation.per_portion_kcal)} kcal</div>
                     <div className="text-xs text-text-muted">per portie</div>
@@ -1023,7 +1024,7 @@ export default function RecipeDetailPage() {
                   </div>
                 </div>
 
-                {/* Expandable ingredient coverage — like suggesties page */}
+                {/* Expandable ingredient coverage */}
                 <div className="space-y-1">
                   <button
                     type="button"
@@ -1072,7 +1073,7 @@ export default function RecipeDetailPage() {
               </>
             )}
 
-            {!calculating && !calculation && !recipe.nutrition && (
+            {!hasSourceNutrition && !calculating && !calculation && (
               <p className="py-8 text-center text-sm text-text-secondary">
                 Geen voedingswaarden beschikbaar.
               </p>

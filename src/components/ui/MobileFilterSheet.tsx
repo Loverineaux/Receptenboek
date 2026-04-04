@@ -13,6 +13,9 @@ interface MobileFilterSheetProps {
   source: string;
   onSourceChange: (value: string) => void;
   sourceOptions: FilterOption[];
+  includedSources?: Set<string>;
+  onIncludedSourceToggle?: (source: string) => void;
+  onClearIncluded?: () => void;
   excludedSources: Set<string>;
   onExcludedSourceToggle: (source: string) => void;
   onClearExcluded: () => void;
@@ -25,6 +28,9 @@ export default function MobileFilterSheet({
   source,
   onSourceChange,
   sourceOptions,
+  includedSources = new Set(),
+  onIncludedSourceToggle,
+  onClearIncluded,
   excludedSources,
   onExcludedSourceToggle,
   onClearExcluded,
@@ -35,7 +41,7 @@ export default function MobileFilterSheet({
   const [open, setOpen] = useState(false);
 
   const activeFilterCount =
-    (source ? 1 : 0) + excludedSources.size + (sort !== 'newest' ? 1 : 0);
+    (source ? 1 : 0) + includedSources.size + excludedSources.size + (sort !== 'newest' ? 1 : 0);
 
   // Prevent body scroll when sheet is open
   useEffect(() => {
@@ -66,34 +72,53 @@ export default function MobileFilterSheet({
         </button>
       </div>
 
-      {/* Desktop: inline selects */}
+      {/* Desktop: inline filters */}
       <div className="hidden md:flex md:flex-wrap md:items-center md:gap-3">
-        <select
-          value={source}
-          onChange={(e) => onSourceChange(e.target.value)}
-          className="rounded-lg border border-gray-300 bg-surface px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-        >
-          <option value="">Alle bronnen</option>
-          {sourceOptions.map((s) => (
-            <option key={s.value} value={s.value}>{s.label}</option>
-          ))}
-        </select>
+        {/* Source chips */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-xs font-medium text-text-muted">Bron:</span>
+          {sourceOptions.map((s) => {
+            const included = includedSources.has(s.value);
+            const excluded = excludedSources.has(s.value);
+            return (
+              <button
+                key={s.value}
+                type="button"
+                onClick={() => {
+                  if (excluded) { onExcludedSourceToggle(s.value); }
+                  else if (included) { onIncludedSourceToggle?.(s.value); }
+                  else { onIncludedSourceToggle?.(s.value); if (source) onSourceChange(''); }
+                }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  if (included) onIncludedSourceToggle?.(s.value);
+                  if (!excluded) onExcludedSourceToggle(s.value);
+                  else onExcludedSourceToggle(s.value);
+                }}
+                className={`rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+                  included ? 'bg-green-100 text-green-700' :
+                  excluded ? 'bg-red-100 text-red-700 line-through' :
+                  'bg-gray-100 text-text-secondary hover:bg-gray-200'
+                }`}
+              >
+                {s.label}
+              </button>
+            );
+          })}
+          {(includedSources.size > 0 || excludedSources.size > 0) && (
+            <button
+              type="button"
+              onClick={() => { onClearIncluded?.(); onClearExcluded(); if (source) onSourceChange(''); }}
+              className="text-[10px] text-text-muted hover:text-text-secondary"
+            >
+              reset
+            </button>
+          )}
+        </div>
 
-        <select
-          value=""
-          onChange={(e) => {
-            if (e.target.value) onExcludedSourceToggle(e.target.value);
-          }}
-          className="rounded-lg border border-gray-300 bg-surface px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-        >
-          <option value="">Verberg bron...</option>
-          {sourceOptions
-            .filter((s) => !excludedSources.has(s.value))
-            .map((s) => (
-              <option key={s.value} value={s.value}>{s.label}</option>
-            ))}
-        </select>
+        <div className="h-5 w-px bg-gray-200" />
 
+        {/* Sort */}
         <select
           value={sort}
           onChange={(e) => onSortChange(e.target.value)}
@@ -103,32 +128,6 @@ export default function MobileFilterSheet({
             <option key={s.value} value={s.value}>{s.label}</option>
           ))}
         </select>
-
-        {excludedSources.size > 0 && (
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-text-muted">Verborgen:</span>
-            {sourceOptions
-              .filter((s) => excludedSources.has(s.value))
-              .map((s) => (
-                <button
-                  key={s.value}
-                  type="button"
-                  onClick={() => onExcludedSourceToggle(s.value)}
-                  className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-100"
-                >
-                  {s.label}
-                  <span className="text-red-400">&times;</span>
-                </button>
-              ))}
-            <button
-              type="button"
-              onClick={onClearExcluded}
-              className="text-xs text-text-muted hover:text-text-secondary"
-            >
-              Alles tonen
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Bottom sheet overlay */}
@@ -179,67 +178,61 @@ export default function MobileFilterSheet({
                 </div>
               </div>
 
-              {/* Source filter */}
+              {/* Source filter — multi-select with toon/verberg */}
               <div>
-                <label className="mb-2 block text-sm font-medium text-text-primary">Bron</label>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => onSourceChange('')}
-                    className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
-                      !source
-                        ? 'bg-primary text-white'
-                        : 'bg-gray-100 text-text-secondary'
-                    }`}
-                  >
-                    Alle bronnen
-                  </button>
-                  {sourceOptions.map((s) => (
-                    <button
-                      key={s.value}
-                      type="button"
-                      onClick={() => onSourceChange(s.value)}
-                      className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
-                        source === s.value
-                          ? 'bg-primary text-white'
-                          : 'bg-gray-100 text-text-secondary'
-                      }`}
-                    >
-                      {s.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Exclude sources */}
-              <div>
-                <label className="mb-2 block text-sm font-medium text-text-primary">Bronnen verbergen</label>
+                <label className="mb-2 block text-sm font-medium text-text-primary">Bronnen</label>
+                <p className="mb-2 text-xs text-text-muted">Tik om te filteren (groen) of lang indrukken om te verbergen (rood)</p>
                 <div className="flex flex-wrap gap-2">
                   {sourceOptions.map((s) => {
+                    const included = includedSources.has(s.value);
                     const excluded = excludedSources.has(s.value);
                     return (
                       <button
                         key={s.value}
                         type="button"
-                        onClick={() => onExcludedSourceToggle(s.value)}
+                        onClick={() => {
+                          if (excluded) {
+                            // Unexclude
+                            onExcludedSourceToggle(s.value);
+                          } else if (included) {
+                            // Uninclude
+                            onIncludedSourceToggle?.(s.value);
+                          } else {
+                            // Include
+                            onIncludedSourceToggle?.(s.value);
+                            // Clear single source filter
+                            if (source) onSourceChange('');
+                          }
+                        }}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          if (included) onIncludedSourceToggle?.(s.value);
+                          if (!excluded) {
+                            onExcludedSourceToggle(s.value);
+                          } else {
+                            onExcludedSourceToggle(s.value);
+                          }
+                        }}
                         className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
-                          excluded
-                            ? 'bg-red-100 text-red-700'
+                          included
+                            ? 'bg-green-100 text-green-700'
+                            : excluded
+                            ? 'bg-red-100 text-red-700 line-through'
                             : 'bg-gray-100 text-text-secondary'
                         }`}
                       >
-                        {excluded ? '✕ ' : ''}{s.label}
+                        {s.label}
                       </button>
                     );
                   })}
                 </div>
-                {excludedSources.size > 0 && (
+                {(includedSources.size > 0 || excludedSources.size > 0) && (
                   <button
                     type="button"
-                    onClick={onClearExcluded}
+                    onClick={() => { onClearIncluded?.(); onClearExcluded(); if (source) onSourceChange(''); }}
                     className="mt-2 text-xs text-text-muted hover:text-text-secondary"
                   >
-                    Alles tonen
+                    Filters wissen
                   </button>
                 )}
               </div>

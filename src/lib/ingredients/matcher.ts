@@ -129,16 +129,20 @@ export async function matchIngredient(
     }
   }
 
-  // 4. Substring match — prefer the longest matching name (more specific)
-  const sorted = [...allGenerics].sort(
-    (a, b) => (b.name?.length ?? 0) - (a.name?.length ?? 0)
-  );
+  // 4. Substring match on aliases first (more specific), then name
+  // Sort by longest match first to prefer "kastanjechampignon" alias over "champignon" name
+  const allNames: { id: string; text: string }[] = [];
+  for (const gi of allGenerics) {
+    for (const alias of (gi.aliases ?? []) as string[]) {
+      allNames.push({ id: gi.id, text: alias.toLowerCase() });
+    }
+    if (gi.name) allNames.push({ id: gi.id, text: gi.name.toLowerCase() });
+  }
+  allNames.sort((a, b) => b.text.length - a.text.length);
 
-  for (const gi of sorted) {
-    const giName = (gi.name ?? '').toLowerCase();
-    if (!giName) continue;
-    if (normalized.includes(giName) || giName.includes(normalized)) {
-      return gi.id;
+  for (const entry of allNames) {
+    if (normalized.includes(entry.text) || entry.text.includes(normalized)) {
+      return entry.id;
     }
   }
 
