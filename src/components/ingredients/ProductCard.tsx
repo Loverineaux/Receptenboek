@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { Pencil, X, Check, Loader2, Camera } from 'lucide-react';
 import type { Product } from '@/types';
@@ -8,6 +8,26 @@ import type { Product } from '@/types';
 interface ProductCardProps {
   product: Product;
   onUpdated?: (product: Product) => void;
+}
+
+function ImageLightbox({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handleKey);
+    document.body.style.overflow = 'hidden';
+    return () => { document.removeEventListener('keydown', handleKey); document.body.style.overflow = ''; };
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={onClose}>
+      <button onClick={onClose} className="absolute right-4 top-4 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm hover:bg-black/70">
+        <X className="h-5 w-5" />
+      </button>
+      <div className="relative max-h-[85vh] max-w-[90vw]" onClick={e => e.stopPropagation()}>
+        <img src={src} alt={alt} className="max-h-[85vh] max-w-[90vw] rounded-lg object-contain" />
+      </div>
+    </div>
+  );
 }
 
 const SOURCE_STYLES: Record<Product['source'], { label: string; className: string }> = {
@@ -20,6 +40,7 @@ export default function ProductCard({ product: initialProduct, onUpdated }: Prod
   const [product, setProduct] = useState(initialProduct);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
   const [form, setForm] = useState({
     product_name: '', brand: '', image_url: '', kcal: '', protein: '', fat: '',
     saturated_fat: '', carbs: '', sugars: '', fiber: '', salt: '',
@@ -165,8 +186,14 @@ export default function ProductCard({ product: initialProduct, onUpdated }: Prod
 
   return (
     <div className="overflow-hidden rounded-xl border border-gray-200 bg-surface shadow-sm">
+      {lightboxOpen && product.image_url && (
+        <ImageLightbox src={product.image_url} alt={product.product_name} onClose={() => setLightboxOpen(false)} />
+      )}
       <div className="flex items-start gap-3 p-3">
-        <div className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg">
+        <div
+          className={`relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg ${product.image_url ? 'cursor-pointer ring-0 transition-shadow hover:ring-2 hover:ring-primary/40' : ''}`}
+          onClick={() => product.image_url && setLightboxOpen(true)}
+        >
           {product.image_url ? (
             <Image src={product.image_url} alt={product.product_name} fill sizes="64px" className="object-cover" unoptimized />
           ) : (

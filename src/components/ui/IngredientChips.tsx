@@ -1,7 +1,8 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Plus, X } from 'lucide-react';
+import { createBrowserClient } from '@supabase/ssr';
 
 interface IngredientChipsProps {
   items: string[];
@@ -9,14 +10,34 @@ interface IngredientChipsProps {
   onRemove: (item: string) => void;
 }
 
-const COMMON_INGREDIENTS = [
+const FALLBACK_INGREDIENTS = [
   'kip', 'rijst', 'pasta', 'aardappelen', 'ui', 'knoflook',
   'paprika', 'tomaat', 'ei', 'kaas', 'wortel', 'broccoli',
 ];
 
 export default function IngredientChips({ items, onAdd, onRemove }: IngredientChipsProps) {
   const [input, setInput] = useState('');
+  const [suggestions, setSuggestions] = useState<string[]>(FALLBACK_INGREDIENTS);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const supabase = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+    supabase
+      .from('generic_ingredients')
+      .select('name')
+      .order('name')
+      .then(({ data }) => {
+        if (data && data.length > 0) {
+          // Pick 12 random ingredients to show as suggestions
+          const names = data.map((d) => d.name);
+          const shuffled = names.sort(() => Math.random() - 0.5);
+          setSuggestions(shuffled.slice(0, 12));
+        }
+      });
+  }, []);
 
   const addItem = (text: string) => {
     const trimmed = text.trim().toLowerCase();
@@ -35,7 +56,7 @@ export default function IngredientChips({ items, onAdd, onRemove }: IngredientCh
     }
   };
 
-  const suggestionsToShow = COMMON_INGREDIENTS.filter(
+  const suggestionsToShow = suggestions.filter(
     (s) => !items.includes(s)
   );
 
