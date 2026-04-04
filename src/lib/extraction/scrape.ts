@@ -40,14 +40,57 @@ interface ScrapedRecipe {
   pageTitle: string;
 }
 
+// Minimal headers — less likely to trigger bot detection on some CDNs
+const SIMPLE_HEADERS: Record<string, string> = {
+  "User-Agent": CHROME_UA,
+  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+  "Accept-Language": "nl-NL,nl;q=0.9",
+};
+
+/** Resolve short redirect URLs (e.g. ah.nl/r/123) to their final destination */
+async function resolveRedirects(url: string): Promise<string> {
+  try {
+    const res = await fetch(url, {
+      method: 'HEAD',
+      redirect: 'follow',
+      headers: SIMPLE_HEADERS,
+    });
+    if (res.url && res.url !== url) {
+      console.log(`[Scrape] Resolved redirect: ${url} → ${res.url}`);
+      return res.url;
+    }
+  } catch {}
+  // Manual redirect following
+  try {
+    const res = await fetch(url, {
+      redirect: 'manual',
+      headers: SIMPLE_HEADERS,
+    });
+    const location = res.headers.get('location');
+    if (location) {
+      const resolved = location.startsWith('http') ? location : new URL(location, url).href;
+      return resolveRedirects(resolved);
+    }
+  } catch {}
+  return url;
+}
+
 export async function scrapePage(url: string): Promise<ScrapedRecipe> {
+  // Resolve short/redirect URLs first (e.g. ah.nl/r/123 → full allerhande URL)
+  const resolvedUrl = await resolveRedirects(url);
+
   // Strategy 1: Direct fetch with full browser headers (fast)
-  const directResult = await tryFetch(url, BROWSER_HEADERS);
+  const directResult = await tryFetch(resolvedUrl, BROWSER_HEADERS);
   if (directResult) return directResult;
 
+  // Strategy 1b: Try with simpler headers (some CDNs block Sec-Fetch-* headers)
+  console.log("[Scrape] Full headers failed, trying simple headers...");
+  const simpleResult = await tryFetch(resolvedUrl, SIMPLE_HEADERS);
+  if (simpleResult) return simpleResult;
+
   // Strategy 2: Headless browser (bypasses Cloudflare JS challenge)
-  console.log("[Scrape] Direct fetch failed, trying headless browser...");
-  const browserResult = await tryHeadlessBrowser(url);
+  console.log("[Scrape] Simple headers failed, trying headless browser...");
+  const browserResult = await tryHeadlessBrowser(resolvedUrl);
   if (browserResult) return browserResult;
 
   throw new Error("Pagina niet bereikbaar (geblokkeerd door bot-detectie)");
@@ -118,9 +161,15 @@ async function tryFetch(url: string, headers: Record<string, string>): Promise<S
 
     const html = await res.text();
 
-    // Check for Cloudflare challenge
+    // Check for Cloudflare / Akamai / bot detection challenge pages
     if (html.length < 5000 && (html.includes("Just a moment") || html.includes("Checking your browser"))) {
       console.log("[Scrape] Cloudflare challenge detected");
+      return null;
+    }
+
+    // Akamai bot detection — returns a small page with no real content
+    if (html.length < 5000 && !html.includes("application/ld+json") && !html.includes("<article")) {
+      console.log("[Scrape] Possible bot detection page (small response, no structured data)");
       return null;
     }
 
@@ -406,12 +455,12 @@ function parseInstructions(instructions: any): Array<{ titel: string | null; bes
         result.push({ titel: null, beschrijving: stripHtml(item) });
       } else if (item["@type"] === "HowToStep") {
         result.push({
-          titel: item.name ? stripHtml(item.name) : null,
+          titel: cleanStepTitel(item.name ? stripHtml(item.name) : null),
           beschrijving: stripHtml(item.text || item.description || ""),
         });
       } else if (item["@type"] === "HowToSection") {
         // Section with sub-steps
-        const sectionName = item.name ? stripHtml(item.name) : null;
+        const sectionName = cleanStepTitel(item.name ? stripHtml(item.name) : null);
         const subSteps = item.itemListElement || [];
         for (const sub of subSteps) {
           result.push({
@@ -425,6 +474,14 @@ function parseInstructions(instructions: any): Array<{ titel: string | null; bes
   }
 
   return [];
+}
+
+/** Remove generic step numbering like "Stap 1", "Step 2" */
+function cleanStepTitel(titel: string | null): string | null {
+  if (!titel) return null;
+  const cleaned = titel.replace(/^\s*(stap|step)\s*\d+\s*[.:\-]?\s*$/i, '').trim();
+  const stripped = cleaned.replace(/^\s*(stap|step)\s*\d+\s*[.:\-]\s*/i, '').trim();
+  return stripped || null;
 }
 
 /** Map common hostnames to nice display names. */

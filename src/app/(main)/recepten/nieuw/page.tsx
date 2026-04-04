@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Link as LinkIcon, Camera, FileUp, PenLine, Loader2, Check } from 'lucide-react';
+import { Link as LinkIcon, Camera, FileUp, PenLine, Loader2, Check, X, AlertTriangle, List } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
@@ -235,6 +235,11 @@ export default function NieuwReceptPage() {
 
   // Import inputs
   const [importUrl, setImportUrl] = useState('');
+  const [bulkMode, setBulkMode] = useState(false);
+  const [bulkText, setBulkText] = useState('');
+  const [bulkItems, setBulkItems] = useState<{ url: string; title: string; status: 'pending' | 'extracting' | 'saving' | 'done' | 'error' | 'duplicate'; error?: string; recipeId?: string }[]>([]);
+  const [bulkImporting, setBulkImporting] = useState(false);
+  const [bulkDone, setBulkDone] = useState(false);
 
   // Foto import
   const [photoFiles, setPhotoFiles] = useState<File[]>([]);
@@ -465,6 +470,159 @@ export default function NieuwReceptPage() {
       setExtracting(false);
       setSaving(false);
     }
+  };
+
+  // ── Bulk URL import ───────────────────────────
+  const parseBulkUrls = () => {
+    const lines = bulkText.split('\n');
+    const parsed: { url: string; title: string }[] = [];
+    const seen = new Set<string>();
+
+    for (const line of lines) {
+      const m = line.match(/(https?:\/\/[^\s]+)/);
+      if (!m) continue;
+      const url = m[1];
+      if (seen.has(url)) continue;
+      seen.add(url);
+
+      // Try to extract a recipe name from the text before the URL
+      const before = line.substring(0, m.index).trim();
+      let title = '';
+      // Strip common prefixes like "Ik eet vandaag:" and hashtags
+      if (before) {
+        title = before
+          .replace(/^ik eet vandaag:\s*/i, '')
+          .replace(/#\w+/g, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+      }
+      if (!title) {
+        // Fallback: use URL slug
+        const slug = decodeURIComponent(url.split('/').pop() || '').replace(/-/g, ' ');
+        title = slug || url;
+      }
+
+      parsed.push({ url, title });
+    }
+
+    setBulkItems(parsed.map(({ url, title }) => ({ url, title, status: 'pending' })));
+  };
+
+  const handleBulkImport = async () => {
+    setBulkImporting(true);
+    setBulkDone(false);
+
+    for (let i = 0; i < bulkItems.length; i++) {
+      if (bulkItems[i].status === 'done' || bulkItems[i].status === 'duplicate') continue;
+
+      setBulkItems(prev => prev.map((it, idx) => idx === i ? { ...it, status: 'extracting' } : it));
+
+      try {
+        // Extract
+        const extractRes = await fetch('/api/extract/url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: bulkItems[i].url }),
+        });
+        if (!extractRes.ok) {
+          const err = await extractRes.json().catch(() => ({ error: 'Extractie mislukt' }));
+          throw new Error(err.error || 'Extractie mislukt');
+        }
+        const extracted = await extractRes.json();
+        extracted.ingredients = parseExtractedIngredients(extracted.ingredients);
+        const title = extracted.title || bulkItems[i].title;
+
+        setBulkItems(prev => prev.map((it, idx) => idx === i ? { ...it, title, status: 'saving' } : it));
+
+        // Save
+        const formData = mapExtractedToFormData(extracted);
+        let saveRes = await fetch('/api/recipes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formData),
+        });
+
+        if (saveRes.status === 409) {
+          saveRes = await fetch('/api/recipes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...formData, _force: true }),
+          });
+          if (saveRes.ok) {
+            const { recipe } = await saveRes.json();
+            setBulkItems(prev => prev.map((it, idx) => idx === i ? { ...it, title, status: 'duplicate', recipeId: recipe.id } : it));
+            continue;
+          }
+        }
+
+        if (!saveRes.ok) {
+          const err = await saveRes.json().catch(() => ({ error: 'Opslaan mislukt' }));
+          throw new Error(err.error || 'Opslaan mislukt');
+        }
+
+        const { recipe } = await saveRes.json();
+        setBulkItems(prev => prev.map((it, idx) => idx === i ? { ...it, title, status: 'done', recipeId: recipe.id } : it));
+      } catch (err: any) {
+        setBulkItems(prev => prev.map((it, idx) => idx === i ? { ...it, status: 'error', error: err.message } : it));
+      }
+
+      if (i < bulkItems.length - 1) await new Promise(r => setTimeout(r, 500));
+    }
+
+    setBulkImporting(false);
+    setBulkDone(true);
+  };
+
+  const retryFailedBulk = async () => {
+    const failed = bulkItems.map((it, idx) => it.status === 'error' ? idx : -1).filter(i => i >= 0);
+    if (!failed.length) return;
+    setBulkImporting(true);
+
+    for (const i of failed) {
+      setBulkItems(prev => prev.map((it, idx) => idx === i ? { ...it, status: 'extracting', error: undefined } : it));
+      try {
+        const extractRes = await fetch('/api/extract/url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: bulkItems[i].url }),
+        });
+        if (!extractRes.ok) throw new Error('Extractie mislukt');
+        const extracted = await extractRes.json();
+        extracted.ingredients = parseExtractedIngredients(extracted.ingredients);
+        const title = extracted.title || bulkItems[i].title;
+
+        setBulkItems(prev => prev.map((it, idx) => idx === i ? { ...it, title, status: 'saving' } : it));
+
+        const formData = mapExtractedToFormData(extracted);
+        let saveRes = await fetch('/api/recipes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formData),
+        });
+
+        if (saveRes.status === 409) {
+          saveRes = await fetch('/api/recipes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...formData, _force: true }),
+          });
+        }
+
+        if (!saveRes.ok) throw new Error('Opslaan mislukt');
+        const { recipe } = await saveRes.json();
+        setBulkItems(prev => prev.map((it, idx) => idx === i ? { ...it, title, status: 'done', recipeId: recipe.id } : it));
+      } catch (err: any) {
+        setBulkItems(prev => prev.map((it, idx) => idx === i ? { ...it, status: 'error', error: err.message } : it));
+      }
+      await new Promise(r => setTimeout(r, 500));
+    }
+    setBulkImporting(false);
+  };
+
+  const bulkCounts = {
+    total: bulkItems.length,
+    done: bulkItems.filter(i => i.status === 'done' || i.status === 'duplicate').length,
+    error: bulkItems.filter(i => i.status === 'error').length,
   };
 
   const [pdfProgress, setPdfProgress] = useState('');
@@ -842,58 +1000,198 @@ export default function NieuwReceptPage() {
       {/* ── URL import ─────────────────────────────── */}
       {activeTab === 'url' && (
         <div className="space-y-4 rounded-xl border bg-surface p-6">
-          <h2 className="text-lg font-semibold text-text-primary">
-            Importeer van URL
-          </h2>
-          <p className="text-sm text-text-secondary">
-            Plak de link naar een recept en wij halen de gegevens automatisch op en slaan het direct voor je op.
-          </p>
-          <Input
-            label="Recept URL"
-            type="url"
-            placeholder="https://www.hellofresh.nl/recipes/..."
-            value={importUrl}
-            onChange={(e) => setImportUrl(e.target.value)}
-            disabled={extracting}
-          />
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-text-primary">
+              Importeer van URL
+            </h2>
+            <button
+              type="button"
+              onClick={() => { setBulkMode(!bulkMode); setExtractError(null); }}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                bulkMode
+                  ? 'bg-primary text-white'
+                  : 'bg-gray-100 text-text-secondary hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700'
+              }`}
+              disabled={extracting || bulkImporting}
+            >
+              <List className="h-3.5 w-3.5" />
+              Bulk import
+            </button>
+          </div>
 
-          {/* Progress indicator */}
-          {extracting && (
-            <div className="space-y-3 rounded-lg bg-primary/5 p-4">
-              {PROGRESS_STEPS.map((step, idx) => (
-                <div
-                  key={idx}
-                  className={`flex items-center gap-3 text-sm transition-opacity duration-300 ${
-                    idx <= progressStep ? 'opacity-100' : 'opacity-30'
-                  }`}
-                >
-                  {idx < progressStep ? (
-                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-white text-xs">
-                      ✓
-                    </span>
-                  ) : idx === progressStep ? (
-                    <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                  ) : (
-                    <span className="flex h-5 w-5 items-center justify-center rounded-full border border-gray-300 text-xs text-gray-400">
-                      {idx + 1}
-                    </span>
-                  )}
-                  <span className={idx <= progressStep ? 'text-text-primary font-medium' : 'text-text-muted'}>
-                    {step}
-                  </span>
+          {!bulkMode ? (
+            <>
+              <p className="text-sm text-text-secondary">
+                Plak de link naar een recept en wij halen de gegevens automatisch op en slaan het direct voor je op.
+              </p>
+              <Input
+                label="Recept URL"
+                type="url"
+                placeholder="https://www.hellofresh.nl/recipes/..."
+                value={importUrl}
+                onChange={(e) => setImportUrl(e.target.value)}
+                disabled={extracting}
+              />
+
+              {/* Progress indicator */}
+              {extracting && (
+                <div className="space-y-3 rounded-lg bg-primary/5 p-4">
+                  {PROGRESS_STEPS.map((step, idx) => (
+                    <div
+                      key={idx}
+                      className={`flex items-center gap-3 text-sm transition-opacity duration-300 ${
+                        idx <= progressStep ? 'opacity-100' : 'opacity-30'
+                      }`}
+                    >
+                      {idx < progressStep ? (
+                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-white text-xs">
+                          ✓
+                        </span>
+                      ) : idx === progressStep ? (
+                        <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                      ) : (
+                        <span className="flex h-5 w-5 items-center justify-center rounded-full border border-gray-300 text-xs text-gray-400">
+                          {idx + 1}
+                        </span>
+                      )}
+                      <span className={idx <= progressStep ? 'text-text-primary font-medium' : 'text-text-muted'}>
+                        {step}
+                      </span>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
+
+              <Button
+                variant="primary"
+                loading={extracting}
+                onClick={handleExtractAndSave}
+                disabled={!importUrl.trim() || extracting}
+              >
+                {extracting ? 'Bezig...' : 'Importeer & opslaan'}
+              </Button>
+            </>
+          ) : (
+            /* ── Bulk URL import ─────────────────────────── */
+            <div className="space-y-4">
+              {bulkItems.length === 0 ? (
+                <>
+                  <p className="text-sm text-text-secondary">
+                    Plak meerdere URLs hieronder (een per regel, of tekst met URLs erin). De URLs worden automatisch herkend.
+                  </p>
+                  <textarea
+                    className="w-full rounded-lg border border-border bg-surface p-3 text-sm text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                    rows={10}
+                    placeholder={"https://www.ah.nl/r/660056\nhttps://www.ah.nl/r/1200299\nhttps://www.hellofresh.nl/recipes/..."}
+                    value={bulkText}
+                    onChange={(e) => setBulkText(e.target.value)}
+                  />
+                  <Button onClick={parseBulkUrls} disabled={!bulkText.trim()}>
+                    URLs herkennen
+                  </Button>
+                </>
+              ) : (
+                <>
+                  {/* Progress bar */}
+                  <div className="rounded-lg bg-primary/5 p-3">
+                    <div className="mb-2 flex items-center justify-between text-sm">
+                      <span className="text-text-secondary">
+                        {bulkImporting ? 'Importeren...' : bulkDone ? 'Import voltooid' : `${bulkCounts.total} recepten gevonden`}
+                      </span>
+                      <span className="font-medium text-text-primary">
+                        {bulkCounts.done}/{bulkCounts.total}
+                        {bulkCounts.error > 0 && <span className="ml-2 text-red-500">({bulkCounts.error} mislukt)</span>}
+                      </span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
+                      <div
+                        className="h-full rounded-full bg-primary transition-all duration-300"
+                        style={{ width: `${bulkCounts.total > 0 ? (bulkCounts.done / bulkCounts.total) * 100 : 0}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Action buttons */}
+                  <div className="flex flex-wrap gap-2">
+                    {!bulkImporting && !bulkDone && (
+                      <Button onClick={handleBulkImport}>
+                        Alles importeren ({bulkCounts.total})
+                      </Button>
+                    )}
+                    {!bulkImporting && bulkCounts.error > 0 && (
+                      <Button variant="secondary" onClick={retryFailedBulk}>
+                        Mislukte opnieuw ({bulkCounts.error})
+                      </Button>
+                    )}
+                    {bulkDone && (
+                      <Button onClick={() => router.push('/recepten')}>
+                        Naar recepten
+                      </Button>
+                    )}
+                    {!bulkImporting && (
+                      <Button variant="ghost" onClick={() => { setBulkItems([]); setBulkDone(false); }}>
+                        Terug
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* Recipe list */}
+                  <div className="max-h-[400px] space-y-1 overflow-y-auto">
+                    {bulkItems.map((item, idx) => (
+                      <div
+                        key={idx}
+                        className={`flex items-center gap-3 rounded-lg border px-3 py-2 text-sm ${
+                          item.status === 'done' ? 'border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950' :
+                          item.status === 'duplicate' ? 'border-yellow-200 bg-yellow-50 dark:border-yellow-900 dark:bg-yellow-950' :
+                          item.status === 'error' ? 'border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950' :
+                          item.status === 'extracting' || item.status === 'saving' ? 'border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950' :
+                          'border-border bg-surface'
+                        }`}
+                      >
+                        <div className="flex-shrink-0">
+                          {item.status === 'done' && <Check className="h-4 w-4 text-green-600" />}
+                          {item.status === 'duplicate' && <AlertTriangle className="h-4 w-4 text-yellow-600" />}
+                          {item.status === 'error' && <X className="h-4 w-4 text-red-600" />}
+                          {(item.status === 'extracting' || item.status === 'saving') && (
+                            <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                          )}
+                          {item.status === 'pending' && (
+                            <div className="h-4 w-4 rounded-full border-2 border-gray-300" />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate font-medium text-text-primary">
+                            {item.title}
+                          </div>
+                          {item.status === 'extracting' && (
+                            <div className="text-xs text-blue-600">Recept ophalen...</div>
+                          )}
+                          {item.status === 'saving' && (
+                            <div className="text-xs text-blue-600">Opslaan...</div>
+                          )}
+                          {item.status === 'error' && (
+                            <div className="text-xs text-red-600">{item.error}</div>
+                          )}
+                          {item.status === 'duplicate' && (
+                            <div className="text-xs text-yellow-600">Bestond al, toch opgeslagen</div>
+                          )}
+                        </div>
+                        {item.recipeId && (
+                          <a
+                            href={`/recepten/${item.recipeId}`}
+                            className="flex-shrink-0 text-xs text-primary hover:underline"
+                            target="_blank"
+                          >
+                            Bekijk
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           )}
-
-          <Button
-            variant="primary"
-            loading={extracting}
-            onClick={handleExtractAndSave}
-            disabled={!importUrl.trim() || extracting}
-          >
-            {extracting ? 'Bezig...' : 'Importeer & opslaan'}
-          </Button>
         </div>
       )}
 

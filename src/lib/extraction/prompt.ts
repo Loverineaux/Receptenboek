@@ -165,5 +165,21 @@ export function parseRecipeResponse(responseText: string): ExtractedRecipe {
     parsed.steps = [];
   }
 
+  // Strip generic step numbering from step titles (e.g. "Stap 1", "Step 3")
+  parsed.steps = parsed.steps.map((s) => ({
+    ...s,
+    titel: cleanStepTitle(s.titel),
+  }));
+
   return parsed;
+}
+
+/** Remove generic step numbering titles like "Stap 1", "Step 2" etc. */
+export function cleanStepTitle(titel?: string | null): string | null {
+  if (!titel) return null;
+  // Strip if the entire title is just "Stap X" / "Step X" (with optional punctuation)
+  const cleaned = titel.replace(/^\s*(stap|step)\s*\d+\s*[.:\-]?\s*$/i, '').trim();
+  // Strip leading "Stap X:" / "Stap X." prefix from titles that have more content
+  const stripped = cleaned.replace(/^\s*(stap|step)\s*\d+\s*[.:\-]\s*/i, '').trim();
+  return stripped || null;
 }
