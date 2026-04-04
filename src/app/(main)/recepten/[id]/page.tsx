@@ -17,6 +17,8 @@ import {
   FolderPlus,
   Calculator,
   Loader2,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -220,6 +222,8 @@ export default function RecipeDetailPage() {
   const [scaledSteps, setScaledSteps] = useState<any[] | null>(null);
   const [calculating, setCalculating] = useState(false);
   const [calculation, setCalculation] = useState<any>(null);
+  const [nutritionOpen, setNutritionOpen] = useState(false);
+  const nutritionFetched = useRef(false);
   const [scalingSteps, setScalingSteps] = useState(false);
   const [cookMode, setCookMode] = useState(false);
   const scaledForPortions = useRef<number | null>(null);
@@ -929,174 +933,153 @@ export default function RecipeDetailPage() {
         </div>
       )}
 
-      {tab === 'voeding' && recipe.nutrition && !calculation && (
-        <div className="space-y-3">
-          <div className="overflow-hidden rounded-lg border">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-2 text-left font-medium text-text-secondary">
-                    Voedingswaarde
-                  </th>
-                  <th className="px-4 py-2 text-right font-medium text-text-secondary">
-                    Per portie
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {[
-                  ['Energie', recipe.nutrition.energie_kcal, 'kcal'],
-                  ['Energie', recipe.nutrition.energie_kj, 'kJ'],
-                  ['Vetten', recipe.nutrition.vetten, 'g'],
-                  ['  waarvan verzadigd', recipe.nutrition.verzadigd, 'g'],
-                  ['Koolhydraten', recipe.nutrition.koolhydraten, 'g'],
-                  ['  waarvan suikers', recipe.nutrition.suikers, 'g'],
-                  ['Vezels', recipe.nutrition.vezels, 'g'],
-                  ['Eiwitten', recipe.nutrition.eiwitten, 'g'],
-                  ['Zout', recipe.nutrition.zout, 'g'],
-                ].map(
-                  ([label, value, unit], idx) =>
-                    value !== null &&
-                    value !== undefined &&
-                    value !== '' && (
-                      <tr key={`${label}-${idx}`}>
-                        <td className="px-4 py-2 text-text-primary">
-                          {label as string}
-                        </td>
-                        <td className="px-4 py-2 text-right text-text-secondary">
-                          {value as string} {unit as string}
-                        </td>
-                      </tr>
-                    )
-                )}
-              </tbody>
-            </table>
-          </div>
-          <div className="flex justify-center">
-            <button
-              onClick={async () => {
-                setCalculating(true);
-                try {
-                  const res = await fetch(`/api/recipes/${params.id}/calculate-nutrition`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ save: false }),
-                  });
-                  if (res.ok) setCalculation(await res.json());
-                } finally {
-                  setCalculating(false);
-                }
-              }}
-              disabled={calculating}
-              className="flex items-center gap-2 text-xs text-text-muted transition-colors hover:text-primary"
-            >
-              {calculating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Calculator className="h-3 w-3" />}
-              {calculating ? 'Berekenen...' : 'Herbereken op basis van ingrediënten'}
-            </button>
-          </div>
-        </div>
-      )}
+      {tab === 'voeding' && (() => {
+        // Auto-calculate when voeding tab is opened
+        if (!calculation && !calculating && !nutritionFetched.current) {
+          nutritionFetched.current = true;
+          setCalculating(true);
+          fetch(`/api/recipes/${params.id}/calculate-nutrition`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ save: false }),
+          }).then(res => res.ok ? res.json() : null)
+            .then(data => { if (data) setCalculation(data); })
+            .finally(() => setCalculating(false));
+        }
 
-      {tab === 'voeding' && !recipe.nutrition && !calculation && (
-        <div className="space-y-4 py-4">
-          <p className="text-center text-sm text-text-secondary">
-            Geen voedingswaarden beschikbaar.
-          </p>
-          <div className="flex justify-center">
-            <button
-              onClick={async () => {
-                setCalculating(true);
-                try {
-                  const res = await fetch(`/api/recipes/${params.id}/calculate-nutrition`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ save: false }),
-                  });
-                  if (res.ok) setCalculation(await res.json());
-                } finally {
-                  setCalculating(false);
-                }
-              }}
-              disabled={calculating}
-              className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
-            >
-              {calculating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Calculator className="h-4 w-4" />}
-              {calculating ? 'Berekenen...' : 'Bereken voedingswaarden'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {tab === 'voeding' && calculation && (
-        <div className="space-y-4">
-          <div className="rounded-lg border bg-surface p-4">
-            <div className="mb-3 text-center">
-              <div className="text-3xl font-bold text-text-primary">{Math.round(calculation.per_portion_kcal)} kcal</div>
-              <div className="text-xs text-text-muted">per portie</div>
-            </div>
-            <div className="space-y-2">
-              {[
-                { label: 'Eiwitten', value: calculation.per_portion_protein, color: 'bg-blue-500' },
-                { label: 'Vetten', value: calculation.per_portion_fat, color: 'bg-yellow-500' },
-                { label: 'Koolhydraten', value: calculation.per_portion_carbs, color: 'bg-green-500' },
-              ].map(({ label, value, color }) => {
-                const total = calculation.per_portion_protein + calculation.per_portion_fat + calculation.per_portion_carbs;
-                const pct = total > 0 ? (value / total) * 100 : 0;
-                return (
-                  <div key={label} className="flex items-center gap-3 text-sm">
-                    <span className="w-24 text-text-secondary">{label}</span>
-                    <div className="flex-1">
-                      <div className="h-2 overflow-hidden rounded-full bg-gray-200">
-                        <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
-                      </div>
-                    </div>
-                    <span className="w-12 text-right text-text-primary">{value.toFixed(1)}g</span>
-                  </div>
-                );
-              })}
-            </div>
-            <div className={`mt-3 text-center text-xs ${
-              calculation.coverage > 0.8 ? 'text-green-600' : calculation.coverage > 0.5 ? 'text-orange-500' : 'text-red-500'
-            }`}>
-              Gebaseerd op {calculation.matched_count} van {calculation.total_count} ingrediënten ({Math.round(calculation.coverage * 100)}%)
-            </div>
-            {calculation.missing.length > 0 && (
-              <div className="mt-2 text-center text-xs text-text-muted">
-                Niet berekend: {calculation.missing.join(', ')}
+        return (
+          <div className="space-y-4">
+            {/* Existing manual nutrition from recipe source */}
+            {recipe.nutrition && (
+              <div className="overflow-hidden rounded-lg border">
+                <div className="bg-gray-50 px-4 py-2">
+                  <span className="text-xs font-medium uppercase tracking-wide text-text-muted">Van receptbron</span>
+                </div>
+                <table className="w-full text-sm">
+                  <tbody className="divide-y">
+                    {[
+                      ['Energie', recipe.nutrition.energie_kcal, 'kcal'],
+                      ['Vetten', recipe.nutrition.vetten, 'g'],
+                      ['  waarvan verzadigd', recipe.nutrition.verzadigd, 'g'],
+                      ['Koolhydraten', recipe.nutrition.koolhydraten, 'g'],
+                      ['  waarvan suikers', recipe.nutrition.suikers, 'g'],
+                      ['Vezels', recipe.nutrition.vezels, 'g'],
+                      ['Eiwitten', recipe.nutrition.eiwitten, 'g'],
+                      ['Zout', recipe.nutrition.zout, 'g'],
+                    ].map(([label, value, unit], idx) =>
+                      value != null && value !== '' ? (
+                        <tr key={`${label}-${idx}`}>
+                          <td className="px-4 py-1.5 text-text-primary">{label as string}</td>
+                          <td className="px-4 py-1.5 text-right text-text-secondary">{value as string} {unit as string}</td>
+                        </tr>
+                      ) : null
+                    )}
+                  </tbody>
+                </table>
               </div>
             )}
+
+            {/* Calculated nutrition */}
+            {calculating && (
+              <div className="flex items-center justify-center gap-2 py-8 text-sm text-text-muted">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Voedingswaarden berekenen...
+              </div>
+            )}
+
+            {calculation && (
+              <>
+                <div className="rounded-lg border bg-surface p-4">
+                  {!recipe.nutrition && (
+                    <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-text-muted">Berekend uit ingrediënten</div>
+                  )}
+                  {recipe.nutrition && (
+                    <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-text-muted">Berekend uit ingrediëntendatabase</div>
+                  )}
+                  <div className="mb-3 text-center">
+                    <div className="text-3xl font-bold text-text-primary">{Math.round(calculation.per_portion_kcal)} kcal</div>
+                    <div className="text-xs text-text-muted">per portie</div>
+                  </div>
+                  <div className="space-y-2">
+                    {[
+                      { label: 'Eiwitten', value: calculation.per_portion_protein, color: 'bg-blue-500' },
+                      { label: 'Vetten', value: calculation.per_portion_fat, color: 'bg-yellow-500' },
+                      { label: 'Koolhydraten', value: calculation.per_portion_carbs, color: 'bg-green-500' },
+                    ].map(({ label, value, color }) => {
+                      const total = calculation.per_portion_protein + calculation.per_portion_fat + calculation.per_portion_carbs;
+                      const pct = total > 0 ? (value / total) * 100 : 0;
+                      return (
+                        <div key={label} className="flex items-center gap-3 text-sm">
+                          <span className="w-24 text-text-secondary">{label}</span>
+                          <div className="flex-1">
+                            <div className="h-2 overflow-hidden rounded-full bg-gray-200">
+                              <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+                            </div>
+                          </div>
+                          <span className="w-12 text-right text-text-primary">{value.toFixed(1)}g</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Expandable ingredient coverage — like suggesties page */}
+                <div className="space-y-1">
+                  <button
+                    type="button"
+                    onClick={() => setNutritionOpen(!nutritionOpen)}
+                    className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-xs transition-colors hover:bg-gray-50"
+                  >
+                    <span className={`font-medium ${
+                      calculation.coverage > 0.8 ? 'text-green-600' : calculation.coverage > 0.5 ? 'text-orange-500' : 'text-red-500'
+                    }`}>
+                      {calculation.matched_count} van {calculation.total_count} ingrediënten berekend
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-text-muted">{Math.round(calculation.coverage * 100)}%</span>
+                      {nutritionOpen ? <ChevronUp className="h-3.5 w-3.5 text-text-muted" /> : <ChevronDown className="h-3.5 w-3.5 text-text-muted" />}
+                    </div>
+                  </button>
+
+                  <div className="px-2">
+                    <div className="h-1.5 w-full rounded-full bg-gray-200">
+                      <div
+                        className={`h-full rounded-full transition-all ${
+                          calculation.coverage > 0.8 ? 'bg-green-500' : calculation.coverage > 0.5 ? 'bg-orange-400' : 'bg-red-400'
+                        }`}
+                        style={{ width: `${calculation.coverage * 100}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {nutritionOpen && (
+                    <div className="mx-1 rounded-lg border bg-surface p-3 shadow-sm">
+                      <div className="flex flex-wrap gap-1.5">
+                        {(calculation.matched || []).map((ing: string, i: number) => (
+                          <span key={`m-${i}`} className="rounded-full bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700">
+                            {ing}
+                          </span>
+                        ))}
+                        {(calculation.missing || []).map((ing: string, i: number) => (
+                          <span key={`x-${i}`} className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600">
+                            {ing}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
+            {!calculating && !calculation && !recipe.nutrition && (
+              <p className="py-8 text-center text-sm text-text-secondary">
+                Geen voedingswaarden beschikbaar.
+              </p>
+            )}
           </div>
-          <div className="flex justify-center gap-3">
-            <button
-              onClick={async () => {
-                const res = await fetch(`/api/recipes/${params.id}/calculate-nutrition`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ save: true }),
-                });
-                if (res.ok) {
-                  setCalculation(null);
-                  // Refresh recipe data
-                  const recipeRes = await fetch(`/api/recipes/${params.id}`);
-                  if (recipeRes.ok) {
-                    const data = await recipeRes.json();
-                    setRecipe(data);
-                  }
-                }
-              }}
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90"
-            >
-              Opslaan als voedingswaarden
-            </button>
-            <button
-              onClick={() => setCalculation(null)}
-              className="rounded-lg border px-4 py-2 text-sm text-text-secondary transition-colors hover:bg-gray-50"
-            >
-              Sluiten
-            </button>
-          </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ── Extra info cards (only show when data exists) ── */}
       {(recipe.weetje || recipe.allergenen || (recipe as any).benodigdheden?.length > 0) && (

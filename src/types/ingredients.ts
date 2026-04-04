@@ -84,6 +84,7 @@ export interface NutritionCalculation {
   coverage: number;
   matched_count: number;
   total_count: number;
+  matched: string[];
   missing: string[];
 }
 

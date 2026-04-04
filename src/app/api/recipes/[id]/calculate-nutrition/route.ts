@@ -48,6 +48,7 @@ export async function POST(
   let totalSalt = 0;
 
   let matchedCount = 0;
+  const matched: string[] = [];
   const missing: string[] = [];
 
   // 4. Process each ingredient
@@ -100,6 +101,7 @@ export async function POST(
           totalFiber += (gi.avg_fiber ?? 0) * factor;
           totalSalt += (gi.avg_salt ?? 0) * factor;
           matchedCount++;
+          matched.push(ing.naam);
         } else {
           // Matched but could not convert to grams
           missing.push(ing.naam);
@@ -137,6 +139,7 @@ export async function POST(
     coverage: totalCount > 0 ? matchedCount / totalCount : 0,
     matched_count: matchedCount,
     total_count: totalCount,
+    matched,
     missing,
   };
 

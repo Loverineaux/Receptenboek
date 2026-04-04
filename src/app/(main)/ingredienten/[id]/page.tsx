@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { ArrowLeft, Sparkles, Loader2 } from 'lucide-react';
+import { ArrowLeft, Sparkles, Loader2, Pencil, X, Check, Camera } from 'lucide-react';
 import ProductCard from '@/components/ingredients/ProductCard';
 import type { GenericIngredientWithProducts } from '@/types';
 
@@ -63,11 +63,70 @@ export default function IngredientDetailPage() {
   const [generating, setGenerating] = useState(false);
   const [generateProgress, setGenerateProgress] = useState('');
 
+  // Edit state
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editForm, setEditForm] = useState({
+    name: '', name_plural: '', category: '', aliases: '',
+    gram_per_piece: '', gram_per_el: '', gram_per_tl: '',
+    image_url: '',
+  });
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+
+  const startEditing = () => {
+    if (!ingredient) return;
+    setEditForm({
+      name: ingredient.name,
+      name_plural: ingredient.name_plural || '',
+      category: ingredient.category || '',
+      aliases: ingredient.aliases.join(', '),
+      gram_per_piece: ingredient.gram_per_piece?.toString() || '',
+      gram_per_el: ingredient.gram_per_el?.toString() || '',
+      gram_per_tl: ingredient.gram_per_tl?.toString() || '',
+      image_url: ingredient.image_url || '',
+    });
+    setImagePreview(ingredient.image_url || null);
+    setEditing(true);
+  };
+
+  const saveEdits = async () => {
+    if (!ingredient) return;
+    setSaving(true);
+    try {
+      const updates = {
+        name: editForm.name.trim(),
+        name_plural: editForm.name_plural.trim() || null,
+        category: editForm.category.trim() || null,
+        aliases: editForm.aliases.split(',').map(a => a.trim()).filter(Boolean),
+        gram_per_piece: editForm.gram_per_piece ? parseFloat(editForm.gram_per_piece) : null,
+        gram_per_el: editForm.gram_per_el ? parseFloat(editForm.gram_per_el) : null,
+        gram_per_tl: editForm.gram_per_tl ? parseFloat(editForm.gram_per_tl) : null,
+        image_url: editForm.image_url || null,
+      };
+      const res = await fetch(`/api/ingredients/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Opslaan mislukt');
+      }
+      // Update local state directly instead of re-fetching (avoids cache issues)
+      setIngredient(prev => prev ? { ...prev, ...updates } : prev);
+      setEditing(false);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // ── Fetch ingredient data ──
 
   const fetchIngredient = useCallback(async () => {
     try {
-      const res = await fetch(`/api/ingredients/${id}`);
+      const res = await fetch(`/api/ingredients/${id}?_t=${Date.now()}`);
       if (!res.ok) throw new Error('Ingrediënt niet gevonden');
       const data = await res.json();
       setIngredient(data);
@@ -226,20 +285,135 @@ export default function IngredientDetailPage() {
         )}
       </div>
 
-      {/* ── Name + aliases ── */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-text-primary">{ingredient.name}</h1>
-        {ingredient.name_plural && (
-          <p className="mt-0.5 text-sm text-text-muted">
-            Meervoud: {ingredient.name_plural}
-          </p>
-        )}
-        {ingredient.aliases.length > 0 && (
-          <p className="mt-1 text-xs text-text-muted">
-            Ook bekend als: {ingredient.aliases.join(', ')}
-          </p>
-        )}
-      </div>
+      {/* ── Name + aliases + edit ── */}
+      {!editing ? (
+        <div className="mb-6">
+          <div className="flex items-start justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-text-primary">{ingredient.name}</h1>
+              {ingredient.name_plural && (
+                <p className="mt-0.5 text-sm text-text-muted">
+                  Meervoud: {ingredient.name_plural}
+                </p>
+              )}
+              {ingredient.aliases.length > 0 && (
+                <p className="mt-1 text-xs text-text-muted">
+                  Ook bekend als: {ingredient.aliases.join(', ')}
+                </p>
+              )}
+            </div>
+            <button
+              onClick={startEditing}
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-text-muted transition-colors hover:bg-gray-200 hover:text-text-primary"
+              title="Bewerken"
+            >
+              <Pencil size={14} />
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="mb-6 rounded-xl border border-primary/30 bg-primary/5 p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-text-primary">Ingrediënt bewerken</h2>
+            <button onClick={() => setEditing(false)} className="text-text-muted hover:text-text-primary">
+              <X size={16} />
+            </button>
+          </div>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-text-muted">Naam</label>
+                <input type="text" value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
+                  className="w-full rounded-lg border border-gray-200 bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-text-muted">Meervoud</label>
+                <input type="text" value={editForm.name_plural} onChange={e => setEditForm(f => ({ ...f, name_plural: e.target.value }))}
+                  placeholder="bijv. uien"
+                  className="w-full rounded-lg border border-gray-200 bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+              </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-text-muted">Categorie</label>
+              <select value={editForm.category} onChange={e => setEditForm(f => ({ ...f, category: e.target.value }))}
+                className="w-full rounded-lg border border-gray-200 bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary">
+                <option value="">Geen</option>
+                {['groente', 'fruit', 'vlees', 'vis', 'zuivel', 'granen', 'kruiden', 'overig'].map(c => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-text-muted">Aliases (komma-gescheiden)</label>
+              <input type="text" value={editForm.aliases} onChange={e => setEditForm(f => ({ ...f, aliases: e.target.value }))}
+                placeholder="bijv. ajuin, sjalot"
+                className="w-full rounded-lg border border-gray-200 bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-text-muted">Gram/stuk</label>
+                <input type="number" step="0.1" value={editForm.gram_per_piece} onChange={e => setEditForm(f => ({ ...f, gram_per_piece: e.target.value }))}
+                  placeholder="bijv. 150"
+                  className="w-full rounded-lg border border-gray-200 bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-text-muted">Gram/el</label>
+                <input type="number" step="0.1" value={editForm.gram_per_el} onChange={e => setEditForm(f => ({ ...f, gram_per_el: e.target.value }))}
+                  className="w-full rounded-lg border border-gray-200 bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-text-muted">Gram/tl</label>
+                <input type="number" step="0.1" value={editForm.gram_per_tl} onChange={e => setEditForm(f => ({ ...f, gram_per_tl: e.target.value }))}
+                  className="w-full rounded-lg border border-gray-200 bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+              </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-text-muted">Afbeelding</label>
+              <div className="flex items-center gap-3">
+                {imagePreview ? (
+                  <div className="relative h-16 w-16 overflow-hidden rounded-lg border">
+                    <Image src={imagePreview} alt="Preview" fill className="object-cover" unoptimized />
+                    <button type="button" onClick={() => { setImagePreview(null); setEditForm(f => ({ ...f, image_url: '' })); }}
+                      className="absolute right-0.5 top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-black/60 text-[10px] text-white">&times;</button>
+                  </div>
+                ) : (
+                  <label className="flex h-16 w-16 cursor-pointer items-center justify-center rounded-lg border-2 border-dashed border-gray-300 text-text-muted transition-colors hover:border-primary hover:text-primary">
+                    <Camera size={20} />
+                    <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      setImagePreview(URL.createObjectURL(file));
+                      try {
+                        const supabase = (await import('@/lib/supabase/client')).createClient();
+                        const path = `ingredients/${Date.now()}-${file.name}`;
+                        const { error: upErr } = await supabase.storage.from('recipe-images').upload(path, file, { contentType: file.type, upsert: true });
+                        if (!upErr) {
+                          const { data: urlData } = supabase.storage.from('recipe-images').getPublicUrl(path);
+                          setEditForm(f => ({ ...f, image_url: urlData.publicUrl }));
+                        }
+                      } catch {}
+                    }} />
+                  </label>
+                )}
+                <input type="text" value={editForm.image_url} onChange={e => { setEditForm(f => ({ ...f, image_url: e.target.value })); setImagePreview(e.target.value || null); }}
+                  placeholder="Of plak een URL"
+                  className="flex-1 rounded-lg border border-gray-200 bg-background px-3 py-2 text-xs focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+              </div>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button onClick={saveEdits} disabled={saving || !editForm.name.trim()}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-50">
+                {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                Opslaan
+              </button>
+              <button onClick={() => setEditing(false)}
+                className="rounded-lg px-4 py-2 text-sm text-text-muted hover:text-text-primary">
+                Annuleren
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Voedingswaarden card ── */}
       <section className="mb-6 rounded-xl border border-gray-200 bg-surface p-4">

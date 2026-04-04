@@ -51,7 +51,7 @@ export default function IngrediëntenPage() {
       const res = await fetch(`/api/ingredients${qs ? `?${qs}` : ''}`);
       if (res.ok) {
         const data = await res.json();
-        setIngredients(data);
+        setIngredients(data.ingredients ?? data);
       }
     } finally {
       setLoading(false);

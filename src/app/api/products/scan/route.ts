@@ -147,6 +147,11 @@ export async function POST(request: NextRequest) {
               .eq('id', savedProduct.id);
 
             savedProduct.generic_ingredient_id = bestMatch.id;
+
+            // Recalculate average nutrition for the generic ingredient
+            await supabaseAdmin.rpc('recalculate_generic_nutrition', {
+              ingredient_id: bestMatch.id,
+            });
           }
         }
       } catch (matchError) {
@@ -154,10 +159,40 @@ export async function POST(request: NextRequest) {
         console.error('[Scan] Auto-match error:', matchError);
       }
 
+      // Generate a suggested name + category for new ingredient creation
+      let suggested_name: string | null = null;
+      let suggested_category: string | null = null;
+
+      if (!suggestedIngredient) {
+        // Strip brand from product name to get generic name
+        const brand = (off.brands || '').toLowerCase();
+        let clean = productName.toLowerCase();
+        if (brand) clean = clean.replace(new RegExp(brand.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), '').trim();
+        // Remove common suffixes
+        clean = clean.replace(/\b(biologisch|bio|light|zero|original|naturel|heel|half|vol|mager)\b/gi, '').trim();
+        clean = clean.replace(/\s{2,}/g, ' ').trim();
+        if (clean) suggested_name = clean.charAt(0).toUpperCase() + clean.slice(1);
+
+        // Try to detect category from OFF categories or product name
+        const offCats = (off.categories_tags || []).join(' ').toLowerCase();
+        const allText = `${productName} ${offCats}`.toLowerCase();
+        if (/vis|zalm|tonijn|haring|garnaal|kabeljauw|makreel|sardine|ansjovis|fish|tuna|salmon|shrimp/.test(allText)) suggested_category = 'vis';
+        else if (/kip|chicken|poultry|kipfilet|kippendij/.test(allText)) suggested_category = 'vlees';
+        else if (/vlees|gehakt|rund|varken|lam|spek|bacon|worst|salami|ham|meat|beef|pork/.test(allText)) suggested_category = 'vlees';
+        else if (/melk|kaas|yoghurt|kwark|boter|room|cheese|milk|yogurt|butter|cream|zuivel|dairy|ei|eieren/.test(allText)) suggested_category = 'zuivel';
+        else if (/brood|cracker|pasta|rijst|muesli|haver|couscous|noodle|noedel|bloem|cereal|graan|grain|bread/.test(allText)) suggested_category = 'granen';
+        else if (/groente|vegetable|tomaat|paprika|ui|wortel|spinazie|broccoli|sla|komkommer/.test(allText)) suggested_category = 'groente';
+        else if (/fruit|appel|banaan|aardbei|mango|sinaasappel|citroen|peer|druif/.test(allText)) suggested_category = 'fruit';
+        else if (/kruiden|specerij|herb|spice|peper|kaneel|oregano|basilicum/.test(allText)) suggested_category = 'kruiden';
+        else suggested_category = 'overig';
+      }
+
       return NextResponse.json({
         product: savedProduct,
         source: 'open_food_facts',
         suggested_ingredient: suggestedIngredient,
+        suggested_name,
+        suggested_category,
       });
     }
 

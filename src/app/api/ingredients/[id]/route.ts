@@ -1,48 +1,74 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { supabaseAdmin } from '@/lib/supabase/admin';
 
-// GET /api/ingredients/[id] — single ingredient with products and recipe count
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+// Direct Supabase REST call — bypasses any client-side caching
+async function supabaseRest(path: string) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    headers: {
+      'apikey': SERVICE_KEY,
+      'Authorization': `Bearer ${SERVICE_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    cache: 'no-store',
+  });
+  return res.json();
+}
+
+async function supabaseRestMutate(path: string, method: string, body: any) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    method,
+    headers: {
+      'apikey': SERVICE_KEY,
+      'Authorization': `Bearer ${SERVICE_KEY}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=representation',
+    },
+    body: JSON.stringify(body),
+    cache: 'no-store',
+  });
+  return res.json();
+}
+
+// GET /api/ingredients/[id]
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   const { id } = params;
 
-  // Fetch the generic ingredient
-  const { data: ingredient, error: ingredientError } = await supabaseAdmin
-    .from('generic_ingredients')
-    .select('*')
-    .eq('id', id)
-    .single();
+  const ingredients = await supabaseRest(
+    `generic_ingredients?id=eq.${id}&select=*&limit=1`
+  );
 
-  if (ingredientError || !ingredient) {
+  if (!ingredients?.length) {
     return NextResponse.json({ error: 'Ingredient not found' }, { status: 404 });
   }
 
-  // Fetch products linked to this generic ingredient
-  const { data: products } = await supabaseAdmin
-    .from('products')
-    .select('*')
-    .eq('generic_ingredient_id', id);
+  const ingredient = ingredients[0];
 
-  // Count distinct recipes that use this generic ingredient
-  const { data: recipeRows } = await supabaseAdmin
-    .from('ingredients')
-    .select('recipe_id')
-    .eq('generic_ingredient_id', id);
+  const products = await supabaseRest(
+    `products?generic_ingredient_id=eq.${id}&select=*`
+  );
+
+  const recipeRows = await supabaseRest(
+    `ingredients?generic_ingredient_id=eq.${id}&select=recipe_id`
+  );
 
   const distinctRecipeIds = new Set((recipeRows ?? []).map((r: any) => r.recipe_id));
-  const recipe_count = distinctRecipeIds.size;
 
   return NextResponse.json({
     ...ingredient,
     products: products ?? [],
-    recipe_count,
+    recipe_count: distinctRecipeIds.size,
+  }, {
+    headers: { 'Cache-Control': 'no-store, max-age=0' },
   });
 }
 
-// PUT /api/ingredients/[id] — update ingredient
+// PUT /api/ingredients/[id]
 export async function PUT(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -57,10 +83,10 @@ export async function PUT(
   const { id } = params;
   const body = await request.json();
 
-  // Only allow known fields
   const allowedFields = [
     'name', 'name_plural', 'category', 'aliases',
     'gram_per_piece', 'gram_per_ml', 'gram_per_el', 'gram_per_tl',
+    'image_url',
   ];
 
   const updateData: Record<string, unknown> = {};
@@ -74,20 +100,17 @@ export async function PUT(
     return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 });
   }
 
-  const { data: updated, error } = await supabaseAdmin
-    .from('generic_ingredients')
-    .update(updateData)
-    .eq('id', id)
-    .select()
-    .single();
+  const updated = await supabaseRestMutate(
+    `generic_ingredients?id=eq.${id}`,
+    'PATCH',
+    updateData
+  );
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!updated?.length) {
+    return NextResponse.json({ error: 'Update failed' }, { status: 500 });
   }
 
-  if (!updated) {
-    return NextResponse.json({ error: 'Ingredient not found' }, { status: 404 });
-  }
-
-  return NextResponse.json(updated);
+  return NextResponse.json(updated[0], {
+    headers: { 'Cache-Control': 'no-store, max-age=0' },
+  });
 }
