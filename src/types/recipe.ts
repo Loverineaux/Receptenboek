@@ -35,6 +35,7 @@ export interface Ingredient {
   eenheid: string | null;
   naam: string;
   sort_order: number;
+  generic_ingredient_id: string | null;
 }
 
 export interface Step {

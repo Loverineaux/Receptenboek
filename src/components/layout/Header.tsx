@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   ChefHat, User, LogOut,
-  BookOpen, Soup, FolderOpen, Heart, Sparkles,
+  BookOpen, Soup, FolderOpen, Heart, Apple,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -14,7 +14,7 @@ const navLinks = [
   { href: '/suggesties', label: 'Wat koken?', icon: Soup },
   { href: '/collecties', label: 'Collecties', icon: FolderOpen },
   { href: '/favorieten', label: 'Favorieten', icon: Heart },
-  { href: '/ontdek', label: 'Nieuwste', icon: Sparkles },
+  { href: '/ingredienten', label: 'Ingrediënten', icon: Apple },
 ];
 
 export default function Header() {

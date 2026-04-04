@@ -1,0 +1,411 @@
+'use client';
+
+import { useCallback, useEffect, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import Image from 'next/image';
+import { ArrowLeft, Sparkles, Loader2 } from 'lucide-react';
+import ProductCard from '@/components/ingredients/ProductCard';
+import type { GenericIngredientWithProducts } from '@/types';
+
+// ── Category emoji mapping (same as IngredientCard) ──
+
+const CATEGORY_EMOJI: Record<string, string> = {
+  groente: '🥬',
+  fruit: '🍎',
+  vlees: '🥩',
+  vis: '🐟',
+  zuivel: '🧀',
+  granen: '🌾',
+  kruiden: '🌿',
+  overig: '🫙',
+};
+
+// ── Nutrition row helper ──
+
+function NutritionRow({ label, value, unit }: { label: string; value: number | null; unit: string }) {
+  if (value == null) return null;
+  return (
+    <tr className="border-b border-gray-100 last:border-0">
+      <td className="py-1.5 text-sm text-text-muted">{label}</td>
+      <td className="py-1.5 text-right text-sm font-medium text-text-primary">
+        {typeof value === 'number' ? (Number.isInteger(value) ? value : value.toFixed(1)) : value}
+        {unit}
+      </td>
+    </tr>
+  );
+}
+
+// ── Encyclopedie block helper ──
+
+function InfoBlock({ title, content }: { title: string; content: string | null }) {
+  if (!content) return null;
+  return (
+    <div className="rounded-xl border border-gray-200 bg-surface p-4">
+      <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-text-muted">
+        {title}
+      </h3>
+      <p className="whitespace-pre-line text-sm leading-relaxed text-text-primary">{content}</p>
+    </div>
+  );
+}
+
+// ── Main page component ──
+
+export default function IngredientDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const router = useRouter();
+
+  const [ingredient, setIngredient] = useState<GenericIngredientWithProducts | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Generate-content state
+  const [generating, setGenerating] = useState(false);
+  const [generateProgress, setGenerateProgress] = useState('');
+
+  // ── Fetch ingredient data ──
+
+  const fetchIngredient = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/ingredients/${id}`);
+      if (!res.ok) throw new Error('Ingrediënt niet gevonden');
+      const data = await res.json();
+      setIngredient(data);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Er ging iets mis');
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    if (id) fetchIngredient();
+  }, [id, fetchIngredient]);
+
+  // ── Generate content via SSE ──
+
+  const handleGenerateContent = async () => {
+    if (!id || generating) return;
+    setGenerating(true);
+    setGenerateProgress('Informatie wordt gegenereerd...');
+
+    try {
+      const res = await fetch(`/api/ingredients/${id}/generate-content`, {
+        method: 'POST',
+      });
+
+      if (!res.ok) throw new Error('Genereren mislukt');
+
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error('Geen stream beschikbaar');
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6).trim();
+            if (data === '[DONE]') {
+              setGenerateProgress('Klaar!');
+            } else {
+              try {
+                const parsed = JSON.parse(data);
+                if (parsed.status) setGenerateProgress(parsed.status);
+              } catch {
+                // ignore parse errors
+              }
+            }
+          }
+        }
+      }
+
+      // Refresh data after generation
+      setLoading(true);
+      await fetchIngredient();
+    } catch (err: unknown) {
+      setGenerateProgress(err instanceof Error ? err.message : 'Er ging iets mis');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  // ── Loading state ──
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // ── Error state ──
+
+  if (error || !ingredient) {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4">
+        <p className="text-text-muted">{error ?? 'Ingrediënt niet gevonden'}</p>
+        <button
+          onClick={() => router.push('/ingredienten')}
+          className="text-sm font-medium text-primary hover:underline"
+        >
+          Terug naar ingrediënten
+        </button>
+      </div>
+    );
+  }
+
+  const fallbackEmoji =
+    CATEGORY_EMOJI[(ingredient.category ?? '').toLowerCase()] ?? '🫙';
+
+  const hasNutrition = ingredient.avg_kcal != null;
+
+  const conversions = [
+    { label: 'Per stuk', value: ingredient.gram_per_piece, unit: 'g' },
+    { label: 'Per eetlepel', value: ingredient.gram_per_el, unit: 'g' },
+    { label: 'Per theelepel', value: ingredient.gram_per_tl, unit: 'g' },
+  ].filter((c) => c.value != null);
+
+  const encyclopedieBlocks = [
+    { title: 'Beschrijving', content: ingredient.description },
+    { title: 'Oorsprong', content: ingredient.origin },
+    { title: 'Gebruik', content: ingredient.usage_tips },
+    { title: 'Bewaring', content: ingredient.storage_tips },
+    { title: 'Seizoen', content: ingredient.season },
+    { title: 'Weetje', content: ingredient.fun_facts },
+  ];
+
+  const hasEncyclopedieContent = encyclopedieBlocks.some((b) => b.content);
+
+  return (
+    <div className="mx-auto max-w-2xl px-4 pb-24 pt-4">
+      {/* ── Back button ── */}
+      <button
+        onClick={() => router.push('/ingredienten')}
+        className="mb-4 flex items-center gap-1.5 text-sm font-medium text-text-muted transition-colors hover:text-text-primary"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Ingrediënten
+      </button>
+
+      {/* ── Hero section ── */}
+      <div className="relative mb-6 overflow-hidden rounded-2xl">
+        <div className="relative aspect-[16/9] w-full">
+          {ingredient.image_url ? (
+            <Image
+              src={ingredient.image_url}
+              alt={ingredient.name}
+              fill
+              sizes="(max-width: 672px) 100vw, 672px"
+              className="object-cover"
+              priority
+              unoptimized
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary/20 to-primary/50">
+              <span className="text-7xl">{fallbackEmoji}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Category badge overlay */}
+        {ingredient.category && (
+          <div className="absolute bottom-3 left-3">
+            <span className="rounded-full bg-black/60 px-3 py-1 text-xs font-medium text-white backdrop-blur-sm">
+              {ingredient.category}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* ── Name + aliases ── */}
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-text-primary">{ingredient.name}</h1>
+        {ingredient.name_plural && (
+          <p className="mt-0.5 text-sm text-text-muted">
+            Meervoud: {ingredient.name_plural}
+          </p>
+        )}
+        {ingredient.aliases.length > 0 && (
+          <p className="mt-1 text-xs text-text-muted">
+            Ook bekend als: {ingredient.aliases.join(', ')}
+          </p>
+        )}
+      </div>
+
+      {/* ── Voedingswaarden card ── */}
+      <section className="mb-6 rounded-xl border border-gray-200 bg-surface p-4">
+        <h2 className="mb-3 text-base font-semibold text-text-primary">
+          Voedingswaarden
+        </h2>
+
+        {hasNutrition ? (
+          <>
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="pb-1.5 text-left text-xs font-medium uppercase tracking-wide text-text-muted">
+                    Per 100g
+                  </th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                <NutritionRow label="Energie" value={ingredient.avg_kcal} unit=" kcal" />
+                <NutritionRow label="Eiwit" value={ingredient.avg_protein} unit="g" />
+                <NutritionRow label="Vet" value={ingredient.avg_fat} unit="g" />
+                <NutritionRow label="  waarvan verzadigd" value={ingredient.avg_saturated_fat} unit="g" />
+                <NutritionRow label="Koolhydraten" value={ingredient.avg_carbs} unit="g" />
+                <NutritionRow label="  waarvan suikers" value={ingredient.avg_sugars} unit="g" />
+                <NutritionRow label="Vezels" value={ingredient.avg_fiber} unit="g" />
+                <NutritionRow label="Zout" value={ingredient.avg_salt} unit="g" />
+              </tbody>
+            </table>
+            <p className="mt-3 text-xs text-text-muted">
+              Gebaseerd op {ingredient.product_count}{' '}
+              {ingredient.product_count === 1 ? 'product' : 'producten'}
+            </p>
+          </>
+        ) : (
+          <p className="text-sm text-text-muted">
+            Nog geen voedingswaarden. Scan een product om data toe te voegen.
+          </p>
+        )}
+      </section>
+
+      {/* ── Encyclopedie section ── */}
+      <section className="mb-6">
+        <h2 className="mb-3 text-base font-semibold text-text-primary">
+          Encyclopedie
+        </h2>
+
+        {hasEncyclopedieContent ? (
+          <div className="flex flex-col gap-3">
+            {encyclopedieBlocks.map((block) => (
+              <InfoBlock key={block.title} title={block.title} content={block.content} />
+            ))}
+          </div>
+        ) : !ingredient.content_generated_at ? (
+          <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-6 text-center">
+            <p className="mb-3 text-sm text-text-muted">
+              Er is nog geen encyclopedie-informatie beschikbaar voor dit ingrediënt.
+            </p>
+            <button
+              onClick={handleGenerateContent}
+              disabled={generating}
+              className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-60"
+            >
+              {generating ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+              {generating ? generateProgress : 'Genereer informatie'}
+            </button>
+          </div>
+        ) : (
+          <p className="text-sm text-text-muted">Geen informatie beschikbaar.</p>
+        )}
+
+        {/* Show generate button even when there IS content but it was never generated */}
+        {hasEncyclopedieContent && !ingredient.content_generated_at && (
+          <div className="mt-3">
+            <button
+              onClick={handleGenerateContent}
+              disabled={generating}
+              className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-surface px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-gray-50 disabled:opacity-60"
+            >
+              {generating ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+              {generating ? generateProgress : 'Genereer informatie'}
+            </button>
+          </div>
+        )}
+      </section>
+
+      {/* ── Varianten ── */}
+      {ingredient.variants.length > 0 && (
+        <section className="mb-6">
+          <h2 className="mb-3 text-base font-semibold text-text-primary">
+            Varianten
+          </h2>
+          <div className="flex flex-wrap gap-2">
+            {ingredient.variants.map((variant) => (
+              <span
+                key={variant}
+                className="rounded-full bg-gray-100 px-3 py-1 text-sm text-text-primary"
+              >
+                {variant}
+              </span>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ── Conversies ── */}
+      {conversions.length > 0 && (
+        <section className="mb-6">
+          <h2 className="mb-3 text-base font-semibold text-text-primary">
+            Conversies
+          </h2>
+          <div className="overflow-hidden rounded-xl border border-gray-200 bg-surface">
+            <table className="w-full">
+              <tbody>
+                {conversions.map((c) => (
+                  <tr key={c.label} className="border-b border-gray-100 last:border-0">
+                    <td className="px-4 py-2.5 text-sm text-text-muted">{c.label}</td>
+                    <td className="px-4 py-2.5 text-right text-sm font-medium text-text-primary">
+                      {c.value} {c.unit}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {/* ── Gekoppelde producten ── */}
+      <section className="mb-6">
+        <h2 className="mb-3 text-base font-semibold text-text-primary">
+          Gekoppelde producten
+        </h2>
+        {ingredient.products.length > 0 ? (
+          <div className="flex flex-col gap-3">
+            {ingredient.products.map((product) => (
+              <ProductCard key={product.id} product={product} />
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-text-muted">
+            Nog geen producten gekoppeld. Scan een barcode.
+          </p>
+        )}
+      </section>
+
+      {/* ── Recepten met dit ingrediënt ── */}
+      {ingredient.recipe_count > 0 && (
+        <section className="mb-6">
+          <h2 className="mb-3 text-base font-semibold text-text-primary">
+            Recepten
+          </h2>
+          <p className="text-sm text-text-muted">
+            Gebruikt in {ingredient.recipe_count}{' '}
+            {ingredient.recipe_count === 1 ? 'recept' : 'recepten'}
+          </p>
+        </section>
+      )}
+    </div>
+  );
+}
