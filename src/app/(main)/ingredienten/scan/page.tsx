@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Check, Plus, Search, Camera, Loader2 } from 'lucide-react';
 import BarcodeScanner from '@/components/ingredients/BarcodeScanner';
@@ -58,7 +58,12 @@ export default function ScanPage() {
   // Label photo
   const [isUploadingLabel, setIsUploadingLabel] = useState(false);
 
+  const scanningRef = useRef(false);
+
   const handleScan = useCallback(async (scannedBarcode: string) => {
+    if (scanningRef.current) return;
+    scanningRef.current = true;
+
     setBarcode(scannedBarcode);
     setStep('loading');
     setError(null);
@@ -70,20 +75,29 @@ export default function ScanPage() {
         body: JSON.stringify({ barcode: scannedBarcode }),
       });
 
-      if (res.ok) {
-        const data: ScanResult = await res.json();
-        setScanResult(data);
-        setStep('found');
-      } else if (res.status === 404) {
+      if (!res.ok) {
+        throw new Error('Onverwachte fout bij het opzoeken van het product.');
+      }
+
+      const data = await res.json();
+
+      if (!data.product || data.source === 'not_found') {
         setManualForm((prev) => ({ ...prev, barcode: scannedBarcode }));
         setStep('not_found');
       } else {
-        throw new Error('Onverwachte fout bij het opzoeken van het product.');
+        setScanResult({
+          product: data.product,
+          generic_ingredient: data.linked_ingredient || null,
+          suggested_ingredient: data.suggested_ingredient || null,
+        });
+        setStep('found');
       }
     } catch (err: any) {
       setError(err.message || 'Er ging iets mis.');
       setStep('not_found');
       setManualForm((prev) => ({ ...prev, barcode: scannedBarcode }));
+    } finally {
+      scanningRef.current = false;
     }
   }, []);
 
@@ -220,6 +234,7 @@ export default function ScanPage() {
   };
 
   const resetScanner = () => {
+    scanningRef.current = false;
     setStep('scanning');
     setBarcode('');
     setScanResult(null);
