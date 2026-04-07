@@ -414,7 +414,8 @@ export default function NieuwReceptPage() {
 
     const handlePopState = () => {
       window.history.pushState(null, '', window.location.href);
-      alert('Er wordt nog een recept verwerkt. Wacht tot het klaar is.');
+      setNavBlockToast(true);
+      setTimeout(() => setNavBlockToast(false), 3000);
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);

@@ -142,10 +142,37 @@ export async function POST(request: NextRequest) {
         const results = await filterProductsWithAI(ing.name, rawResults);
 
         if (results.length > 0) {
+          // Deduplicate results by normalized product_name + brand
+          const seen = new Set<string>();
+          const uniqueResults: OffProduct[] = [];
+          for (const p of results) {
+            const key = `${(p.product_name || '').toLowerCase().trim()}|${(p.brands || '').toLowerCase().trim()}`;
+            if (!seen.has(key)) {
+              seen.add(key);
+              uniqueResults.push(p);
+            }
+          }
+
+          // Also check which product names are already linked to this ingredient
+          const { data: existingLinked } = await admin
+            .from('products')
+            .select('product_name, brand')
+            .eq('generic_ingredient_id', ing.id);
+          const existingKeys = new Set(
+            (existingLinked ?? []).map((p: any) =>
+              `${(p.product_name || '').toLowerCase().trim()}|${(p.brand || '').toLowerCase().trim()}`
+            )
+          );
+
           // Save individual products
           let savedProducts = 0;
-          for (const p of results) {
+          for (const p of uniqueResults) {
             const barcode = p.code || `off-${ing.name}-${savedProducts}`;
+            const nameKey = `${(p.product_name || '').toLowerCase().trim()}|${(p.brands || '').toLowerCase().trim()}`;
+
+            // Skip if same product name+brand already linked to this ingredient
+            if (existingKeys.has(nameKey)) continue;
+
             // Skip if barcode already exists
             const { data: exists } = await admin.from('products').select('id').eq('barcode', barcode).maybeSingle();
             if (!exists) {
@@ -167,6 +194,7 @@ export async function POST(request: NextRequest) {
                 salt: n['salt_100g'] ?? null,
                 source: 'open_food_facts',
               });
+              existingKeys.add(nameKey);
               savedProducts++;
             }
           }

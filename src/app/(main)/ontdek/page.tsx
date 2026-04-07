@@ -81,16 +81,9 @@ export default function NieuwsteReceptenPage() {
     if (!user) return;
 
     if (isFavorited) {
-      await supabase.from('favorites').insert({
-        recipe_id: recipeId,
-        user_id: user.id,
-      });
+      await fetch(`/api/recipes/${recipeId}/favorite`, { method: 'POST' });
     } else {
-      await supabase
-        .from('favorites')
-        .delete()
-        .eq('recipe_id', recipeId)
-        .eq('user_id', user.id);
+      await fetch(`/api/recipes/${recipeId}/favorite`, { method: 'DELETE' });
     }
 
     setRecipes((prev) =>
