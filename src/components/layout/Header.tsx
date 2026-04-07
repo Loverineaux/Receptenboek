@@ -4,10 +4,11 @@ import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  ChefHat, User, LogOut,
+  ChefHat, User, LogOut, Settings,
   BookOpen, Soup, FolderOpen, Heart, Apple,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import NotificationBell from '@/components/notifications/NotificationBell';
 
 const navLinks = [
   { href: '/recepten', label: 'Recepten', icon: BookOpen },
@@ -66,8 +67,10 @@ export default function Header() {
             ))}
           </nav>
 
-          {/* User menu (desktop + mobile) */}
-          <div ref={userMenuRef}>
+          {/* Notification bell + User menu */}
+          <div className="flex items-center gap-1">
+            {user && <NotificationBell />}
+          <div ref={userMenuRef} className="relative">
             {user ? (
               <>
                 <button
@@ -92,7 +95,7 @@ export default function Header() {
                 </button>
 
                 {userMenuOpen && (
-                  <div className="absolute right-4 mt-2 w-48 rounded-lg border bg-surface py-1 shadow-lg sm:right-6">
+                  <div className="absolute right-0 top-full mt-2 w-48 rounded-lg border bg-surface py-1 shadow-lg">
                     <div className="border-b px-4 py-2">
                       <p className="text-sm font-medium text-text-primary">
                         {profile?.display_name || 'Gebruiker'}
@@ -100,12 +103,12 @@ export default function Header() {
                       <p className="text-xs text-text-muted">{user.email}</p>
                     </div>
                     <Link
-                      href="/profiel"
+                      href="/instellingen"
                       className="flex items-center gap-2 px-4 py-2 text-sm text-text-secondary hover:bg-gray-50"
                       onClick={() => setUserMenuOpen(false)}
                     >
-                      <User className="h-4 w-4" />
-                      Profiel
+                      <Settings className="h-4 w-4" />
+                      Instellingen
                     </Link>
                     <button
                       type="button"
@@ -126,6 +129,7 @@ export default function Header() {
                 Inloggen
               </Link>
             )}
+          </div>
           </div>
         </div>
       </header>
