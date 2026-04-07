@@ -205,6 +205,7 @@ export default function RecipeDetailPage() {
   const [tab, setTab] = useState<Tab>('ingredienten');
   const [portions, setPortions] = useState(2);
   const [isFavorited, setIsFavorited] = useState(false);
+  const [favoriteCount, setFavoriteCount] = useState(0);
   const [userRating, setUserRating] = useState(0);
   const [comments, setComments] = useState<any[]>([]);
   const [commentText, setCommentText] = useState('');
@@ -264,10 +265,23 @@ export default function RecipeDetailPage() {
 
     const flatTags = (data.tags ?? []).map((rt: any) => rt.tag).filter(Boolean);
 
+    // Favorite count + user favorite status via API (bypasses RLS)
+    let fetchedFavCount = 0;
+    let fetchedIsFavorited = false;
+    try {
+      const fcRes = await fetch(`/api/recipes/${params.id}/favorite-count`);
+      if (fcRes.ok) {
+        const fcData = await fcRes.json();
+        fetchedFavCount = fcData.count ?? 0;
+        fetchedIsFavorited = fcData.is_favorited ?? false;
+      }
+    } catch {}
+
     const r: RecipeWithRelations = {
-      ...data,
+      ...(data as any),
       tags: flatTags,
       average_rating: avg,
+      favorite_count: fetchedFavCount,
       nutrition: Array.isArray(data.nutrition)
         ? data.nutrition[0] ?? null
         : data.nutrition,
@@ -284,19 +298,11 @@ export default function RecipeDetailPage() {
     setRecipe(r);
     setPortions(r.basis_porties);
     setComments(data.comments ?? []);
+    setFavoriteCount(fetchedFavCount);
+    setIsFavorited(fetchedIsFavorited);
 
-    // Check favorite
+    // Check user rating
     if (user) {
-      const { data: fav } = await supabase
-        .from('favorites')
-        .select('recipe_id')
-        .eq('recipe_id', params.id)
-        .eq('user_id', user.id)
-        .single();
-
-      setIsFavorited(!!fav);
-
-      // Check user rating
       const myRating = ratings.find((rt: any) => rt.user_id === user.id);
       if (myRating) setUserRating(myRating.sterren);
     }
@@ -349,22 +355,24 @@ export default function RecipeDetailPage() {
 
   // ── actions ────────────────────────────────────
 
-  const toggleFavorite = async () => {
+  const toggleFavorite = () => {
     if (!user) return;
 
-    if (isFavorited) {
-      await supabase
-        .from('favorites')
-        .delete()
-        .eq('recipe_id', params.id)
-        .eq('user_id', user.id);
-    } else {
-      await supabase.from('favorites').insert({
-        recipe_id: params.id,
-        user_id: user.id,
-      });
-    }
-    setIsFavorited(!isFavorited);
+    const wasLiked = isFavorited;
+    setIsFavorited(!wasLiked);
+    setFavoriteCount((c) => Math.max(0, c + (wasLiked ? -1 : 1)));
+
+    fetch(`/api/recipes/${params.id}/favorite`, {
+      method: wasLiked ? 'DELETE' : 'POST',
+    }).then((res) => {
+      if (!res.ok) {
+        setIsFavorited(wasLiked);
+        setFavoriteCount((c) => c + (wasLiked ? 1 : -1));
+      }
+    }).catch(() => {
+      setIsFavorited(wasLiked);
+      setFavoriteCount((c) => c + (wasLiked ? 1 : -1));
+    });
   };
 
   const handleRate = async (score: number) => {
@@ -408,12 +416,19 @@ export default function RecipeDetailPage() {
     const isLiked = commentLikes.has(commentId);
 
     if (isLiked) {
-      await supabase.from('comment_likes').delete()
-        .eq('comment_id', commentId).eq('user_id', user.id);
+      await fetch(`/api/recipes/${params.id}/comments/like`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ comment_id: commentId }),
+      });
       setCommentLikes((prev) => { const n = new Set(prev); n.delete(commentId); return n; });
       setComments((prev) => prev.map((c) => c.id === commentId ? { ...c, likes_count: (c.likes_count || 1) - 1 } : c));
     } else {
-      await supabase.from('comment_likes').insert({ comment_id: commentId, user_id: user.id });
+      await fetch(`/api/recipes/${params.id}/comments/like`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ comment_id: commentId }),
+      });
       setCommentLikes((prev) => new Set(prev).add(commentId));
       setComments((prev) => prev.map((c) => c.id === commentId ? { ...c, likes_count: (c.likes_count || 0) + 1 } : c));
     }
@@ -626,7 +641,7 @@ export default function RecipeDetailPage() {
         <div className="absolute right-4 top-4 flex gap-2">
           <button
             onClick={toggleFavorite}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-white/80 backdrop-blur-sm transition-colors hover:bg-white"
+            className="flex items-center gap-1 rounded-full bg-white/80 px-2.5 py-2 backdrop-blur-sm transition-colors hover:bg-white"
           >
             <Heart
               className={`h-5 w-5 ${
@@ -635,6 +650,11 @@ export default function RecipeDetailPage() {
                   : 'text-gray-600'
               }`}
             />
+            {favoriteCount > 0 && (
+              <span className="text-xs font-medium text-gray-600">
+                {favoriteCount}
+              </span>
+            )}
           </button>
           <button
             onClick={handleShare}

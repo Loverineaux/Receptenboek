@@ -108,7 +108,7 @@ export default function RecipeCard({ recipe, onFavoriteToggle, onRate, userRatin
           )}
           <button
             onClick={handleFavoriteClick}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-white/80 backdrop-blur-sm transition-colors hover:bg-white"
+            className="flex items-center gap-1 rounded-full bg-white/80 px-2 py-1.5 backdrop-blur-sm transition-colors hover:bg-white"
           >
             <Heart
               className={`h-4 w-4 transition-colors ${
@@ -117,6 +117,11 @@ export default function RecipeCard({ recipe, onFavoriteToggle, onRate, userRatin
                   : 'text-gray-600'
               }`}
             />
+            {(recipe as any).favorite_count > 0 && (
+              <span className="text-[11px] font-medium text-gray-600">
+                {(recipe as any).favorite_count}
+              </span>
+            )}
           </button>
         </div>
 

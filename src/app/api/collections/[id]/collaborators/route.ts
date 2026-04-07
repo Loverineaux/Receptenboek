@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { supabaseAdmin } from '@/lib/supabase/admin';
+import { createNotification } from '@/lib/notifications';
 
 // GET /api/collections/[id]/collaborators
 export async function GET(
@@ -85,6 +87,28 @@ export async function POST(
     }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  // ── Send notification to invited user (fire-and-forget) ──
+  const collectionId = params.id;
+  (async () => {
+    try {
+      const { data: col } = await supabaseAdmin
+        .from('collections').select('title').eq('id', collectionId).single();
+      const { data: actorProfile } = await supabaseAdmin
+        .from('profiles').select('display_name').eq('id', user.id).single();
+      const actorName = actorProfile?.display_name || 'Iemand';
+
+      await createNotification({
+        recipientId: user_id,
+        actorId: user.id,
+        type: 'collection_invite',
+        message: `${actorName} heeft je uitgenodigd als medewerker voor: ${col?.title || 'een collectie'}`,
+        link: `/collecties/${collectionId}`,
+      });
+    } catch (err) {
+      console.error('[Collaborator] Notification error:', err);
+    }
+  })();
 
   return NextResponse.json({ success: true }, { status: 201 });
 }

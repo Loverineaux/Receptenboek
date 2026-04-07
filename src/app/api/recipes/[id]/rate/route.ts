@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { supabaseAdmin } from '@/lib/supabase/admin';
+import { createNotification } from '@/lib/notifications';
 
 export async function POST(
   request: NextRequest,
@@ -59,6 +61,32 @@ export async function POST(
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
+  }
+
+  // ── Send notification on first rating (fire-and-forget) ──
+  if (!existing) {
+    const recipeId = params.id;
+    (async () => {
+      try {
+        const { data: recipe } = await supabaseAdmin
+          .from('recipes').select('user_id, title').eq('id', recipeId).single();
+        const { data: actorProfile } = await supabaseAdmin
+          .from('profiles').select('display_name').eq('id', user.id).single();
+        const actorName = actorProfile?.display_name || 'Iemand';
+
+        if (recipe) {
+          await createNotification({
+            recipientId: recipe.user_id,
+            actorId: user.id,
+            type: 'rating',
+            message: `${actorName} heeft ${recipe.title} beoordeeld met ${sterren} ${sterren === 1 ? 'ster' : 'sterren'}`,
+            link: `/recepten/${recipeId}`,
+          });
+        }
+      } catch (err) {
+        console.error('[Rating] Notification error:', err);
+      }
+    })();
   }
 
   return NextResponse.json({ success: true });

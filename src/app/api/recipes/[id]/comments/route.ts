@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { supabaseAdmin } from '@/lib/supabase/admin';
+import { createNotificationForMany } from '@/lib/notifications';
 
 // ────────────────────────────────────────────
 // GET  /api/recipes/[id]/comments
@@ -66,6 +68,45 @@ export async function POST(
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  // ── Send notifications (fire-and-forget) ──
+  const recipeId = params.id;
+  (async () => {
+    try {
+      const { data: actorProfile } = await supabaseAdmin
+        .from('profiles').select('display_name').eq('id', user.id).single();
+      const actorName = actorProfile?.display_name || 'Iemand';
+
+      const { data: recipe } = await supabaseAdmin
+        .from('recipes').select('user_id, title').eq('id', recipeId).single();
+      if (!recipe) return;
+
+      // Notify recipe owner + all previous commenters (includes reply authors)
+      const { data: previousComments } = await supabaseAdmin
+        .from('comments')
+        .select('user_id')
+        .eq('recipe_id', recipeId);
+
+      const recipientIds = new Set<string>();
+      recipientIds.add(recipe.user_id); // recipe owner
+      for (const c of previousComments ?? []) {
+        recipientIds.add(c.user_id);
+      }
+      recipientIds.delete(user.id); // exclude actor
+
+      if (recipientIds.size > 0) {
+        await createNotificationForMany(
+          Array.from(recipientIds),
+          user.id,
+          'comment',
+          `${actorName} heeft een reactie geplaatst op: ${recipe.title}`,
+          `/recepten/${recipeId}`,
+        );
+      }
+    } catch (err) {
+      console.error('[Comments] Notification error:', err);
+    }
+  })();
 
   return NextResponse.json({ comment: data }, { status: 201 });
 }

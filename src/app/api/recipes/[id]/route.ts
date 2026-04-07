@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 
 // ────────────────────────────────────────────
 // GET  /api/recipes/[id]
@@ -40,10 +41,17 @@ export async function GET(
 
   const flatTags = (data.tags ?? []).map((rt: any) => rt.tag).filter(Boolean);
 
+  // Favorite count via admin (bypasses RLS)
+  const { count: favoriteCount } = await supabaseAdmin
+    .from('favorites')
+    .select('*', { count: 'exact', head: true })
+    .eq('recipe_id', params.id);
+
   const recipe = {
     ...data,
     tags: flatTags,
     average_rating: avg,
+    favorite_count: favoriteCount ?? 0,
     nutrition: Array.isArray(data.nutrition)
       ? data.nutrition[0] ?? null
       : data.nutrition,

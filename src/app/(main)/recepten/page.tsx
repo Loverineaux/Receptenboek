@@ -178,7 +178,7 @@ export default function ReceptenPage() {
           filtered.sort((a, b) => b.title.localeCompare(a.title, 'nl'));
         }
 
-        // Check favorites
+        // Check favorites + counts
         if (user) {
           const { data: favs } = await supabase
             .from('favorites')
@@ -186,9 +186,26 @@ export default function ReceptenPage() {
             .eq('user_id', user.id);
 
           const favIds = new Set((favs ?? []).map((f: any) => f.recipe_id));
+
+          // Fetch favorite counts in bulk
+          let favCounts: Record<string, number> = {};
+          try {
+            const ids = filtered.map((r) => r.id);
+            const fcRes = await fetch('/api/recipes/favorite-counts', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ recipe_ids: ids }),
+            });
+            if (fcRes.ok) {
+              const fcData = await fcRes.json();
+              favCounts = fcData.counts ?? {};
+            }
+          } catch {}
+
           filtered = filtered.map((r) => ({
             ...r,
             is_favorited: favIds.has(r.id),
+            favorite_count: favCounts[r.id] || 0,
           }));
         }
 
@@ -268,27 +285,40 @@ export default function ReceptenPage() {
     });
   };
 
-  const handleFavoriteToggle = async (recipeId: string, isFavorited: boolean) => {
+  const handleFavoriteToggle = (recipeId: string, isFavorited: boolean) => {
     if (!user) return;
 
-    if (isFavorited) {
-      await supabase.from('favorites').insert({
-        recipe_id: recipeId,
-        user_id: user.id,
-      });
-    } else {
-      await supabase
-        .from('favorites')
-        .delete()
-        .eq('recipe_id', recipeId)
-        .eq('user_id', user.id);
-    }
-
+    // Optimistic update: instant UI change including count
     setRecipes((prev) =>
       prev.map((r) =>
-        r.id === recipeId ? { ...r, is_favorited: isFavorited } : r
+        r.id === recipeId
+          ? {
+              ...r,
+              is_favorited: isFavorited,
+              favorite_count: Math.max(0, ((r as any).favorite_count || 0) + (isFavorited ? 1 : -1)),
+            }
+          : r
       )
     );
+
+    // Fire-and-forget API call, rollback on failure
+    fetch(`/api/recipes/${recipeId}/favorite`, {
+      method: isFavorited ? 'POST' : 'DELETE',
+    }).then((res) => {
+      if (!res.ok) {
+        setRecipes((prev) =>
+          prev.map((r) =>
+            r.id === recipeId
+              ? {
+                  ...r,
+                  is_favorited: !isFavorited,
+                  favorite_count: Math.max(0, ((r as any).favorite_count || 0) + (isFavorited ? -1 : 1)),
+                }
+              : r
+          )
+        );
+      }
+    });
   };
 
   return (

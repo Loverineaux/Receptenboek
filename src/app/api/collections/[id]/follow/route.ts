@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { supabaseAdmin } from '@/lib/supabase/admin';
+import { createNotification } from '@/lib/notifications';
 
 // POST /api/collections/[id]/follow — follow a collection
 export async function POST(
@@ -40,6 +42,30 @@ export async function POST(
     }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  // ── Send notification (fire-and-forget) ──
+  const collectionId = params.id;
+  (async () => {
+    try {
+      const { data: col } = await supabaseAdmin
+        .from('collections').select('user_id, title').eq('id', collectionId).single();
+      const { data: actorProfile } = await supabaseAdmin
+        .from('profiles').select('display_name').eq('id', user.id).single();
+      const actorName = actorProfile?.display_name || 'Iemand';
+
+      if (col) {
+        await createNotification({
+          recipientId: col.user_id,
+          actorId: user.id,
+          type: 'collection_follow',
+          message: `${actorName} volgt nu je collectie: ${col.title}`,
+          link: `/collecties/${collectionId}`,
+        });
+      }
+    } catch (err) {
+      console.error('[Follow] Notification error:', err);
+    }
+  })();
 
   return NextResponse.json({ success: true }, { status: 201 });
 }

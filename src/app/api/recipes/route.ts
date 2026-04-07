@@ -168,6 +168,19 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  // Fetch favorite counts in bulk via admin (bypasses RLS)
+  const recipeIds = (data ?? []).map((r: any) => r.id);
+  const favCountMap: Record<string, number> = {};
+  if (recipeIds.length > 0) {
+    const { data: favRows } = await supabaseAdmin
+      .from('favorites')
+      .select('recipe_id')
+      .in('recipe_id', recipeIds);
+    for (const f of favRows ?? []) {
+      favCountMap[f.recipe_id] = (favCountMap[f.recipe_id] || 0) + 1;
+    }
+  }
+
   // Post-process: compute average rating, flatten tags
   const recipes = (data ?? []).map((r: any) => {
     const ratings = r.ratings ?? [];
@@ -184,6 +197,7 @@ export async function GET(request: NextRequest) {
       ...r,
       tags: flatTags,
       average_rating: avg,
+      favorite_count: favCountMap[r.id] || 0,
       nutrition: Array.isArray(r.nutrition) ? r.nutrition[0] ?? null : r.nutrition,
     };
   });
