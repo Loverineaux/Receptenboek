@@ -2,8 +2,9 @@
 
 import { useState, FormEvent } from 'react'
 import Link from 'next/link'
-import { Mail, Lock, User } from 'lucide-react'
+import { Mail, Lock, User, Eye, EyeOff } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { translateAuthError } from '@/lib/auth-errors'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 
@@ -17,6 +18,7 @@ export default function RegisterPage() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -46,12 +48,7 @@ export default function RegisterPage() {
     })
 
     if (error) {
-      // Map common English errors to Dutch
-      if (error.message.toLowerCase().includes('rate limit')) {
-        setError('Te veel pogingen. Probeer het later opnieuw.')
-      } else {
-        setError(error.message)
-      }
+      setError(translateAuthError(error.message))
     } else if (data.user && data.user.identities?.length === 0) {
       // Supabase returns a fake success when email already exists
       setError('Er bestaat al een account met dit e-mailadres. Probeer in te loggen.')
@@ -129,17 +126,27 @@ export default function RegisterPage() {
 
             <Input
               label="Wachtwoord"
-              type="password"
+              type={showPassword ? 'text' : 'password'}
               placeholder="Minimaal 6 tekens"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               icon={<Lock className="h-4 w-4" />}
+              endIcon={
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="text-text-muted hover:text-text-primary"
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              }
               required
             />
 
             <Input
               label="Bevestig wachtwoord"
-              type="password"
+              type={showPassword ? 'text' : 'password'}
               placeholder="Herhaal wachtwoord"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}

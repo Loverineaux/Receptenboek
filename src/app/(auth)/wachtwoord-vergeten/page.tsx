@@ -4,6 +4,7 @@ import { useState, FormEvent } from 'react'
 import Link from 'next/link'
 import { Mail, ArrowLeft } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
+import { translateAuthError } from '@/lib/auth-errors'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 
@@ -23,7 +24,7 @@ export default function WachtwoordVergetenPage() {
     const { error } = await resetPassword(email)
 
     if (error) {
-      setError(error.message)
+      setError(translateAuthError(error.message))
     } else {
       setSuccess(true)
     }

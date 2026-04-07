@@ -3,8 +3,9 @@
 import { useState, FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Mail, Lock } from 'lucide-react'
+import { Mail, Lock, Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
+import { translateAuthError } from '@/lib/auth-errors'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 
@@ -16,6 +17,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -29,7 +31,7 @@ export default function LoginPage() {
 
       if (error) {
         console.error('[Login] Auth error:', error.message, error.status, error)
-        setError(error.message)
+        setError(translateAuthError(error.message))
       } else {
         console.log('[Login] Success, redirecting to /recepten')
         router.push('/recepten')
@@ -48,7 +50,7 @@ export default function LoginPage() {
     setError(null)
     const { error } = await signInWithGoogle()
     if (error) {
-      setError(error.message)
+      setError(translateAuthError(error.message))
     }
   }
 
@@ -82,11 +84,21 @@ export default function LoginPage() {
 
             <Input
               label="Wachtwoord"
-              type="password"
+              type={showPassword ? 'text' : 'password'}
               placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               icon={<Lock className="h-4 w-4" />}
+              endIcon={
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="text-text-muted hover:text-text-primary"
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              }
               required
             />
 
