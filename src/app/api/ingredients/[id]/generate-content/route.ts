@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import Anthropic from '@anthropic-ai/sdk';
 
@@ -6,9 +7,19 @@ export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  // Auth check
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return new Response(JSON.stringify({ error: 'Niet ingelogd' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   const { id } = params;
 
-  // 1. Fetch ingredient
+  // Fetch ingredient
   const { data: ingredient, error } = await supabaseAdmin
     .from('generic_ingredients')
     .select('*')
@@ -16,7 +27,7 @@ export async function POST(
     .single();
 
   if (error || !ingredient) {
-    return new Response(JSON.stringify({ error: 'Ingredient not found' }), {
+    return new Response(JSON.stringify({ error: 'Ingrediënt niet gevonden' }), {
       status: 404,
       headers: { 'Content-Type': 'application/json' },
     });
@@ -28,13 +39,23 @@ export async function POST(
   const stream = new ReadableStream({
     async start(controller) {
       const send = (data: any) => {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+        try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+        } catch {
+          // Controller already closed
+        }
       };
+
+      // Timeout after 60 seconds
+      const timeout = setTimeout(() => {
+        send({ type: 'error', message: 'Het genereren duurde te lang. Probeer het opnieuw.' });
+        try { controller.close(); } catch {}
+      }, 60000);
 
       try {
         send({ type: 'status', message: `Informatie opzoeken over "${ingredient.name}"...` });
 
-        // 2. First call: research the ingredient with web search
+        // Step 1: Research with web search
         const researchResponse = await client.messages.create({
           model: 'claude-sonnet-4-6',
           max_tokens: 4096,
@@ -68,13 +89,12 @@ Geef alle informatie zo volledig en feitelijk mogelijk.`,
 
         send({ type: 'status', message: `Informatie structureren...` });
 
-        // Extract text from research response
         const researchText = researchResponse.content
           .filter((b) => b.type === 'text')
           .map((b) => (b as any).text)
           .join('\n');
 
-        // 3. Second call: structure the research into JSON
+        // Step 2: Structure as JSON
         const structureResponse = await client.messages.create({
           model: 'claude-sonnet-4-6',
           max_tokens: 2048,
@@ -111,11 +131,12 @@ Antwoord ALLEEN met de JSON, geen markdown codeblocks of andere tekst.`,
           .join('')
           .trim();
 
-        // 4. Parse JSON
+        // Step 3: Parse JSON
         const jsonMatch = structuredText.match(/\{[\s\S]*\}/);
         if (!jsonMatch) {
           send({ type: 'error', message: 'Kon geen JSON-structuur herkennen in het antwoord.' });
-          controller.close();
+          clearTimeout(timeout);
+          try { controller.close(); } catch {}
           return;
         }
 
@@ -123,7 +144,7 @@ Antwoord ALLEEN met de JSON, geen markdown codeblocks of andere tekst.`,
 
         send({ type: 'status', message: `Opslaan...` });
 
-        // 5. Update the generic_ingredients record
+        // Step 4: Save to database
         const updateData: Record<string, unknown> = {
           description: parsed.description ?? null,
           origin: parsed.origin ?? null,
@@ -147,16 +168,15 @@ Antwoord ALLEEN met de JSON, geen markdown codeblocks of andere tekst.`,
 
         if (updateError) {
           send({ type: 'error', message: `Fout bij opslaan: ${updateError.message}` });
-          controller.close();
-          return;
+        } else {
+          send({ type: 'complete', ingredient: updated });
         }
-
-        send({ type: 'complete', ingredient: updated });
       } catch (err: any) {
-        send({ type: 'error', message: err.message || 'Onbekende fout' });
+        send({ type: 'error', message: err.message || 'Onbekende fout bij het genereren van informatie' });
+      } finally {
+        clearTimeout(timeout);
+        try { controller.close(); } catch {}
       }
-
-      controller.close();
     },
   });
 

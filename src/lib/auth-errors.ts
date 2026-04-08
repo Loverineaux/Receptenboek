@@ -31,9 +31,13 @@ const AUTH_ERROR_MAP: Record<string, string> = {
   'Email rate limit exceeded':
     'Te veel verzoeken. Probeer het later opnieuw.',
 
-  // Banned (deleted account fallback)
+  // Banned/blocked
   'User is banned':
-    'Dit account is verwijderd. Je kunt opnieuw registreren met hetzelfde e-mailadres.',
+    'Je account is geblokkeerd door een beheerder. Neem contact op als je denkt dat dit een vergissing is.',
+
+  // Session
+  'Auth session missing!':
+    'Je sessie is verlopen. Vraag een nieuwe wachtwoord reset e-mail aan.',
 
   // General
   'Request timeout':
@@ -49,7 +53,7 @@ export function translateAuthError(message: string): string {
   if (lower.includes('rate limit')) return 'Te veel verzoeken. Probeer het later opnieuw.';
   if (lower.includes('email not confirmed')) return 'Je e-mailadres is nog niet bevestigd. Check je inbox.';
   if (lower.includes('invalid login')) return 'Ongeldig e-mailadres of wachtwoord.';
-  if (lower.includes('banned')) return 'Dit account is verwijderd. Je kunt opnieuw registreren met hetzelfde e-mailadres.';
+  if (lower.includes('banned')) return 'Je account is geblokkeerd door een beheerder. Neem contact op als je denkt dat dit een vergissing is.';
 
   return message;
 }

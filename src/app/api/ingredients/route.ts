@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
   const search = searchParams.get('search') || '';
   const category = searchParams.get('category') || '';
   const offset = parseInt(searchParams.get('offset') || '0', 10);
-  const limit = parseInt(searchParams.get('limit') || '50', 10);
+  const limit = parseInt(searchParams.get('limit') || '200', 10);
 
   let query = supabaseAdmin
     .from('generic_ingredients')
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'An ingredient with this name already exists' }, { status: 409 });
   }
 
-  const insertData: Record<string, unknown> = { name: name.trim() };
+  const insertData: Record<string, unknown> = { name: name.trim(), created_by: user.id };
   if (name_plural !== undefined) insertData.name_plural = name_plural;
   if (category !== undefined) insertData.category = category;
   if (aliases !== undefined) insertData.aliases = aliases;

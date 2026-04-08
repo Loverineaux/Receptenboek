@@ -2,12 +2,16 @@
 
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
-import { Pencil, X, Check, Loader2, Camera } from 'lucide-react';
+import { Pencil, X, Check, Loader2, Camera, Trash2, ArrowRightLeft } from 'lucide-react';
 import type { Product } from '@/types';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
 
 interface ProductCardProps {
   product: Product;
   onUpdated?: (product: Product) => void;
+  onDeleted?: (productId: string) => void;
+  onTransfer?: (productId: string) => void;
+  canEdit?: boolean;
 }
 
 function ImageLightbox({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
@@ -36,11 +40,13 @@ const SOURCE_STYLES: Record<Product['source'], { label: string; className: strin
   user_photo: { label: 'Foto', className: 'bg-purple-100 text-purple-700' },
 };
 
-export default function ProductCard({ product: initialProduct, onUpdated }: ProductCardProps) {
+export default function ProductCard({ product: initialProduct, onUpdated, onDeleted, onTransfer, canEdit = true }: ProductCardProps) {
   const [product, setProduct] = useState(initialProduct);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [form, setForm] = useState({
     product_name: '', brand: '', image_url: '', kcal: '', protein: '', fat: '',
     saturated_fat: '', carbs: '', sugars: '', fiber: '', salt: '',
@@ -211,9 +217,21 @@ export default function ProductCard({ product: initialProduct, onUpdated }: Prod
             </span>
           </div>
         </div>
-        <button onClick={startEdit} className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-text-muted transition-colors hover:bg-gray-100 hover:text-text-primary" title="Bewerken">
-          <Pencil size={12} />
-        </button>
+        {canEdit && (
+          <div className="flex flex-shrink-0 gap-1">
+            {onTransfer && (
+              <button onClick={() => onTransfer(product.id)} className="flex h-7 w-7 items-center justify-center rounded-full text-text-muted transition-colors hover:bg-blue-50 hover:text-blue-500" title="Verplaats naar ander ingrediënt">
+                <ArrowRightLeft size={12} />
+              </button>
+            )}
+            <button onClick={startEdit} className="flex h-7 w-7 items-center justify-center rounded-full text-text-muted transition-colors hover:bg-gray-100 hover:text-text-primary" title="Bewerken">
+              <Pencil size={12} />
+            </button>
+            <button onClick={() => setConfirmDelete(true)} className="flex h-7 w-7 items-center justify-center rounded-full text-text-muted transition-colors hover:bg-red-50 hover:text-red-500" title="Verwijderen">
+              <Trash2 size={12} />
+            </button>
+          </div>
+        )}
       </div>
 
       {(product.kcal != null || product.protein != null || product.fat != null || product.carbs != null) && (
@@ -227,6 +245,24 @@ export default function ProductCard({ product: initialProduct, onUpdated }: Prod
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Product verwijderen"
+        message={`Weet je zeker dat je "${product.product_name}" wilt verwijderen? De voedingswaarden van het ingrediënt worden herberekend.`}
+        variant="danger"
+        confirmLabel="Verwijderen"
+        onConfirm={async () => {
+          setConfirmDelete(false);
+          setDeleting(true);
+          const res = await fetch(`/api/products/${product.id}`, { method: 'DELETE' });
+          if (res.ok) {
+            onDeleted?.(product.id);
+          }
+          setDeleting(false);
+        }}
+        onCancel={() => setConfirmDelete(false)}
+      />
     </div>
   );
 }

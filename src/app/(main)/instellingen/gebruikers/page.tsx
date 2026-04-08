@@ -28,10 +28,6 @@ function timeAgo(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-function memberSince(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('nl-NL', { month: 'long', year: 'numeric' });
-}
-
 export default function GebruikersPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
@@ -177,7 +173,7 @@ export default function GebruikersPage() {
                   )}
                   <span className="flex items-center gap-1">
                     <CalendarDays className="h-3 w-3" />
-                    Lid sinds {memberSince(u.created_at)}
+                    Lid sinds {new Date(u.created_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' })}
                   </span>
                   {u.last_seen && (
                     <span className="flex items-center gap-1">

@@ -19,18 +19,29 @@ export default function ResetPasswordPage() {
   const [submitting, setSubmitting] = useState(false);
   const [sessionReady, setSessionReady] = useState(false);
 
-  // Supabase automatically picks up the token from the URL hash and creates a session
+  // Check for existing session
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY') {
-        setSessionReady(true);
-      }
-    });
-
-    // Also check if we already have a session (in case event already fired)
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session) setSessionReady(true);
     });
+
+    // Try multiple ways to detect the session
+    const checkSession = async () => {
+      // 1. Check getUser (uses cookies)
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) { setSessionReady(true); return; }
+
+      // 2. Try getSession
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) { setSessionReady(true); return; }
+
+      // 3. Retry after a short delay (cookies might not be set yet)
+      setTimeout(async () => {
+        const { data: { user: u2 } } = await supabase.auth.getUser();
+        if (u2) setSessionReady(true);
+      }, 1000);
+    };
+    checkSession();
 
     return () => subscription.unsubscribe();
   }, [supabase]);

@@ -4,10 +4,11 @@ import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  ChefHat, User, LogOut, Settings,
+  ChefHat, User, LogOut, Settings, ShieldAlert,
   BookOpen, Soup, FolderOpen, Heart, Apple,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { useAdmin } from '@/hooks/useAdmin';
 import NotificationBell from '@/components/notifications/NotificationBell';
 
 const navLinks = [
@@ -20,6 +21,7 @@ const navLinks = [
 
 export default function Header() {
   const { user, profile, signOut } = useAuth();
+  const { isAdmin } = useAdmin();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
@@ -78,15 +80,20 @@ export default function Header() {
                   onClick={() => setUserMenuOpen(!userMenuOpen)}
                   className="flex items-center gap-2 rounded-full py-1 pl-1 pr-1 transition-colors hover:bg-gray-100 md:pr-3"
                 >
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-light text-primary md:h-9 md:w-9">
+                  <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-light text-primary md:h-9 md:w-9">
                     {profile?.avatar_url ? (
                       <img
                         src={profile.avatar_url}
                         alt={profile.display_name || ''}
-                        className="h-full w-full object-cover"
+                        className="h-full w-full rounded-full object-cover"
                       />
                     ) : (
                       <User className="h-4 w-4 md:h-5 md:w-5" />
+                    )}
+                    {isAdmin && (
+                      <div className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[8px] font-bold text-white ring-2 ring-surface">
+                        <ShieldAlert className="h-2.5 w-2.5" />
+                      </div>
                     )}
                   </div>
                   <span className="hidden text-sm font-medium text-text-primary md:inline">
@@ -110,6 +117,16 @@ export default function Header() {
                       <Settings className="h-4 w-4" />
                       Instellingen
                     </Link>
+                    {isAdmin && (
+                      <Link
+                        href="/admin"
+                        className="flex items-center gap-2 px-4 py-2 text-sm text-primary hover:bg-primary/5"
+                        onClick={() => setUserMenuOpen(false)}
+                      >
+                        <ShieldAlert className="h-4 w-4" />
+                        Admin
+                      </Link>
+                    )}
                     <button
                       type="button"
                       className="flex w-full items-center gap-2 px-4 py-2 text-sm text-text-secondary hover:bg-gray-50"

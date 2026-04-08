@@ -15,14 +15,27 @@ const bronStyles: Record<string, { bg: string; text: string }> = {
   ah: { bg: '#e3f2fd', text: '#1565c0' },
 };
 
-// Generate a consistent color from bron name for unknown sources
+// Predefined distinct colors for unknown sources — cycles through these to avoid similar hues
+const DISTINCT_COLORS = [
+  { bg: '#fce4ec', text: '#ad1457' }, // roze
+  { bg: '#e8eaf6', text: '#283593' }, // indigo
+  { bg: '#fff3e0', text: '#e65100' }, // oranje
+  { bg: '#e0f2f1', text: '#00695c' }, // teal
+  { bg: '#f3e5f5', text: '#7b1fa2' }, // paars
+  { bg: '#fffde7', text: '#f57f17' }, // geel
+  { bg: '#efebe9', text: '#4e342e' }, // bruin
+  { bg: '#e1f5fe', text: '#0277bd' }, // lichtblauw
+  { bg: '#fbe9e7', text: '#bf360c' }, // dieporanje
+  { bg: '#e8f5e9', text: '#2e7d32' }, // groen
+];
+
 function hashColor(str: string): { bg: string; text: string } {
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
     hash = str.charCodeAt(i) + ((hash << 5) - hash);
   }
-  const hue = ((hash % 360) + 360) % 360;
-  return { bg: `hsl(${hue}, 60%, 92%)`, text: `hsl(${hue}, 60%, 30%)` };
+  const idx = ((hash % DISTINCT_COLORS.length) + DISTINCT_COLORS.length) % DISTINCT_COLORS.length;
+  return DISTINCT_COLORS[idx];
 }
 
 const defaultStyle = { bg: '#f1f5f9', text: '#475569' };

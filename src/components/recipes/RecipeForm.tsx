@@ -199,7 +199,9 @@ export default function RecipeForm({ initialData, onSubmit }: RecipeFormProps) {
 
   const [tags, setTags] = useState<string[]>(() => {
     if (isFullRecipe && (initialData as RecipeWithRelations).tags) {
-      return (initialData as RecipeWithRelations).tags.map((t) => t.name);
+      return (initialData as RecipeWithRelations).tags.map((t: any) =>
+        typeof t === 'string' ? t : t.name
+      ).filter(Boolean);
     }
     if (initialData && 'tags' in initialData && Array.isArray((initialData as ExtractedRecipe).tags)) {
       return (initialData as ExtractedRecipe).tags;

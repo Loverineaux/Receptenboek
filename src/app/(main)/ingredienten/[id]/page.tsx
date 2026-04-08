@@ -3,9 +3,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { ArrowLeft, Sparkles, Loader2, Pencil, X, Check, Camera } from 'lucide-react';
+import { ArrowLeft, Sparkles, Loader2, Pencil, X, Check, Camera, Search } from 'lucide-react';
 import ProductCard from '@/components/ingredients/ProductCard';
-import type { GenericIngredientWithProducts } from '@/types';
+import Modal from '@/components/ui/Modal';
+import { useAuth } from '@/hooks/useAuth';
+import { useAdmin } from '@/hooks/useAdmin';
+import { supabaseAdmin } from '@/lib/supabase/admin';
+import { createClient } from '@/lib/supabase/client';
+import type { GenericIngredientWithProducts, GenericIngredient } from '@/types';
 
 // ── Category emoji mapping (same as IngredientCard) ──
 
@@ -54,10 +59,19 @@ function InfoBlock({ title, content }: { title: string; content: string | null }
 export default function IngredientDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const { user } = useAuth();
+  const { isAdmin: isAdminUser } = useAdmin();
 
   const [ingredient, setIngredient] = useState<GenericIngredientWithProducts | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Transfer product state
+  const [transferProductId, setTransferProductId] = useState<string | null>(null);
+  const [transferSearch, setTransferSearch] = useState('');
+  const [transferResults, setTransferResults] = useState<GenericIngredient[]>([]);
+  const [transferring, setTransferring] = useState(false);
+  const supabaseClient = createClient();
 
   // Generate-content state
   const [generating, setGenerating] = useState(false);
@@ -120,6 +134,42 @@ export default function IngredientDetailPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  // ── Transfer product search ──
+  useEffect(() => {
+    if (!transferProductId || transferSearch.length < 1) { setTransferResults([]); return; }
+    const timer = setTimeout(async () => {
+      const { data } = await supabaseClient
+        .from('generic_ingredients')
+        .select('id, name, category')
+        .ilike('name', `%${transferSearch}%`)
+        .neq('id', id) // exclude current ingredient
+        .limit(10);
+      setTransferResults((data ?? []) as GenericIngredient[]);
+    }, 300);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transferSearch, transferProductId]);
+
+  const handleTransfer = async (targetIngredientId: string) => {
+    if (!transferProductId) return;
+    setTransferring(true);
+    const res = await fetch(`/api/products/${transferProductId}/link`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ generic_ingredient_id: targetIngredientId }),
+    });
+    if (res.ok) {
+      // Remove product from current ingredient's list
+      setIngredient((prev) => prev ? {
+        ...prev,
+        products: prev.products.filter((p) => p.id !== transferProductId),
+      } : null);
+      setTransferProductId(null);
+      setTransferSearch('');
+    }
+    setTransferring(false);
   };
 
   // ── Fetch ingredient data ──
@@ -302,13 +352,15 @@ export default function IngredientDetailPage() {
                 </p>
               )}
             </div>
-            <button
-              onClick={startEditing}
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-text-muted transition-colors hover:bg-gray-200 hover:text-text-primary"
-              title="Bewerken"
-            >
-              <Pencil size={14} />
-            </button>
+            {(isAdminUser || ingredient.created_by === user?.id) && (
+              <button
+                onClick={startEditing}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-text-muted transition-colors hover:bg-gray-200 hover:text-text-primary"
+                title="Bewerken"
+              >
+                <Pencil size={14} />
+              </button>
+            )}
           </div>
         </div>
       ) : (
@@ -558,7 +610,22 @@ export default function IngredientDetailPage() {
         {ingredient.products.length > 0 ? (
           <div className="flex flex-col gap-3">
             {ingredient.products.map((product) => (
-              <ProductCard key={product.id} product={product} />
+              <ProductCard
+                key={product.id}
+                product={product}
+                canEdit={isAdminUser || product.scanned_by === user?.id}
+                onDeleted={(pid) => {
+                  setIngredient((prev) => prev ? {
+                    ...prev,
+                    products: prev.products.filter((p) => p.id !== pid),
+                  } : null);
+                }}
+                onTransfer={(isAdminUser || product.scanned_by === user?.id) ? (pid) => {
+                  setTransferProductId(pid);
+                  setTransferSearch('');
+                  setTransferResults([]);
+                } : undefined}
+              />
             ))}
           </div>
         ) : (
@@ -580,6 +647,49 @@ export default function IngredientDetailPage() {
           </p>
         </section>
       )}
+
+      {/* Transfer product modal */}
+      <Modal
+        open={!!transferProductId}
+        onClose={() => setTransferProductId(null)}
+        title="Product verplaatsen"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-text-secondary">
+            Kies het ingrediënt waar je dit product naartoe wilt verplaatsen.
+          </p>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
+            <input
+              type="text"
+              value={transferSearch}
+              onChange={(e) => setTransferSearch(e.target.value)}
+              placeholder="Zoek ingrediënt..."
+              className="w-full rounded-xl border border-gray-200 bg-surface py-2.5 pl-10 pr-4 text-sm text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              autoFocus
+            />
+          </div>
+          <div className="max-h-48 overflow-y-auto">
+            {transferResults.map((ing) => (
+              <button
+                key={ing.id}
+                onClick={() => handleTransfer(ing.id)}
+                disabled={transferring}
+                className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-gray-50 disabled:opacity-50"
+              >
+                <span className="text-lg">{CATEGORY_EMOJI[(ing.category || '').toLowerCase()] || '🍽️'}</span>
+                <span className="text-sm font-medium text-text-primary">{ing.name}</span>
+                {ing.category && (
+                  <span className="ml-auto text-xs text-text-muted">{ing.category}</span>
+                )}
+              </button>
+            ))}
+            {transferSearch.length > 0 && transferResults.length === 0 && (
+              <p className="py-4 text-center text-sm text-text-muted">Geen ingrediënten gevonden</p>
+            )}
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

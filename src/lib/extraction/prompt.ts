@@ -9,6 +9,18 @@ REGELS:
 - Als er een korte introductietekst of verhaaltje bij het recept staat, gebruik die als "subtitle".
 - Retourneer UITSLUITEND geldig JSON. Geen uitleg, geen markdown, geen extra tekst. Alleen het JSON-object.
 
+BELANGRIJK voor ingrediënten:
+- Standaardiseer ALTIJD afkortingen naar voluit geschreven eenheden: "gr." / "g" → "gram", "ml." → "ml", "el" → "el", "tl" → "tl", "sn." → "snuf"
+- "snuf", "snufje", "mespuntje" → eenheid: "snuf"
+- "bos", "bosje" → eenheid: "bos"
+- "teen", "teentje" → eenheid: "teen"
+- "scheutje", "scheut" → eenheid: "scheut"
+- "handvol", "handje" → eenheid: "handvol"
+- "naar smaak" → hoeveelheid: null, eenheid: null, voeg "naar smaak" toe aan de naam
+- Splits altijd correct: "200 gr. pasta" → hoeveelheid: "200", eenheid: "gram", naam: "pasta"
+- "1 snuf peper" → hoeveelheid: "1", eenheid: "snuf", naam: "peper"
+- "2 teentjes knoflook" → hoeveelheid: "2", eenheid: "teen", naam: "knoflook"
+
 JSON SCHEMA:
 {
   "title": "string (verplicht)",
@@ -23,9 +35,9 @@ JSON SCHEMA:
   "allergenen": "string | null",
   "ingredients": [
     {
-      "hoeveelheid": "string | null",
-      "eenheid": "string | null",
-      "naam": "string (verplicht)"
+      "hoeveelheid": "string | null (het getal, bijv. '400', '3', '½')",
+      "eenheid": "string | null (gestandaardiseerd: gram, ml, el, tl, stuk, snuf, bos, teen, schijf, plak, blik, zakje, kopje — NIET afkortingen als 'gr.' of 'g')",
+      "naam": "string (verplicht, alleen de naam zonder hoeveelheid/eenheid)"
     }
   ],
   "steps": [

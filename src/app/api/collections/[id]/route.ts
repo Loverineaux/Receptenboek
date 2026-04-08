@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { isAdmin } from '@/lib/admin';
 
 // GET /api/collections/[id] — collection with all recipes
 export async function GET(
@@ -130,16 +131,18 @@ export async function PUT(
   const body = await request.json();
   const { title, description } = body;
 
-  const { data, error } = await supabase
+  const admin = await isAdmin(supabase);
+  let query = supabase
     .from('collections')
     .update({
       ...(title !== undefined && { title: title.trim() }),
       ...(description !== undefined && { description: description?.trim() || null }),
     })
-    .eq('id', params.id)
-    .eq('user_id', user.id)
-    .select()
-    .single();
+    .eq('id', params.id);
+
+  if (!admin) query = query.eq('user_id', user.id);
+
+  const { data, error } = await query.select().single();
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -162,11 +165,15 @@ export async function DELETE(
     return NextResponse.json({ error: 'Niet ingelogd' }, { status: 401 });
   }
 
-  const { error } = await supabase
+  const admin = await isAdmin(supabase);
+  let query = supabase
     .from('collections')
     .delete()
-    .eq('id', params.id)
-    .eq('user_id', user.id);
+    .eq('id', params.id);
+
+  if (!admin) query = query.eq('user_id', user.id);
+
+  const { error } = await query;
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

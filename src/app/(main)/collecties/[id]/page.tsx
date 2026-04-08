@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Pencil, Share2, Trash2, User, Users, X as XIcon, Copy, UserPlus, Info } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { useAdmin } from '@/hooks/useAdmin';
 import { createClient } from '@/lib/supabase/client';
 import RecipeCard from '@/components/recipes/RecipeCard';
 import Button from '@/components/ui/Button';
@@ -47,8 +48,9 @@ export default function CollectionDetailPage() {
   const [removeRecipeId, setRemoveRecipeId] = useState<string | null>(null);
 
   const collectionRecipeIds = useCollectionRecipeIds();
+  const { isAdmin: isAdminUser } = useAdmin();
   const isOwner = user && collection?.user_id === user.id;
-  const canEdit = isOwner || isCollaborator;
+  const canEdit = isOwner || isCollaborator || isAdminUser;
 
   const fetchCollection = useCallback(async () => {
     const res = await fetch(`/api/collections/${params.id}`);
@@ -391,7 +393,7 @@ export default function CollectionDetailPage() {
               <Share2 className="h-4 w-4" />
               Delen
             </Button>
-            {isOwner && (
+            {(isOwner || isAdminUser) && (
               <>
                 <Button variant="ghost" size="sm" onClick={() => setCollabModalOpen(true)}>
                   <UserPlus className="h-4 w-4" />

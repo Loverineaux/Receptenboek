@@ -32,6 +32,7 @@ import RecipeChat, { type ChatMessage } from '@/components/recipes/RecipeChat';
 import AddToCollectionModal from '@/components/recipes/AddToCollectionModal';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import ShareModal from '@/components/ui/ShareModal';
+import { useAdmin } from '@/hooks/useAdmin';
 import type { RecipeWithRelations, Comment as CommentType } from '@/types';
 
 // ── fraction parsing + formatting ────────────────
@@ -199,6 +200,7 @@ export default function RecipeDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const { user } = useAuth();
+  const { isAdmin: isAdminUser } = useAdmin();
   const supabase = createClient();
 
   const [recipe, setRecipe] = useState<RecipeWithRelations | null>(null);
@@ -580,6 +582,7 @@ export default function RecipeDetailPage() {
   // ── derived values ─────────────────────────────
 
   const isOwner = user?.id === recipe.user_id;
+  const canEdit = isOwner || isAdminUser;
   const ratio = portions / recipe.basis_porties;
 
   const tabs: { key: Tab; label: string }[] = [
@@ -695,7 +698,7 @@ export default function RecipeDetailPage() {
 
         {/* Tags — owner can edit category tags */}
         <div className="mt-3 flex flex-wrap gap-2">
-          {isOwner ? (
+          {canEdit ? (
             <>
               {CATEGORY_LIST.map((cat) => {
                 const hasTag = recipe.tags.some((t) => t.name.toLowerCase() === cat.toLowerCase());
@@ -704,28 +707,17 @@ export default function RecipeDetailPage() {
                     key={cat}
                     type="button"
                     onClick={async () => {
-                      if (hasTag) {
-                        // Remove tag
-                        const tag = recipe.tags.find((t) => t.name.toLowerCase() === cat.toLowerCase());
-                        if (tag) {
-                          await supabase.from('recipe_tags').delete()
-                            .eq('recipe_id', recipe.id).eq('tag_id', tag.id);
-                        }
-                      } else {
-                        // Add tag — first find existing, then create if needed
-                        let { data: tag } = await supabase.from('tags')
-                          .select('id').eq('name', cat).single();
-                        if (!tag) {
-                          const { data: newTag } = await supabase.from('tags')
-                            .insert({ name: cat }).select().single();
-                          tag = newTag;
-                        }
-                        if (tag) {
-                          const { error } = await supabase.from('recipe_tags')
-                            .insert({ recipe_id: recipe.id, tag_id: tag.id });
-                          if (error) console.error('recipe_tags insert error:', error.message);
-                        }
-                      }
+                      // Toggle tag via API (handles RLS for admin)
+                      const currentTags = recipe.tags.map((t) => t.name);
+                      const newTags = hasTag
+                        ? currentTags.filter((t) => t.toLowerCase() !== cat.toLowerCase())
+                        : [...currentTags, cat];
+
+                      await fetch(`/api/recipes/${recipe.id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ tags: newTags }),
+                      });
                       fetchRecipe();
                     }}
                     className={`rounded-full px-3 py-0.5 text-xs font-medium transition-colors ${
@@ -763,7 +755,7 @@ export default function RecipeDetailPage() {
         </div>
 
         {/* Owner actions */}
-        {isOwner && (
+        {canEdit && (
           <div className="mt-4 flex gap-2">
             <Link href={`/recepten/${recipe.id}/bewerk`}>
               <Button variant="secondary" size="sm">

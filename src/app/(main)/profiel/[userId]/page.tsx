@@ -15,7 +15,7 @@ interface ProfileStats {
   member_since: string;
 }
 
-function memberSince(dateStr: string): string {
+function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
@@ -181,6 +181,9 @@ export default function PublicProfilePage() {
           <h1 className="text-2xl font-bold text-text-primary">
             {profile.display_name ?? 'Anoniem'}
           </h1>
+          {profile.bio && (
+            <p className="mt-1 max-w-md text-sm text-text-secondary">{profile.bio}</p>
+          )}
         </div>
       </div>
 
@@ -201,7 +204,7 @@ export default function PublicProfilePage() {
           </div>
           <div className="rounded-xl border border-gray-200 bg-surface p-3 text-center">
             <CalendarDays className="mx-auto h-5 w-5 text-blue-500" />
-            <p className="mt-1 text-sm font-bold text-text-primary">{memberSince(stats.member_since)}</p>
+            <p className="mt-1 text-sm font-bold text-text-primary">{formatDate(stats.member_since)}</p>
             <p className="text-[11px] text-text-muted">Lid sinds</p>
           </div>
           <div className="rounded-xl border border-gray-200 bg-surface p-3 text-center">

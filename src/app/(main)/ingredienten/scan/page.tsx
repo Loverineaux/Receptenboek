@@ -541,14 +541,25 @@ export default function ScanPage() {
                 Suggestie:{' '}
                 <span className="font-semibold">{scanResult.suggested_ingredient.name}</span>
               </p>
-              <button
-                onClick={() => handleLink(scanResult.suggested_ingredient!.id)}
-                disabled={isLinking}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
-              >
-                {isLinking ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                Bevestigen
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleLink(scanResult.suggested_ingredient!.id)}
+                  disabled={isLinking}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {isLinking ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                  Bevestigen
+                </button>
+                <button
+                  onClick={() => {
+                    // Clear suggestion so the manual search form shows
+                    setScanResult((prev) => prev ? { ...prev, suggested_ingredient: null } : null);
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-gray-50"
+                >
+                  Andere kiezen
+                </button>
+              </div>
             </div>
           ) : (
             <div className="rounded-xl border border-gray-200 bg-surface p-4">

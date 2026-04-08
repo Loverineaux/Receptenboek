@@ -139,19 +139,7 @@ export async function POST(request: NextRequest) {
 
           if (bestMatch && bestScore > 3) {
             suggestedIngredient = bestMatch;
-
-            // Link the product to the matched ingredient
-            await supabaseAdmin
-              .from('products')
-              .update({ generic_ingredient_id: bestMatch.id })
-              .eq('id', savedProduct.id);
-
-            savedProduct.generic_ingredient_id = bestMatch.id;
-
-            // Recalculate average nutrition for the generic ingredient
-            await supabaseAdmin.rpc('recalculate_generic_nutrition', {
-              ingredient_id: bestMatch.id,
-            });
+            // Don't auto-link — let the user confirm or change the suggestion
           }
         }
       } catch (matchError) {

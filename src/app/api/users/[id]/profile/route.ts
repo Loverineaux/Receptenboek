@@ -8,7 +8,7 @@ export async function GET(
   // Fetch profile (bypasses RLS)
   const { data: profile } = await supabaseAdmin
     .from('profiles')
-    .select('id, display_name, avatar_url, created_at, last_seen')
+    .select('id, display_name, avatar_url, bio, created_at, last_seen')
     .eq('id', params.id)
     .single();
 

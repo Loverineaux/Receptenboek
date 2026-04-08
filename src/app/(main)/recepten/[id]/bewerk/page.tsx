@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useAdmin } from '@/hooks/useAdmin';
 import Button from '@/components/ui/Button';
 import RecipeForm, { RecipeFormData } from '@/components/recipes/RecipeForm';
 import type { RecipeWithRelations } from '@/types';
@@ -13,6 +14,7 @@ export default function BewerkReceptPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
+  const { isAdmin: isAdminUser, loading: adminLoading } = useAdmin();
   const supabase = createClient();
 
   const [recipe, setRecipe] = useState<RecipeWithRelations | null>(null);
@@ -44,7 +46,7 @@ export default function BewerkReceptPage() {
       return;
     }
 
-    if (user && data.user_id !== user.id) {
+    if (user && data.user_id !== user.id && !isAdminUser) {
       setError('Je hebt geen toegang om dit recept te bewerken');
       setLoading(false);
       return;
@@ -71,15 +73,13 @@ export default function BewerkReceptPage() {
 
     setRecipe(r);
     setLoading(false);
-  }, [supabase, params.id, user]);
+  }, [supabase, params.id, user, isAdminUser]);
 
   useEffect(() => {
-    if (!authLoading && user) {
-      fetchRecipe();
-    } else if (!authLoading && !user) {
-      router.push('/login');
-    }
-  }, [authLoading, user, fetchRecipe, router]);
+    if (authLoading || adminLoading) return;
+    if (!user) { router.push('/login'); return; }
+    fetchRecipe();
+  }, [authLoading, adminLoading, user, fetchRecipe, router]);
 
   const handleSubmit = async (data: RecipeFormData) => {
     const res = await fetch(`/api/recipes/${params.id}`, {
@@ -96,7 +96,7 @@ export default function BewerkReceptPage() {
     }
   };
 
-  if (loading || authLoading) {
+  if (loading || authLoading || adminLoading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />

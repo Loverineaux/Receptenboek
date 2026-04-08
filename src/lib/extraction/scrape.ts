@@ -405,29 +405,72 @@ function parseIsoDuration(iso: any): string | null {
   return `${minutes} min`;
 }
 
+// Standardize unit abbreviations to full Dutch names
+function normalizeUnit(unit: string | null): string | null {
+  if (!unit) return null;
+  const u = unit.toLowerCase().replace(/\.$/, '').trim();
+  const map: Record<string, string> = {
+    'g': 'gram', 'gr': 'gram', 'gram': 'gram',
+    'kg': 'kg',
+    'ml': 'ml', 'dl': 'dl', 'cl': 'cl', 'l': 'liter',
+    'el': 'el', 'eetlepel': 'el', 'eetlepels': 'el',
+    'tl': 'tl', 'theelepel': 'tl', 'theelepels': 'tl',
+    'tbsp': 'el', 'tsp': 'tl',
+    'stuk': 'stuk', 'stuks': 'stuk', 'st': 'stuk',
+    'snuf': 'snuf', 'snufje': 'snuf', 'mespunt': 'snuf', 'mespuntje': 'snuf',
+    'teen': 'teen', 'teentje': 'teen', 'teentjes': 'teen', 'tenen': 'teen',
+    'tak': 'tak', 'takje': 'tak', 'takjes': 'tak',
+    'bos': 'bos', 'bosje': 'bos',
+    'scheut': 'scheut', 'scheutje': 'scheut',
+    'handvol': 'handvol', 'handje': 'handvol',
+    'plak': 'plak', 'plakje': 'plak', 'plakjes': 'plak',
+    'snee': 'snee', 'sneetje': 'snee', 'sneetjes': 'snee',
+    'blaadje': 'blaadje', 'blaadjes': 'blaadje',
+    'blik': 'blik', 'blikje': 'blik', 'blikjes': 'blik',
+    'zakje': 'zakje', 'zakjes': 'zakje',
+    'potje': 'potje', 'potjes': 'potje',
+    'beker': 'beker', 'cup': 'beker',
+    'oz': 'oz', 'lb': 'lb',
+  };
+  return map[u] || unit;
+}
+
 function parseIngredientString(text: any) {
   if (typeof text !== "string") {
-    // Handle object ingredients (some JSON-LD formats)
     if (text && typeof text === "object") {
       return {
         hoeveelheid: text.amount || text.quantity || null,
-        eenheid: text.unit || text.unitText || null,
+        eenheid: normalizeUnit(text.unit || text.unitText || null),
         naam: text.name || text.ingredient || JSON.stringify(text),
       };
     }
     return { hoeveelheid: null, eenheid: null, naam: String(text || "") };
   }
-  // Try to split "200 g kipfilet" into hoeveelheid/eenheid/naam
+
+  // Handle "snuf peper", "Snuf tijm", "snufje kaneel" — no number prefix
+  const snufMatch = text.match(/^(snuf|snufje|mespunt|mespuntje)\s+(.+)/i);
+  if (snufMatch) {
+    return { hoeveelheid: '1', eenheid: 'snuf', naam: snufMatch[2].trim() };
+  }
+
+  // Handle "naar smaak" items
+  if (/naar smaak/i.test(text)) {
+    const cleanName = text.replace(/,?\s*naar smaak/i, '').trim();
+    return { hoeveelheid: null, eenheid: null, naam: cleanName ? `${cleanName} (naar smaak)` : text.trim() };
+  }
+
+  // Try to split "200 gr. kipfilet" into hoeveelheid/eenheid/naam
   const match = text.match(
-    /^([\d.,/½¼¾⅓⅔⅛]+)\s*(g|kg|ml|l|dl|cl|el|tl|eetlepel|theelepel|stuks?|plakjes?|sneetjes?|blaadjes?|tenen?|takjes?|snufje|scheut|blik(?:jes?)?|zakjes?|potjes?|beker|cup|oz|lb|tbsp|tsp|stuk)?\s+(.+)/i
+    /^([\d.,/½¼¾⅓⅔⅛]+)\s*(gr\.?|g|kg|ml\.?|l|dl|cl|el|tl|eetlepels?|theelepels?|stuks?|st\.?|plakjes?|sneetjes?|blaadjes?|teentjes?|tenen?|takjes?|snufjes?|snuf|mespuntje?|scheutje?|scheut|handvol|handje|bosje?|blik(?:jes?)?|zakjes?|potjes?|beker|cup|oz|lb|tbsp|tsp|stuk)\.?\s+(.+)/i
   );
   if (match) {
     return {
       hoeveelheid: match[1],
-      eenheid: match[2] || null,
+      eenheid: normalizeUnit(match[2]),
       naam: match[3].trim(),
     };
   }
+
   return { hoeveelheid: null, eenheid: null, naam: text.trim() };
 }
 

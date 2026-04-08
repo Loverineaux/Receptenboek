@@ -9,7 +9,7 @@ import { translateAuthError } from '@/lib/auth-errors'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 
-const ACCESS_CODE = 'KokenMetKokkies2026'
+// Toegangscode wordt dynamisch gevalideerd via API
 
 export default function RegisterPage() {
   const supabase = createClient()
@@ -35,16 +35,31 @@ export default function RegisterPage() {
   const [submitting, setSubmitting] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
 
-  const handleCodeSubmit = (e: FormEvent) => {
+  const [verifyingCode, setVerifyingCode] = useState(false)
+
+  const handleCodeSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setCodeError(null)
+    setVerifyingCode(true)
 
-    if (accessCode !== ACCESS_CODE) {
-      setCodeError('Ongeldige toegangscode. Vraag de code aan bij de beheerder.')
-      return
+    try {
+      const res = await fetch('/api/auth/verify-access-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: accessCode }),
+      })
+      const { valid } = await res.json()
+
+      if (!valid) {
+        setCodeError('Ongeldige toegangscode. Vraag de code aan bij de beheerder.')
+      } else {
+        setStep(2)
+      }
+    } catch {
+      setCodeError('Kon de code niet verifiëren. Probeer het opnieuw.')
+    } finally {
+      setVerifyingCode(false)
     }
-
-    setStep(2)
   }
 
   const handleSubmit = async (e: FormEvent) => {
@@ -164,6 +179,7 @@ export default function RegisterPage() {
                   type="submit"
                   variant="primary"
                   size="lg"
+                  loading={verifyingCode}
                   className="w-full"
                 >
                   Doorgaan

@@ -39,7 +39,31 @@ export async function updateSession(request: NextRequest) {
   )
 
   // Refreshing the auth token
-  await supabase.auth.getUser()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  const pathname = request.nextUrl.pathname
+
+  // Redirect blocked users to /geblokkeerd (only check on page navigations, not assets/api)
+  if (user && pathname !== '/geblokkeerd'
+    && !pathname.startsWith('/api/')
+    && !pathname.startsWith('/_next/')
+    && !pathname.includes('.')
+  ) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('is_blocked')
+      .eq('id', user.id)
+      .single()
+
+    if (profile?.is_blocked) {
+      return NextResponse.redirect(new URL('/geblokkeerd', request.url))
+    }
+  }
+
+  // Protect admin routes — require login
+  if (pathname.startsWith('/admin') && !user) {
+    return NextResponse.redirect(new URL('/login', request.url))
+  }
 
   return response
 }

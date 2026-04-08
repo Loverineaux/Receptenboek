@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { supabaseAdmin } from '@/lib/supabase/admin';
+import { isAdmin } from '@/lib/admin';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -81,6 +83,25 @@ export async function PUT(
   }
 
   const { id } = params;
+
+  // Ownership check: only creator or admin can edit
+  const admin = await isAdmin(supabase);
+  if (!admin) {
+    const { data: ingredient } = await supabaseAdmin
+      .from('generic_ingredients')
+      .select('created_by')
+      .eq('id', id)
+      .single();
+
+    // Seed ingredients (created_by = null) can only be edited by admin
+    if (!ingredient || (ingredient.created_by !== null && ingredient.created_by !== user.id)) {
+      return NextResponse.json({ error: 'Geen toegang' }, { status: 403 });
+    }
+    if (ingredient.created_by === null) {
+      return NextResponse.json({ error: 'Alleen een beheerder kan dit ingrediënt bewerken' }, { status: 403 });
+    }
+  }
+
   const body = await request.json();
 
   const allowedFields = [
