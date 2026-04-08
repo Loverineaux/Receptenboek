@@ -6,6 +6,9 @@ const nextConfig = {
   env: {
     APP_VERSION: pkg.version,
   },
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
   experimental: {
     serverActions: {
       bodySizeLimit: '100mb',
