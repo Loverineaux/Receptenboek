@@ -199,7 +199,7 @@ function mapExtractedToFormData(extracted: any, sourceUrl?: string): RecipeFormD
     benodigdheden: (extracted.benodigdheden ?? [])
       .map((b: any) => (typeof b === 'string' ? b : b.naam))
       .filter(Boolean),
-    tags: [...new Set([...(extracted.tags ?? []), ...(extracted.categorieen ?? [])])],
+    tags: Array.from(new Set([...(extracted.tags ?? []), ...(extracted.categorieen ?? [])])),
   };
 }
 
