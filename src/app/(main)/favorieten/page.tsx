@@ -80,6 +80,20 @@ export default function FavorietenPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
+  // Realtime: favorites changes
+  useEffect(() => {
+    if (!user) return;
+    const sb = createClient();
+    const channel = sb.channel('favorites-realtime');
+    const refresh = () => fetchFavorites();
+    channel
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'favorites' }, refresh)
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'favorites' }, refresh)
+      .subscribe();
+    return () => { sb.removeChannel(channel); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
   const handleFavoriteToggle = async (recipeId: string, isFavorited: boolean) => {
     if (!user) return;
 

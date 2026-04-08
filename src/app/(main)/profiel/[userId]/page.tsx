@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { User, ChefHat, Star, CalendarDays, Clock } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { useRealtimeRefresh } from '@/hooks/useRealtimeSubscription';
 import RecipeCard from '@/components/recipes/RecipeCard';
 import type { RecipeWithRelations } from '@/types';
 
@@ -109,6 +110,10 @@ export default function PublicProfilePage() {
   useEffect(() => {
     fetchProfile();
   }, [fetchProfile]);
+
+  // Realtime: profile and recipe changes
+  useRealtimeRefresh({ table: 'profiles', filter: `id=eq.${params.userId}`, onAnyChange: fetchProfile, enabled: !!profile });
+  useRealtimeRefresh({ table: 'recipes', filter: `user_id=eq.${params.userId}`, onAnyChange: fetchProfile, enabled: !!profile });
 
   const handleFavoriteToggle = (recipeId: string, isFavorited: boolean) => {
     if (!currentUser) return;

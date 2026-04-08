@@ -39,6 +39,20 @@ export default function CollectiesPage() {
     fetchCollections();
   }, [fetchCollections]);
 
+  // Realtime: collections changes
+  useEffect(() => {
+    const sb = createClient();
+    const channel = sb.channel('collections-realtime');
+    const refresh = () => fetchCollections();
+    channel
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'collections' }, refresh)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'collections' }, refresh)
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'collections' }, refresh)
+      .subscribe();
+    return () => { sb.removeChannel(channel); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Listen for FAB button event
   useEffect(() => {
     const handler = () => setCreateOpen(true);

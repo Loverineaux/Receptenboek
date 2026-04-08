@@ -33,6 +33,7 @@ import AddToCollectionModal from '@/components/recipes/AddToCollectionModal';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import ShareModal from '@/components/ui/ShareModal';
 import { useAdmin } from '@/hooks/useAdmin';
+import { useRealtimeSubscription, useRealtimeRefresh } from '@/hooks/useRealtimeSubscription';
 import type { RecipeWithRelations, Comment as CommentType } from '@/types';
 
 // ── fraction parsing + formatting ────────────────
@@ -390,8 +391,8 @@ export default function RecipeDetailPage() {
       body: JSON.stringify({ sterren: newScore }),
     });
 
-    // Refresh to update average
-    fetchRecipe();
+    // Refetch ratings only (not full page)
+    refetchRatings();
   };
 
   const handleComment = async (parentId?: string) => {
@@ -553,6 +554,76 @@ export default function RecipeDetailPage() {
   };
 
   const [shareOpen, setShareOpen] = useState(false);
+
+  // Realtime: comments
+  useRealtimeSubscription({
+    table: 'comments',
+    filter: `recipe_id=eq.${params.id}`,
+    enabled: !!recipe,
+    onInsert: async (newComment) => {
+      // Fetch the full comment with user profile
+      const { data } = await supabase
+        .from('comments')
+        .select('*, user:profiles!comments_user_id_fkey(id, display_name, avatar_url)')
+        .eq('id', newComment.id)
+        .single();
+      if (data) {
+        setComments((prev) => {
+          // Don't add if already exists (e.g. own comment)
+          if (prev.some((c) => c.id === data.id)) return prev;
+          return [...prev, data];
+        });
+      }
+    },
+    onDelete: (deleted) => {
+      setComments((prev) => prev.filter((c) => c.id !== deleted.id));
+    },
+  });
+
+  // Realtime: favorites count (skip own actions — already handled optimistically)
+  useRealtimeSubscription({
+    table: 'favorites',
+    filter: `recipe_id=eq.${params.id}`,
+    enabled: !!recipe,
+    onInsert: (fav) => {
+      if (fav.user_id === user?.id) return;
+      setFavoriteCount((c) => c + 1);
+    },
+    onDelete: (fav) => {
+      if (fav.user_id === user?.id) return;
+      setFavoriteCount((c) => Math.max(0, c - 1));
+    },
+  });
+
+  // Realtime: ratings — always refetch from DB (DELETE events don't include user_id)
+  const refetchRatings = useCallback(() => {
+    setTimeout(() => {
+      supabase.from('ratings').select('sterren, user_id').eq('recipe_id', params.id)
+        .then(({ data }) => {
+          if (data) {
+            const avg = data.length > 0 ? data.reduce((s, r: any) => s + r.sterren, 0) / data.length : null;
+            setRecipe((prev) => prev ? { ...prev, average_rating: avg, ratings: data as any } : null);
+          }
+        });
+    }, 300); // Small delay to let DB settle after own optimistic updates
+  }, [supabase, params.id]);
+
+  useRealtimeRefresh({
+    table: 'ratings',
+    filter: `recipe_id=eq.${params.id}`,
+    enabled: !!recipe,
+    onAnyChange: refetchRatings,
+  });
+
+  // Realtime: recipe updates (title, image, etc.) — update in place
+  useRealtimeSubscription({
+    table: 'recipes',
+    filter: `id=eq.${params.id}`,
+    enabled: !!recipe,
+    onUpdate: (updated) => {
+      setRecipe((prev) => prev ? { ...prev, ...updated } : null);
+    },
+  });
 
   // ── loading / not found ────────────────────────
 
@@ -798,6 +869,15 @@ export default function RecipeDetailPage() {
             Jouw beoordeling:
           </span>
           <StarRating value={userRating} onChange={handleRate} />
+          {userRating > 0 && (
+            <button
+              onClick={() => handleRate(userRating)}
+              className="flex items-center gap-0.5 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary hover:bg-primary/20"
+              title="Beoordeling verwijderen"
+            >
+              Jij: {userRating}★ ✕
+            </button>
+          )}
         </div>
       )}
 

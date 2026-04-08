@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import { useRealtimeSubscription } from '@/hooks/useRealtimeSubscription';
 import type { AppNotification } from '@/types';
 
 export function useNotifications() {
@@ -10,7 +11,7 @@ export function useNotifications() {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Poll unread count every 30 seconds
+  // Fetch initial unread count
   useEffect(() => {
     if (!user) {
       setUnreadCount(0);
@@ -28,9 +29,38 @@ export function useNotifications() {
     };
 
     fetchCount();
-    const interval = setInterval(fetchCount, 30000);
-    return () => clearInterval(interval);
   }, [user]);
+
+  // Realtime: listen for new/updated/deleted notifications
+  useRealtimeSubscription({
+    table: 'notifications',
+    filter: user ? `recipient_id=eq.${user.id}` : undefined,
+    enabled: !!user,
+    onInsert: () => {
+      setUnreadCount((c) => c + 1);
+      // If panel is open (notifications loaded), refresh the list
+      if (notifications.length > 0) {
+        fetch('/api/notifications')
+          .then((r) => r.json())
+          .then((data) => setNotifications(data.notifications ?? []))
+          .catch(() => {});
+      }
+    },
+    onUpdate: (updated) => {
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === updated.id ? { ...n, ...updated } : n))
+      );
+      // Recalculate unread count
+      fetch('/api/notifications/count')
+        .then((r) => r.json())
+        .then((data) => setUnreadCount(data.count))
+        .catch(() => {});
+    },
+    onDelete: (deleted) => {
+      setNotifications((prev) => prev.filter((n) => n.id !== deleted.id));
+      if (!deleted.is_read) setUnreadCount((c) => Math.max(0, c - 1));
+    },
+  });
 
   const fetchNotifications = useCallback(async () => {
     if (!user) return;

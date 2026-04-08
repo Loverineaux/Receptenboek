@@ -8,6 +8,7 @@ import ProductCard from '@/components/ingredients/ProductCard';
 import Modal from '@/components/ui/Modal';
 import { useAuth } from '@/hooks/useAuth';
 import { useAdmin } from '@/hooks/useAdmin';
+import { useRealtimeRefresh } from '@/hooks/useRealtimeSubscription';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/client';
 import type { GenericIngredientWithProducts, GenericIngredient } from '@/types';
@@ -190,6 +191,10 @@ export default function IngredientDetailPage() {
   useEffect(() => {
     if (id) fetchIngredient();
   }, [id, fetchIngredient]);
+
+  // Realtime: ingredient and product changes
+  useRealtimeRefresh({ table: 'generic_ingredients', filter: `id=eq.${id}`, onAnyChange: fetchIngredient, enabled: !!ingredient });
+  useRealtimeRefresh({ table: 'products', filter: `generic_ingredient_id=eq.${id}`, onAnyChange: fetchIngredient, enabled: !!ingredient });
 
   // ── Generate content via SSE ──
 

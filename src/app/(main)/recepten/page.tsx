@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Plus } from 'lucide-react';
@@ -224,6 +224,92 @@ export default function ReceptenPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, searchIngredients, category, source, includedSources, excludedSources, sort, user?.id]);
 
+  const [userRatings, setUserRatings] = useState<Record<string, number>>({});
+  const [initialUserRatings, setInitialUserRatings] = useState<Record<string, number>>({});
+
+  // Realtime: update individual recipe cards without full page refresh
+  const userIdRef = useRef(user?.id);
+  userIdRef.current = user?.id;
+  const fetchRecipesRef = useRef(fetchRecipes);
+  fetchRecipesRef.current = fetchRecipes;
+
+  useEffect(() => {
+    const sb = createClient();
+    const channel = sb.channel('library-realtime');
+
+    // Recipes: new → refetch list, update → patch in place, delete → remove
+    channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'recipes' }, () => {
+      fetchRecipesRef.current();
+    });
+    channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'recipes' }, (payload) => {
+      setRecipes((prev) => prev.map((r) =>
+        r.id === payload.new.id ? { ...r, title: payload.new.title, image_url: payload.new.image_url, tijd: payload.new.tijd, bron: payload.new.bron } : r
+      ));
+    });
+    channel.on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'recipes' }, (payload) => {
+      setRecipes((prev) => prev.filter((r) => r.id !== payload.old.id));
+    });
+
+    // Favorites: refetch actual count from DB
+    const refetchFavoriteCount = async (recipeId: string) => {
+      try {
+        const res = await fetch('/api/recipes/favorite-counts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recipe_ids: [recipeId] }),
+        });
+        if (res.ok) {
+          const { counts } = await res.json();
+          const count = counts?.[recipeId] || 0;
+          setRecipes((prev) => prev.map((r) =>
+            r.id === recipeId ? { ...r, favorite_count: count } : r
+          ));
+        }
+      } catch {}
+    };
+    channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'favorites' }, (payload) => {
+      if (payload.new?.recipe_id) refetchFavoriteCount(payload.new.recipe_id);
+    });
+    channel.on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'favorites' }, (payload) => {
+      if (payload.old?.recipe_id) refetchFavoriteCount(payload.old.recipe_id);
+    });
+
+    // Ratings: refetch from DB and sync initialUserRatings to prevent double-counting
+    const handleRatingChange = async (recipeId: string) => {
+      await new Promise((r) => setTimeout(r, 200));
+      const { data } = await sb.from('ratings').select('sterren, user_id').eq('recipe_id', recipeId);
+      if (data) {
+        const avg = data.length > 0 ? data.reduce((s: number, r: any) => s + r.sterren, 0) / data.length : null;
+        setRecipes((prev) => prev.map((r) =>
+          r.id === recipeId ? { ...r, ratings: data as any, average_rating: avg } : r
+        ));
+        const uid = userIdRef.current;
+        if (uid) {
+          const myRating = data.find((r: any) => r.user_id === uid);
+          if (myRating) {
+            setInitialUserRatings((prev) => ({ ...prev, [recipeId]: myRating.sterren }));
+            setUserRatings((prev) => ({ ...prev, [recipeId]: myRating.sterren }));
+          } else {
+            setInitialUserRatings((prev) => { const n = { ...prev }; delete n[recipeId]; return n; });
+            setUserRatings((prev) => { const n = { ...prev }; delete n[recipeId]; return n; });
+          }
+        }
+      }
+    };
+    channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'ratings' }, (payload) => {
+      if (payload.new?.recipe_id) handleRatingChange(payload.new.recipe_id);
+    });
+    channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'ratings' }, (payload) => {
+      if (payload.new?.recipe_id) handleRatingChange(payload.new.recipe_id);
+    });
+    channel.on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'ratings' }, (payload) => {
+      if (payload.old?.recipe_id) handleRatingChange(payload.old.recipe_id);
+    });
+
+    channel.subscribe();
+    return () => { sb.removeChannel(channel); };
+  }, []);
+
   // Silently refresh tags after 5s to pick up auto-categorize results
   useEffect(() => {
     if (recipes.length === 0) return;
@@ -250,8 +336,6 @@ export default function ReceptenPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recipes.length]);
 
-  const [userRatings, setUserRatings] = useState<Record<string, number>>({});
-  const [initialUserRatings, setInitialUserRatings] = useState<Record<string, number>>({});
   const [collectionRecipeId, setCollectionRecipeId] = useState<string | null>(null);
   const [shareRecipeId, setShareRecipeId] = useState<string | null>(null);
 

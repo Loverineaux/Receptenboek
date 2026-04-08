@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { ArrowLeft, Pencil, Share2, Trash2, User, Users, X as XIcon, Copy, UserPlus, Info } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useAdmin } from '@/hooks/useAdmin';
+import { useRealtimeRefresh } from '@/hooks/useRealtimeSubscription';
 import { createClient } from '@/lib/supabase/client';
 import RecipeCard from '@/components/recipes/RecipeCard';
 import Button from '@/components/ui/Button';
@@ -230,6 +231,11 @@ export default function CollectionDetailPage() {
   };
 
   const [shareOpen, setShareOpen] = useState(false);
+
+  // Realtime: collection changes
+  useRealtimeRefresh({ table: 'collection_recipes', filter: `collection_id=eq.${params.id}`, onAnyChange: fetchCollection });
+  useRealtimeRefresh({ table: 'collection_follows', filter: `collection_id=eq.${params.id}`, onAnyChange: fetchCollection });
+  useRealtimeRefresh({ table: 'collection_collaborators', filter: `collection_id=eq.${params.id}`, onAnyChange: fetchCollection });
   const [dupInfoOpen, setDupInfoOpen] = useState(false);
 
   if (loading) {
