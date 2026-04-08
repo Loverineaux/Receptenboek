@@ -6,6 +6,18 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '0.3.0',
+    date: '8 april 2026',
+    highlights: [
+      'Admin paneel: beheer gebruikers, recepten, reacties, collecties en ingrediënten vanuit één plek',
+      'Admins kunnen gebruikers blokkeren, wachtwoorden resetten en rollen toewijzen',
+      'Je kunt nu producten verwijderen en verplaatsen naar een ander ingrediënt',
+      'Bij het scannen van een barcode kun je de ingrediënt-suggestie wijzigen',
+      'Recepten importeren herkent nu meer eenheden zoals snuf, scheut en teentje',
+      'Alle ingrediënten hebben nu een afbeelding',
+    ],
+  },
+  {
     version: '0.2.0',
     date: '7 april 2026',
     highlights: [
@@ -20,22 +32,11 @@ export const releaseNotes: ReleaseNote[] = [
     version: '0.1.0',
     date: '4 april 2026',
     highlights: [
-      'Scan een barcode om ingrediënten snel toe te voegen',
+      'Ingrediënten database met barcode scanner',
       'Voedingswaarden worden automatisch berekend op basis van je ingrediënten',
       'Importeer meerdere recepten tegelijk via een link',
       'Organiseer je recepten in collecties, net als Pinterest-borden',
       'HelloFresh recepten kunnen nu ook geïmporteerd worden',
-    ],
-  },
-  {
-    version: '0.0.1',
-    date: '27 maart 2026',
-    highlights: [
-      'De eerste versie van Receptenboek is live!',
-      'Voeg recepten toe of importeer ze vanuit een PDF',
-      'Geef sterren en plaats reacties op recepten van anderen',
-      'Sla je favoriete recepten op en vind ze snel terug',
-      'Maak een profiel aan en deel je kookkunsten',
     ],
   },
 ];
