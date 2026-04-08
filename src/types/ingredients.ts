@@ -26,6 +26,7 @@ export interface GenericIngredient {
   fun_facts: string | null;
   image_url: string | null;
   content_generated_at: string | null;
+  created_by: string | null;
   created_at: string;
   updated_at: string;
 }
