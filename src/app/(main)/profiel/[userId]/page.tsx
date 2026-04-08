@@ -2,112 +2,146 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { User } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
+import { User, ChefHat, Star, CalendarDays, Clock } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import RecipeCard from '@/components/recipes/RecipeCard';
-import type { RecipeWithRelations, UserProfile } from '@/types';
+import type { RecipeWithRelations } from '@/types';
+
+interface ProfileStats {
+  recipe_count: number;
+  avg_rating: number | null;
+  last_recipe_at: string | null;
+  last_seen: string | null;
+  member_since: string;
+}
+
+function memberSince(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+function timeAgo(dateStr: string): string {
+  const diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+  if (diff < 60) return 'Zojuist';
+  if (diff < 3600) return `${Math.floor(diff / 60)} min geleden`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} uur geleden`;
+  if (diff < 604800) return `${Math.floor(diff / 86400)} dagen geleden`;
+  if (diff < 2592000) return `${Math.floor(diff / 604800)} weken geleden`;
+  return new Date(dateStr).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' });
+}
 
 export default function PublicProfilePage() {
   const params = useParams<{ userId: string }>();
   const { user: currentUser } = useAuth();
-  const supabase = createClient();
 
-  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [profile, setProfile] = useState<any>(null);
   const [recipes, setRecipes] = useState<RecipeWithRelations[]>([]);
+  const [stats, setStats] = useState<ProfileStats | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchProfile = useCallback(async () => {
     setLoading(true);
 
-    // Fetch profile
-    const { data: profileData } = await supabase
-      .from('profiles')
-      .select('id, email, display_name, avatar_url, created_at, updated_at')
-      .eq('id', params.userId)
-      .single();
-
-    if (profileData) {
-      setProfile(profileData as UserProfile);
+    const res = await fetch(`/api/users/${params.userId}/profile`);
+    if (!res.ok) {
+      setLoading(false);
+      return;
     }
 
-    // Fetch their public recipes
-    const { data: recipesData } = await supabase
-      .from('recipes')
-      .select(
-        `
-        *,
-        ingredients(*),
-        steps(*),
-        tags:recipe_tags(tag:tags(*)),
-        nutrition(*),
-        ratings(*)
-      `
-      )
-      .eq('user_id', params.userId)
-      .eq('is_public', true)
-      .order('created_at', { ascending: false });
+    const data = await res.json();
+    setProfile(data.profile);
+    setStats(data.stats);
 
-    const processed: RecipeWithRelations[] = (recipesData ?? []).map(
-      (r: any) => {
-        const ratings = r.ratings ?? [];
-        const avg =
-          ratings.length > 0
-            ? ratings.reduce((s: number, rt: any) => s + rt.sterren, 0) /
-              ratings.length
-            : null;
+    // Process recipes
+    const processed: RecipeWithRelations[] = (data.recipes ?? []).map((r: any) => {
+      const ratings = r.ratings ?? [];
+      const avg = ratings.length > 0
+        ? ratings.reduce((s: number, rt: any) => s + rt.sterren, 0) / ratings.length
+        : null;
 
-        return {
-          ...r,
-          tags: (r.tags ?? []).map((rt: any) => rt.tag).filter(Boolean),
-          average_rating: avg,
-          nutrition: Array.isArray(r.nutrition)
-            ? r.nutrition[0] ?? null
-            : r.nutrition,
-          comments: [],
-          user: profileData,
-        };
-      }
-    );
+      return {
+        ...r,
+        tags: (r.tags ?? []).map((rt: any) => rt.tag).filter(Boolean),
+        average_rating: avg,
+        nutrition: null,
+        steps: [],
+        comments: r.comments ?? [],
+        user: data.profile,
+      };
+    });
 
-    // Check favorites
+    // Check favorites for current user
     if (currentUser) {
+      const { createClient } = await import('@/lib/supabase/client');
+      const supabase = createClient();
       const { data: favs } = await supabase
         .from('favorites')
         .select('recipe_id')
         .eq('user_id', currentUser.id);
 
       const favIds = new Set((favs ?? []).map((f: any) => f.recipe_id));
-      const withFavs = processed.map((r) => ({
+
+      let favCounts: Record<string, number> = {};
+      try {
+        const ids = processed.map((r) => r.id);
+        const fcRes = await fetch('/api/recipes/favorite-counts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recipe_ids: ids }),
+        });
+        if (fcRes.ok) {
+          const fcData = await fcRes.json();
+          favCounts = fcData.counts ?? {};
+        }
+      } catch {}
+
+      setRecipes(processed.map((r) => ({
         ...r,
         is_favorited: favIds.has(r.id),
-      }));
-      setRecipes(withFavs);
+        favorite_count: favCounts[r.id] || 0,
+      })));
     } else {
       setRecipes(processed);
     }
 
     setLoading(false);
-  }, [supabase, params.userId, currentUser]);
+  }, [params.userId, currentUser]);
 
   useEffect(() => {
     fetchProfile();
   }, [fetchProfile]);
 
-  const handleFavoriteToggle = async (recipeId: string, isFavorited: boolean) => {
+  const handleFavoriteToggle = (recipeId: string, isFavorited: boolean) => {
     if (!currentUser) return;
-
-    if (isFavorited) {
-      await fetch(`/api/recipes/${recipeId}/favorite`, { method: 'POST' });
-    } else {
-      await fetch(`/api/recipes/${recipeId}/favorite`, { method: 'DELETE' });
-    }
 
     setRecipes((prev) =>
       prev.map((r) =>
-        r.id === recipeId ? { ...r, is_favorited: isFavorited } : r
+        r.id === recipeId
+          ? {
+              ...r,
+              is_favorited: isFavorited,
+              favorite_count: Math.max(0, ((r as any).favorite_count || 0) + (isFavorited ? 1 : -1)),
+            }
+          : r
       )
     );
+
+    fetch(`/api/recipes/${recipeId}/favorite`, {
+      method: isFavorited ? 'POST' : 'DELETE',
+    }).then((res) => {
+      if (!res.ok) {
+        setRecipes((prev) =>
+          prev.map((r) =>
+            r.id === recipeId
+              ? {
+                  ...r,
+                  is_favorited: !isFavorited,
+                  favorite_count: Math.max(0, ((r as any).favorite_count || 0) + (isFavorited ? -1 : 1)),
+                }
+              : r
+          )
+        );
+      }
+    });
   };
 
   if (loading) {
@@ -128,21 +162,10 @@ export default function PublicProfilePage() {
     );
   }
 
-  // Compute average rating the user has given
-  const allRatings = recipes.flatMap((r) => r.ratings);
-  const userGivenRatings = allRatings.filter(
-    (rt) => rt.user_id === params.userId
-  );
-  const avgGiven =
-    userGivenRatings.length > 0
-      ? userGivenRatings.reduce((s, r) => s + r.sterren, 0) /
-        userGivenRatings.length
-      : null;
-
   return (
     <div className="space-y-8">
       {/* Profile header */}
-      <div className="flex items-center gap-5">
+      <div className="flex flex-col items-center gap-3 pt-4 text-center">
         <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-gray-100">
           {profile.avatar_url ? (
             <img
@@ -158,39 +181,70 @@ export default function PublicProfilePage() {
           <h1 className="text-2xl font-bold text-text-primary">
             {profile.display_name ?? 'Anoniem'}
           </h1>
-          <p className="text-sm text-text-secondary">
-            {recipes.length} openbare recept{recipes.length !== 1 ? 'en' : ''}
-          </p>
-          {avgGiven !== null && (
-            <p className="text-sm text-text-secondary">
-              Gemiddeld gegeven beoordeling: {avgGiven.toFixed(1)} / 5
-            </p>
-          )}
         </div>
       </div>
 
-      {/* Recipes grid */}
-      {recipes.length > 0 ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {recipes.map((recipe) => (
-            <RecipeCard
-              key={recipe.id}
-              recipe={recipe}
-              onFavoriteToggle={handleFavoriteToggle}
-            />
-          ))}
-        </div>
-      ) : (
-        <div className="flex flex-col items-center justify-center py-20 text-center">
-          <span className="text-5xl">📭</span>
-          <h2 className="mt-4 text-lg font-semibold text-text-primary">
-            Geen openbare recepten
-          </h2>
-          <p className="mt-1 text-sm text-text-secondary">
-            Deze gebruiker heeft nog geen openbare recepten gedeeld.
-          </p>
+      {/* Stats cards */}
+      {stats && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div className="rounded-xl border border-gray-200 bg-surface p-3 text-center">
+            <ChefHat className="mx-auto h-5 w-5 text-primary" />
+            <p className="mt-1 text-lg font-bold text-text-primary">{stats.recipe_count}</p>
+            <p className="text-[11px] text-text-muted">Recepten</p>
+          </div>
+          <div className="rounded-xl border border-gray-200 bg-surface p-3 text-center">
+            <Star className="mx-auto h-5 w-5 text-yellow-500" />
+            <p className="mt-1 text-lg font-bold text-text-primary">
+              {stats.avg_rating !== null ? stats.avg_rating.toFixed(1) : '—'}
+            </p>
+            <p className="text-[11px] text-text-muted">Gem. beoordeling</p>
+          </div>
+          <div className="rounded-xl border border-gray-200 bg-surface p-3 text-center">
+            <CalendarDays className="mx-auto h-5 w-5 text-blue-500" />
+            <p className="mt-1 text-sm font-bold text-text-primary">{memberSince(stats.member_since)}</p>
+            <p className="text-[11px] text-text-muted">Lid sinds</p>
+          </div>
+          <div className="rounded-xl border border-gray-200 bg-surface p-3 text-center">
+            <Clock className="mx-auto h-5 w-5 text-green-500" />
+            <p className="mt-1 text-sm font-bold text-text-primary">
+              {stats.last_seen ? timeAgo(stats.last_seen) : '—'}
+            </p>
+            <p className="text-[11px] text-text-muted">Laatst actief</p>
+          </div>
+          <div className="rounded-xl border border-gray-200 bg-surface p-3 text-center">
+            <ChefHat className="mx-auto h-5 w-5 text-orange-500" />
+            <p className="mt-1 text-sm font-bold text-text-primary">
+              {stats.last_recipe_at ? timeAgo(stats.last_recipe_at) : '—'}
+            </p>
+            <p className="text-[11px] text-text-muted">Laatste bijdrage</p>
+          </div>
         </div>
       )}
+
+      {/* Recipes grid */}
+      <div>
+        <h2 className="mb-3 text-lg font-semibold text-text-primary">
+          Recepten ({recipes.length})
+        </h2>
+        {recipes.length > 0 ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {recipes.map((recipe) => (
+              <RecipeCard
+                key={recipe.id}
+                recipe={recipe}
+                onFavoriteToggle={handleFavoriteToggle}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <span className="text-4xl">📭</span>
+            <p className="mt-3 text-sm text-text-secondary">
+              Deze gebruiker heeft nog geen recepten.
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

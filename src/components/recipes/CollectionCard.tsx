@@ -36,7 +36,7 @@ export default function CollectionCard({ collection, onRate, userRating, initial
             {collection.is_collaborator && (
               <span className="flex items-center gap-1 rounded-full bg-primary/80 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur-sm">
                 <Users className="h-3 w-3" />
-                Medewerker
+                Sous-chef
               </span>
             )}
           </div>
@@ -98,15 +98,41 @@ export default function CollectionCard({ collection, onRate, userRating, initial
             {collection.recipe_count} recept{collection.recipe_count !== 1 ? 'en' : ''}
           </span>
           <div className="flex items-center gap-1.5">
-            {collection.user?.avatar_url ? (
-              <img
-                src={collection.user.avatar_url}
-                alt=""
-                className="h-4 w-4 rounded-full object-cover"
-              />
-            ) : (
-              <User className="h-3.5 w-3.5 text-text-muted" />
-            )}
+            {/* Owner + sous-chef avatars */}
+            <div className="flex -space-x-1.5">
+              {collection.user?.avatar_url ? (
+                <img
+                  src={collection.user.avatar_url}
+                  alt={collection.user.display_name || ''}
+                  title={collection.user.display_name || 'Eigenaar'}
+                  className="h-5 w-5 rounded-full border border-white object-cover"
+                />
+              ) : (
+                <div className="flex h-5 w-5 items-center justify-center rounded-full border border-white bg-gray-100" title={collection.user?.display_name || 'Eigenaar'}>
+                  <User className="h-3 w-3 text-text-muted" />
+                </div>
+              )}
+              {(collection.collaborators ?? []).slice(0, 3).map((c) =>
+                c.avatar_url ? (
+                  <img
+                    key={c.id}
+                    src={c.avatar_url}
+                    alt={c.display_name || ''}
+                    title={c.display_name || 'Sous-chef'}
+                    className="h-5 w-5 rounded-full border border-white object-cover"
+                  />
+                ) : (
+                  <div key={c.id} className="flex h-5 w-5 items-center justify-center rounded-full border border-white bg-gray-100" title={c.display_name || 'Sous-chef'}>
+                    <User className="h-3 w-3 text-text-muted" />
+                  </div>
+                )
+              )}
+              {(collection.collaborators ?? []).length > 3 && (
+                <div className="flex h-5 w-5 items-center justify-center rounded-full border border-white bg-gray-200 text-[9px] font-medium text-text-secondary">
+                  +{(collection.collaborators ?? []).length - 3}
+                </div>
+              )}
+            </div>
             <span className="text-xs text-text-muted">
               {collection.user?.display_name || 'Gebruiker'}
             </span>

@@ -69,14 +69,14 @@ export default function ProfielPage() {
 
     setDeleting(true)
 
-    const { error } = await supabase.functions.invoke('delete-account')
+    const res = await fetch('/api/users/delete-account', { method: 'POST' })
 
-    if (error) {
+    if (!res.ok) {
       setError('Kon account niet verwijderen. Probeer het later opnieuw.')
       setDeleting(false)
       setShowDeleteModal(false)
     } else {
-      router.push('/')
+      window.location.href = '/'
     }
   }
 

@@ -1,7 +1,8 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, ChefHat, Code, Heart } from 'lucide-react';
+import { ArrowLeft, ChefHat, Code, Heart, Sparkles } from 'lucide-react';
+import { releaseNotes } from '@/lib/release-notes';
 
 const APP_VERSION = process.env.APP_VERSION || '0.0.0';
 
@@ -9,14 +10,16 @@ export default function OverPage() {
   const router = useRouter();
 
   return (
-    <div className="mx-auto max-w-2xl px-4 pb-24 pt-4">
-      <button
-        onClick={() => router.push('/instellingen')}
-        className="mb-4 flex items-center gap-1.5 text-sm font-medium text-text-muted transition-colors hover:text-text-primary"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Instellingen
-      </button>
+    <div className="mx-auto max-w-2xl px-4 pb-24">
+      <div className="sticky top-14 z-20 -mx-4 bg-background px-4 pb-2 pt-4 md:top-16">
+        <button
+          onClick={() => router.push('/instellingen')}
+          className="flex items-center gap-1.5 text-sm font-medium text-text-muted transition-colors hover:text-text-primary"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Instellingen
+        </button>
+      </div>
 
       {/* App icon + name */}
       <div className="mb-8 flex flex-col items-center pt-4">
@@ -49,6 +52,35 @@ export default function OverPage() {
         <div className="flex items-center justify-between px-4 py-3">
           <p className="text-sm text-text-muted">Gemaakt door</p>
           <p className="text-sm font-medium text-text-primary">Robin Lovink</p>
+        </div>
+      </div>
+
+      {/* Release notes */}
+      <div className="mt-6">
+        <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-text-primary">
+          <Sparkles className="h-4 w-4 text-primary" />
+          Wat is er nieuw?
+        </h2>
+        <div className="space-y-4">
+          {releaseNotes.slice(0, 3).map((release) => (
+            <div
+              key={release.version}
+              className="overflow-hidden rounded-xl border border-gray-200 bg-surface"
+            >
+              <div className="flex items-center justify-between border-b border-gray-100 px-4 py-2.5">
+                <span className="text-sm font-semibold text-primary">v{release.version}</span>
+                <span className="text-xs text-text-muted">{release.date}</span>
+              </div>
+              <ul className="px-4 py-3">
+                {release.highlights.map((item, i) => (
+                  <li key={i} className="flex items-start gap-2 py-1 text-sm text-text-secondary">
+                    <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-primary/40" />
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </div>
       </div>
 

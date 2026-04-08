@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft, Loader2, Bell, User, Shield, LogOut,
-  ChevronRight, Trash2, ChefHat, Heart, Info,
+  ChevronRight, Trash2, ChefHat, Users, Info,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
@@ -90,13 +90,15 @@ export default function InstellingenPage() {
   const handleDeleteAccount = async () => {
     if (deleteText !== 'VERWIJDER') return;
     setDeleting(true);
-    const { error } = await supabase.functions.invoke('delete-account');
+    const res = await fetch('/api/users/delete-account', { method: 'POST' });
+    const error = res.ok ? null : await res.json().then((d) => d.error || 'Onbekende fout');
     if (error) {
       showToast('Kon account niet verwijderen. Probeer het later opnieuw.');
       setDeleting(false);
       setConfirmDelete(false);
     } else {
-      window.location.href = '/';
+      await signOut();
+      window.location.href = '/login';
     }
   };
 
@@ -111,36 +113,37 @@ export default function InstellingenPage() {
   if (!user) return null;
 
   return (
-    <div className="mx-auto max-w-2xl px-4 pb-24 pt-4">
-      <button
-        onClick={() => router.back()}
-        className="mb-4 flex items-center gap-1.5 text-sm font-medium text-text-muted transition-colors hover:text-text-primary"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Terug
-      </button>
+    <div className="mx-auto max-w-2xl px-4 pb-24">
+      <div className="sticky top-14 z-20 -mx-4 bg-background px-4 pb-2 pt-4 md:top-16">
+        <button
+          onClick={() => router.back()}
+          className="flex items-center gap-1.5 text-sm font-medium text-text-muted transition-colors hover:text-text-primary"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Terug
+        </button>
+      </div>
 
-      <h1 className="mb-2 text-2xl font-bold text-text-primary">Instellingen</h1>
+      <h1 className="sr-only">Instellingen</h1>
 
-      {/* ── Profile card ── */}
+      {/* ── Profile header ── */}
       <button
         onClick={() => router.push('/instellingen/account')}
-        className="mt-4 flex w-full items-center gap-3 rounded-xl border border-gray-200 bg-surface p-4 text-left transition-colors hover:bg-gray-50"
+        className="mb-2 flex w-full flex-col items-center gap-2 py-4"
       >
-        <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-light">
+        <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-primary-light">
           {profile?.avatar_url ? (
             <img src={profile.avatar_url} alt="" className="h-full w-full object-cover" />
           ) : (
-            <User className="h-6 w-6 text-primary" />
+            <User className="h-8 w-8 text-primary" />
           )}
         </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-base font-semibold text-text-primary">
+        <div className="text-center">
+          <p className="text-lg font-semibold text-text-primary">
             {profile?.display_name || 'Gebruiker'}
           </p>
-          <p className="truncate text-sm text-text-muted">{user.email}</p>
+          <p className="text-sm text-text-muted">{user.email}</p>
         </div>
-        <ChevronRight className="h-5 w-5 flex-shrink-0 text-text-muted" />
       </button>
 
       {/* ── Account ── */}
@@ -165,21 +168,25 @@ export default function InstellingenPage() {
         />
       </div>
 
-      {/* ── Shortcuts ── */}
-      <SectionLabel>Snelkoppelingen</SectionLabel>
+      {/* ── My content ── */}
+      <SectionLabel>Mijn content</SectionLabel>
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-surface">
-        <SettingsItem
-          icon={Heart}
-          label="Favorieten"
-          description="Bekijk je opgeslagen recepten"
-          onClick={() => router.push('/favorieten')}
-        />
-        <Divider />
         <SettingsItem
           icon={ChefHat}
           label="Mijn recepten"
-          description="Beheer je eigen recepten"
-          onClick={() => router.push('/recepten')}
+          description="Recepten die jij hebt toegevoegd"
+          onClick={() => router.push('/instellingen/mijn-recepten')}
+        />
+      </div>
+
+      {/* ── Community ── */}
+      <SectionLabel>Community</SectionLabel>
+      <div className="overflow-hidden rounded-xl border border-gray-200 bg-surface">
+        <SettingsItem
+          icon={Users}
+          label="Gebruikers"
+          description="Zoek andere koks en bekijk hun profiel"
+          onClick={() => router.push('/instellingen/gebruikers')}
         />
       </div>
 

@@ -13,7 +13,10 @@ export async function GET() {
       collection_recipes(
         recipe:recipes(id, image_url)
       ),
-      collection_ratings(sterren)
+      collection_ratings(sterren),
+      collection_collaborators(
+        user:profiles!collection_collaborators_user_id_fkey(id, display_name, avatar_url)
+      )
     `)
     .order('created_at', { ascending: false });
 
@@ -60,6 +63,7 @@ export async function GET() {
         .slice(0, 4),
       is_following: followedIds.has(c.id),
       is_collaborator: collaboratorIds.has(c.id),
+      collaborators: (c.collection_collaborators ?? []).map((cc: any) => cc.user).filter(Boolean),
       average_rating: avgRating,
       rating_count: ratings.length,
     };

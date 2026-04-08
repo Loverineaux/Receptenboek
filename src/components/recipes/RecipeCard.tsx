@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { Clock, FolderCheck, FolderPlus, Heart, MessageCircle } from 'lucide-react';
+import { Clock, FolderCheck, FolderPlus, Heart, MessageCircle, Share2 } from 'lucide-react';
 import BronBadge from '@/components/ui/BronBadge';
 import StarRating from '@/components/ui/StarRating';
 import type { RecipeWithRelations } from '@/types';
@@ -15,6 +15,7 @@ interface RecipeCardProps {
   onAddToCollection?: (recipeId: string) => void;
   isInCollection?: boolean;
   initialUserRating?: number;
+  onShare?: (recipeId: string) => void;
 }
 
 // Category tags that should be displayed as filter badges
@@ -23,7 +24,7 @@ const CATEGORY_TAGS = new Set([
   'pasta', 'salade', 'soep', 'dessert', 'ontbijt', 'lunch',
 ]);
 
-export default function RecipeCard({ recipe, onFavoriteToggle, onRate, userRating, onAddToCollection, isInCollection, initialUserRating = 0 }: RecipeCardProps) {
+export default function RecipeCard({ recipe, onFavoriteToggle, onRate, userRating, onAddToCollection, isInCollection, initialUserRating = 0, onShare }: RecipeCardProps) {
   const router = useRouter();
 
   // Live average: recalculate from API average + user's rating change
@@ -93,6 +94,15 @@ export default function RecipeCard({ recipe, onFavoriteToggle, onRate, userRatin
 
         {/* Action buttons — top right */}
         <div className="absolute right-2 top-2 flex items-center gap-2">
+          {onShare && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onShare(recipe.id); }}
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-white/80 backdrop-blur-sm transition-colors hover:bg-white"
+              title="Delen"
+            >
+              <Share2 className="h-4 w-4 text-gray-600" />
+            </button>
+          )}
           {onAddToCollection && (
             <button
               onClick={(e) => { e.stopPropagation(); onAddToCollection(recipe.id); }}

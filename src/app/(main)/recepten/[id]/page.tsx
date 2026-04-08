@@ -31,6 +31,7 @@ import CookMode from '@/components/recipes/CookMode';
 import RecipeChat, { type ChatMessage } from '@/components/recipes/RecipeChat';
 import AddToCollectionModal from '@/components/recipes/AddToCollectionModal';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import ShareModal from '@/components/ui/ShareModal';
 import type { RecipeWithRelations, Comment as CommentType } from '@/types';
 
 // ── fraction parsing + formatting ────────────────
@@ -549,25 +550,7 @@ export default function RecipeDetailPage() {
     setDeleteModalOpen(false);
   };
 
-  const handleShare = async () => {
-    const shareData = {
-      title: recipe?.title || 'Recept',
-      text: `${recipe?.title}${recipe?.subtitle ? ` — ${recipe.subtitle.substring(0, 80)}` : ''}`,
-      url: window.location.href,
-    };
-
-    if (navigator.share) {
-      try {
-        await navigator.share(shareData);
-      } catch {
-        // User cancelled share
-      }
-    } else {
-      await navigator.clipboard.writeText(window.location.href);
-      setToastMessage('Link gekopieerd naar klembord!');
-      setTimeout(() => setToastMessage(null), 3000);
-    }
-  };
+  const [shareOpen, setShareOpen] = useState(false);
 
   // ── loading / not found ────────────────────────
 
@@ -657,7 +640,7 @@ export default function RecipeDetailPage() {
             )}
           </button>
           <button
-            onClick={handleShare}
+            onClick={() => setShareOpen(true)}
             className="flex h-9 w-9 items-center justify-center rounded-full bg-white/80 backdrop-blur-sm transition-colors hover:bg-white"
           >
             <Share2 className="h-5 w-5 text-gray-600" />
@@ -1293,6 +1276,16 @@ export default function RecipeDetailPage() {
           onClose={() => setCollectionModalOpen(false)}
         />
       )}
+
+      {/* ── Share modal ────────────────────────────── */}
+      <ShareModal
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
+        title={recipe?.title || 'Recept'}
+        url={typeof window !== 'undefined' ? window.location.href : ''}
+        shareType="recipe"
+        itemId={params.id}
+      />
 
       {/* ── Toast ──────────────────────────────────── */}
       {toastMessage && (

@@ -11,6 +11,7 @@ import CategoryFilter from '@/components/ui/CategoryFilter';
 import Button from '@/components/ui/Button';
 import RecipeCard from '@/components/recipes/RecipeCard';
 import AddToCollectionModal from '@/components/recipes/AddToCollectionModal';
+import ShareModal from '@/components/ui/ShareModal';
 import PullToRefresh from '@/components/ui/PullToRefresh';
 import MobileFilterSheet from '@/components/ui/MobileFilterSheet';
 import { useCollectionRecipeIds } from '@/hooks/useCollectionRecipeIds';
@@ -252,6 +253,7 @@ export default function ReceptenPage() {
   const [userRatings, setUserRatings] = useState<Record<string, number>>({});
   const [initialUserRatings, setInitialUserRatings] = useState<Record<string, number>>({});
   const [collectionRecipeId, setCollectionRecipeId] = useState<string | null>(null);
+  const [shareRecipeId, setShareRecipeId] = useState<string | null>(null);
 
   // Load user's ratings
   useEffect(() => {
@@ -324,7 +326,7 @@ export default function ReceptenPage() {
   return (
     <PullToRefresh onRefresh={fetchRecipes}>
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-text-primary">Mijn recepten</h1>
+      <h1 className="text-2xl font-bold text-text-primary">Receptenbibliotheek</h1>
 
       {/* Sticky filter bar */}
       <div className="sticky top-0 z-30 -mx-4 space-y-3 bg-background px-4 pb-3 pt-1 shadow-sm md:-mx-6 md:px-6">
@@ -421,6 +423,7 @@ export default function ReceptenPage() {
                 initialUserRating={initialUserRatings[recipe.id] ?? 0}
                 onAddToCollection={user ? (id) => setCollectionRecipeId(id) : undefined}
                 isInCollection={collectionRecipeIds.has(recipe.id)}
+                onShare={user ? (id) => setShareRecipeId(id) : undefined}
               />
             ))}
           </div>
@@ -453,6 +456,18 @@ export default function ReceptenPage() {
           recipeId={collectionRecipeId}
           open={!!collectionRecipeId}
           onClose={() => setCollectionRecipeId(null)}
+        />
+      )}
+
+      {/* Share modal */}
+      {shareRecipeId && (
+        <ShareModal
+          open={!!shareRecipeId}
+          onClose={() => setShareRecipeId(null)}
+          title={recipes.find((r) => r.id === shareRecipeId)?.title || 'Recept'}
+          url={typeof window !== 'undefined' ? `${window.location.origin}/recepten/${shareRecipeId}` : ''}
+          shareType="recipe"
+          itemId={shareRecipeId}
         />
       )}
     </div>

@@ -153,7 +153,7 @@ export default function UserPicker({
       )}
 
       {atMax && (
-        <p className="text-xs text-text-muted">Maximum van {maxUsers} medewerkers bereikt.</p>
+        <p className="text-xs text-text-muted">Maximum van {maxUsers} sous-chefs bereikt.</p>
       )}
     </div>
   );

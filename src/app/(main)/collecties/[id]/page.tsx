@@ -3,13 +3,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Pencil, Share2, Trash2, User, Users, X as XIcon, Copy, UserPlus } from 'lucide-react';
+import { ArrowLeft, Pencil, Share2, Trash2, User, Users, X as XIcon, Copy, UserPlus, Info } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { createClient } from '@/lib/supabase/client';
 import RecipeCard from '@/components/recipes/RecipeCard';
 import Button from '@/components/ui/Button';
 import StarRating from '@/components/ui/StarRating';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import ShareModal from '@/components/ui/ShareModal';
 import AddToCollectionModal from '@/components/recipes/AddToCollectionModal';
 import Modal from '@/components/ui/Modal';
 import UserPicker from '@/components/ui/UserPicker';
@@ -226,16 +227,8 @@ export default function CollectionDetailPage() {
     setFollowLoading(false);
   };
 
-  const handleShare = async () => {
-    if (navigator.share) {
-      await navigator.share({
-        title: collection.title,
-        url: window.location.href,
-      });
-    } else {
-      await navigator.clipboard.writeText(window.location.href);
-    }
-  };
+  const [shareOpen, setShareOpen] = useState(false);
+  const [dupInfoOpen, setDupInfoOpen] = useState(false);
 
   if (loading) {
     return (
@@ -341,9 +334,9 @@ export default function CollectionDetailPage() {
                 <div className="flex -space-x-2">
                   {collaborators.slice(0, 5).map((c) => (
                     c.avatar_url ? (
-                      <img key={c.id} src={c.avatar_url} alt={c.display_name || ''} title={c.display_name || 'Medewerker'} className="h-6 w-6 rounded-full border-2 border-white object-cover" />
+                      <img key={c.id} src={c.avatar_url} alt={c.display_name || ''} title={c.display_name || 'Sous-chef'} className="h-6 w-6 rounded-full border-2 border-white object-cover" />
                     ) : (
-                      <div key={c.id} title={c.display_name || 'Medewerker'} className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-gray-100">
+                      <div key={c.id} title={c.display_name || 'Sous-chef'} className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-gray-100">
                         <User className="h-3 w-3 text-gray-400" />
                       </div>
                     )
@@ -375,17 +368,26 @@ export default function CollectionDetailPage() {
                     {isFollowing ? 'Volgend' : 'Volgen'}
                   </Button>
                 )}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => { setDuplicateOpen(true); setDuplicateTitle(''); setDuplicateError(''); }}
-                >
-                  <Copy className="h-4 w-4" />
-                  Dupliceren
-                </Button>
+                <div className="flex items-center">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => { setDuplicateOpen(true); setDuplicateTitle(''); setDuplicateError(''); }}
+                  >
+                    <Copy className="h-4 w-4" />
+                    Kopieer collectie
+                  </Button>
+                  <button
+                    onClick={() => setDupInfoOpen(true)}
+                    className="ml--1 rounded-full p-1 text-text-muted transition-colors hover:bg-gray-100 hover:text-text-primary"
+                    title="Wat doet dit?"
+                  >
+                    <Info className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </>
             )}
-            <Button variant="ghost" size="sm" onClick={handleShare}>
+            <Button variant="ghost" size="sm" onClick={() => setShareOpen(true)}>
               <Share2 className="h-4 w-4" />
               Delen
             </Button>
@@ -393,7 +395,7 @@ export default function CollectionDetailPage() {
               <>
                 <Button variant="ghost" size="sm" onClick={() => setCollabModalOpen(true)}>
                   <UserPlus className="h-4 w-4" />
-                  Medewerkers
+                  Sous-chefs
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
                   <Pencil className="h-4 w-4" />
@@ -499,11 +501,11 @@ export default function CollectionDetailPage() {
       <Modal
         open={collabModalOpen}
         onClose={() => setCollabModalOpen(false)}
-        title="Medewerkers beheren"
+        title="Sous-chefs beheren"
       >
         <div className="space-y-4">
           <p className="text-sm text-text-secondary">
-            Medewerkers kunnen recepten toevoegen aan en verwijderen uit deze collectie. Maximum 10 medewerkers.
+            Sous-chefs kunnen recepten toevoegen aan en verwijderen uit deze collectie. Maximum 10 sous-chefs.
           </p>
           <UserPicker
             selectedUsers={collaborators}
@@ -537,6 +539,28 @@ export default function CollectionDetailPage() {
         variant="danger"
         onConfirm={handleDelete}
         onCancel={() => setDeleteOpen(false)}
+      />
+
+      {/* Share modal */}
+      <ShareModal
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
+        title={collection.title}
+        url={typeof window !== 'undefined' ? window.location.href : ''}
+        shareType="collection"
+        itemId={collection.id}
+        excludeUserIds={[collection.user_id, ...collaborators.map((c) => c.id)]}
+      />
+
+      {/* Duplicate info modal */}
+      <ConfirmDialog
+        open={dupInfoOpen}
+        title="Collectie kopiëren"
+        message="Hiermee maak je een eigen kopie van deze collectie met alle recepten erin. Handig als je recepten wilt toevoegen of weghalen zonder de originele collectie te wijzigen."
+        confirmLabel="Begrepen"
+        variant="primary"
+        onConfirm={() => setDupInfoOpen(false)}
+        onCancel={() => setDupInfoOpen(false)}
       />
     </div>
   );

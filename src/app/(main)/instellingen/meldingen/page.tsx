@@ -35,7 +35,12 @@ const NOTIFICATION_TYPES = [
   {
     key: 'collection_invite' as const,
     label: 'Collectie uitnodigingen',
-    description: 'Je wordt uitgenodigd als medewerker',
+    description: 'Je wordt uitgenodigd als sous-chef',
+  },
+  {
+    key: 'share' as const,
+    label: 'Gedeeld met jou',
+    description: 'Iemand deelt een recept of collectie met je',
   },
 ];
 
@@ -156,14 +161,16 @@ export default function MeldingenInstellingenPage() {
   if (!prefs) return null;
 
   return (
-    <div className="mx-auto max-w-2xl px-4 pb-24 pt-4">
-      <button
-        onClick={() => router.push('/instellingen')}
-        className="mb-4 flex items-center gap-1.5 text-sm font-medium text-text-muted transition-colors hover:text-text-primary"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Instellingen
-      </button>
+    <div className="mx-auto max-w-2xl px-4 pb-24">
+      <div className="sticky top-14 z-20 -mx-4 bg-background px-4 pb-2 pt-4 md:top-16">
+        <button
+          onClick={() => router.push('/instellingen')}
+          className="flex items-center gap-1.5 text-sm font-medium text-text-muted transition-colors hover:text-text-primary"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Instellingen
+        </button>
+      </div>
 
       <h1 className="mb-6 text-2xl font-bold text-text-primary">Meldingen</h1>
 

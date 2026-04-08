@@ -51,6 +51,8 @@ export function useAuth() {
 
       if (user) {
         await fetchProfile(user.id)
+        // Update last_seen
+        fetch('/api/users/heartbeat', { method: 'POST' }).catch(() => {})
       }
     }
 
@@ -127,6 +129,10 @@ export function useAuth() {
     return { error }
   }
 
+  const refreshProfile = useCallback(async () => {
+    if (authState.user) await fetchProfile(authState.user.id)
+  }, [authState.user, fetchProfile])
+
   return {
     user: authState.user,
     profile: authState.profile,
@@ -136,5 +142,6 @@ export function useAuth() {
     signOut,
     signInWithGoogle,
     resetPassword,
+    refreshProfile,
   }
 }

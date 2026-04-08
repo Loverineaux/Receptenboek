@@ -6,12 +6,13 @@ import { ArrowLeft, User, Camera, KeyRound, Mail, Check } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { createClient } from '@/lib/supabase/client';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import AvatarCropModal from '@/components/ui/AvatarCropModal';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 
 export default function AccountInstellingenPage() {
   const router = useRouter();
-  const { user, profile, loading, resetPassword } = useAuth();
+  const { user, profile, loading, resetPassword, refreshProfile } = useAuth();
   const supabase = createClient();
 
   const [displayName, setDisplayName] = useState('');
@@ -24,6 +25,7 @@ export default function AccountInstellingenPage() {
   const [resetSent, setResetSent] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
     setToastMessage(msg);
@@ -67,20 +69,28 @@ export default function AccountInstellingenPage() {
     } else {
       showToast('Profiel opgeslagen');
       setHasChanges(false);
+      await refreshProfile();
     }
     setSaving(false);
   };
 
-  const handleAvatarUpload = async (file: File) => {
+  const handleFileSelect = (file: File) => {
+    // Read file and open crop modal
+    const reader = new FileReader();
+    reader.onload = () => setCropImageSrc(reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const handleCroppedUpload = async (blob: Blob) => {
     if (!user) return;
+    setCropImageSrc(null);
     setUploading(true);
 
-    const ext = file.name.split('.').pop();
-    const path = `${user.id}/avatar.${ext}`;
+    const path = `${user.id}/avatar.jpg`;
 
     const { error: uploadErr } = await supabase.storage
       .from('avatars')
-      .upload(path, file, { upsert: true });
+      .upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
 
     if (uploadErr) {
       showToast('Upload mislukt: ' + uploadErr.message, 'error');
@@ -89,7 +99,8 @@ export default function AccountInstellingenPage() {
     }
 
     const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path);
-    const newUrl = urlData.publicUrl;
+    // Append timestamp to bust cache
+    const newUrl = urlData.publicUrl + '?t=' + Date.now();
     setAvatarUrl(newUrl);
 
     const { error: saveErr } = await supabase
@@ -101,6 +112,7 @@ export default function AccountInstellingenPage() {
       showToast('Foto geupload maar profiel update mislukt', 'error');
     } else {
       showToast('Profielfoto bijgewerkt');
+      await refreshProfile();
     }
     setUploading(false);
   };
@@ -128,14 +140,16 @@ export default function AccountInstellingenPage() {
   if (!user) return null;
 
   return (
-    <div className="mx-auto max-w-2xl px-4 pb-24 pt-4">
-      <button
-        onClick={() => router.push('/instellingen')}
-        className="mb-4 flex items-center gap-1.5 text-sm font-medium text-text-muted transition-colors hover:text-text-primary"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Instellingen
-      </button>
+    <div className="mx-auto max-w-2xl px-4 pb-24">
+      <div className="sticky top-14 z-20 -mx-4 bg-background px-4 pb-2 pt-4 md:top-16">
+        <button
+          onClick={() => router.push('/instellingen')}
+          className="flex items-center gap-1.5 text-sm font-medium text-text-muted transition-colors hover:text-text-primary"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Instellingen
+        </button>
+      </div>
 
       <h1 className="mb-6 text-2xl font-bold text-text-primary">Account</h1>
 
@@ -159,7 +173,8 @@ export default function AccountInstellingenPage() {
             disabled={uploading}
             onChange={(e) => {
               const file = e.target.files?.[0];
-              if (file) handleAvatarUpload(file);
+              if (file) handleFileSelect(file);
+              e.target.value = '';
             }}
           />
           {uploading && (
@@ -270,6 +285,16 @@ export default function AccountInstellingenPage() {
         onConfirm={handleResetPassword}
         onCancel={() => setConfirmReset(false)}
       />
+
+      {/* Avatar crop modal */}
+      {cropImageSrc && (
+        <AvatarCropModal
+          open={!!cropImageSrc}
+          imageSrc={cropImageSrc}
+          onClose={() => setCropImageSrc(null)}
+          onCropComplete={handleCroppedUpload}
+        />
+      )}
 
       {/* Toast */}
       {toastMessage && (

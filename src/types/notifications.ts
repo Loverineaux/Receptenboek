@@ -5,7 +5,8 @@ export type NotificationType =
   | 'rating'
   | 'comment_like'
   | 'collection_follow'
-  | 'collection_invite';
+  | 'collection_invite'
+  | 'share';
 
 export interface AppNotification {
   id: string;
@@ -39,6 +40,7 @@ export interface NotificationPreferences {
   comment_like: boolean;
   collection_follow: boolean;
   collection_invite: boolean;
+  share: boolean;
   push_enabled: boolean;
   updated_at: string;
 }

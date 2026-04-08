@@ -21,11 +21,20 @@ Voer het bump script uit:
 bash scripts/bump-version.sh [patch|minor|major]
 ```
 
-## 3. Update de "Over de app" pagina
+## 3. Genereer release notes
 
-Controleer dat `src/app/(main)/instellingen/over/page.tsx` de juiste versie toont. Het script doet dit automatisch, maar verifieer het.
+Lees het bestand `src/lib/release-notes.ts`. Voeg bovenaan de `releaseNotes` array een nieuw item toe met:
+- `version`: de nieuwe versie
+- `date`: vandaag in het formaat "7 april 2026"
+- `highlights`: een array van 4-6 korte zinnen in **begrijpelijke Nederlandse taal** die beschrijven wat er nieuw of verbeterd is. Schrijf voor gewone gebruikers, niet voor developers. Gebruik geen technische termen.
 
-## 4. Maak een versie-commit
+Baseer de highlights op de commits sinds de laatste tag. Groepeer gerelateerde commits in één zin. Als er meer dan 3 releases in het bestand staan, verwijder de oudste zodat er maximaal 3 overblijven.
+
+## 4. Controleer
+
+Verifieer dat `src/app/(main)/instellingen/over/page.tsx` de versie dynamisch toont via `process.env.APP_VERSION`.
+
+## 5. Maak een versie-commit
 
 Stage de gewijzigde bestanden en maak een commit:
 
@@ -33,16 +42,16 @@ Stage de gewijzigde bestanden en maak een commit:
 chore: bump version to X.Y.Z
 ```
 
-## 5. Tag de release
+## 6. Tag de release
 
 ```bash
 git tag vX.Y.Z
 ```
 
-## 6. Push
+## 7. Push
 
 ```bash
 git push && git push --tags
 ```
 
-Meld aan de gebruiker welke versie er is gereleased en wat de belangrijkste wijzigingen zijn (korte samenvatting van de commits).
+Meld aan de gebruiker welke versie er is gereleased en geef een korte samenvatting.

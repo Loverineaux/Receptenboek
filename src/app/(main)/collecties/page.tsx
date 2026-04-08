@@ -238,10 +238,10 @@ export default function CollectiesPage() {
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium text-text-primary">
-              Medewerkers
+              Sous-chefs
             </label>
             <p className="mb-2 text-xs text-text-muted">
-              Medewerkers kunnen recepten toevoegen en verwijderen. (optioneel, max 10)
+              Sous-chefs kunnen recepten toevoegen en verwijderen. (optioneel, max 10)
             </p>
             <UserPicker
               selectedUsers={newCollaborators}

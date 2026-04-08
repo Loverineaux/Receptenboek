@@ -17,6 +17,7 @@ const TYPE_LABELS: Record<string, string> = {
   comment_like: 'Like',
   collection_follow: 'Volger',
   collection_invite: 'Uitnodiging',
+  share: 'Gedeeld',
 };
 
 const TYPE_COLORS: Record<string, string> = {
@@ -27,6 +28,7 @@ const TYPE_COLORS: Record<string, string> = {
   comment_like: 'bg-red-100 text-red-700',
   collection_follow: 'bg-green-100 text-green-700',
   collection_invite: 'bg-purple-100 text-purple-700',
+  share: 'bg-cyan-100 text-cyan-700',
 };
 
 function timeAgo(dateStr: string): string {

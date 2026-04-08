@@ -49,7 +49,7 @@ export async function POST(
     .single();
 
   if (!collection || collection.user_id !== user.id) {
-    return NextResponse.json({ error: 'Alleen de eigenaar kan medewerkers toevoegen' }, { status: 403 });
+    return NextResponse.json({ error: 'Alleen de eigenaar kan sous-chefs toevoegen' }, { status: 403 });
   }
 
   const body = await request.json();
@@ -60,7 +60,7 @@ export async function POST(
   }
 
   if (user_id === user.id) {
-    return NextResponse.json({ error: 'Je kunt jezelf niet als medewerker toevoegen' }, { status: 400 });
+    return NextResponse.json({ error: 'Je kunt jezelf niet als sous-chef toevoegen' }, { status: 400 });
   }
 
   // Check max 10 collaborators
@@ -70,7 +70,7 @@ export async function POST(
     .eq('collection_id', params.id);
 
   if ((count ?? 0) >= 10) {
-    return NextResponse.json({ error: 'Maximum van 10 medewerkers bereikt' }, { status: 400 });
+    return NextResponse.json({ error: 'Maximum van 10 sous-chefs bereikt' }, { status: 400 });
   }
 
   const { error } = await supabase
@@ -83,7 +83,7 @@ export async function POST(
 
   if (error) {
     if (error.code === '23505') {
-      return NextResponse.json({ error: 'Deze gebruiker is al medewerker' }, { status: 409 });
+      return NextResponse.json({ error: 'Deze gebruiker is al sous-chef' }, { status: 409 });
     }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -102,7 +102,7 @@ export async function POST(
         recipientId: user_id,
         actorId: user.id,
         type: 'collection_invite',
-        message: `${actorName} heeft je uitgenodigd als medewerker voor: ${col?.title || 'een collectie'}`,
+        message: `${actorName} heeft je uitgenodigd als sous-chef voor: ${col?.title || 'een collectie'}`,
         link: `/collecties/${collectionId}`,
       });
     } catch (err) {
@@ -135,7 +135,7 @@ export async function DELETE(
     .single();
 
   if (!collection || collection.user_id !== user.id) {
-    return NextResponse.json({ error: 'Alleen de eigenaar kan medewerkers verwijderen' }, { status: 403 });
+    return NextResponse.json({ error: 'Alleen de eigenaar kan sous-chefs verwijderen' }, { status: 403 });
   }
 
   const body = await request.json();
