@@ -1203,7 +1203,7 @@ export default function NieuwReceptPage() {
             Importeer van foto
           </h2>
           <p className="text-sm text-text-secondary">
-            Upload foto's van een recept. Meerdere foto's mogen (bijv. ingrediënten + bereiding + resultaat). We combineren alles tot één recept.
+            Upload foto&apos;s van een recept. Meerdere foto&apos;s mogen (bijv. ingrediënten + bereiding + resultaat). We combineren alles tot één recept.
           </p>
 
           <BronInput
@@ -1223,9 +1223,9 @@ export default function NieuwReceptPage() {
             <div className="text-center">
               <Camera className="mx-auto h-8 w-8 text-text-muted" />
               <p className="mt-2 text-sm text-text-secondary">
-                Klik of sleep foto's hierheen
+                Klik of sleep foto&apos;s hierheen
               </p>
-              <p className="text-xs text-text-muted">Max 10 foto's, JPEG/PNG/WebP</p>
+              <p className="text-xs text-text-muted">Max 10 foto&apos;s, JPEG/PNG/WebP</p>
             </div>
             <input
               ref={photoInputRef}
