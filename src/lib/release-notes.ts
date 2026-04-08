@@ -6,6 +6,16 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '0.4.0',
+    date: '8 april 2026',
+    highlights: [
+      'Veranderingen van andere gebruikers verschijnen nu direct op je scherm',
+      'Nieuwe reacties, favorieten en beoordelingen zie je zonder te refreshen',
+      'Meldingen komen nu instant binnen in plaats van met vertraging',
+      'Nieuwe recepten en collecties verschijnen automatisch in de lijst',
+    ],
+  },
+  {
     version: '0.3.0',
     date: '8 april 2026',
     highlights: [
@@ -26,17 +36,6 @@ export const releaseNotes: ReleaseNote[] = [
       'Het hartje op receptkaarten werkt nu direct — geen vertraging meer',
       'Je kunt nu je wachtwoord wijzigen via een e-mail link',
       'Alle meldingen en foutberichten zijn nu in het Nederlands',
-    ],
-  },
-  {
-    version: '0.1.0',
-    date: '4 april 2026',
-    highlights: [
-      'Ingrediënten database met barcode scanner',
-      'Voedingswaarden worden automatisch berekend op basis van je ingrediënten',
-      'Importeer meerdere recepten tegelijk via een link',
-      'Organiseer je recepten in collecties, net als Pinterest-borden',
-      'HelloFresh recepten kunnen nu ook geïmporteerd worden',
     ],
   },
 ];
