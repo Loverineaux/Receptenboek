@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, FormEvent } from 'react'
+import { Suspense, useState, useEffect, FormEvent } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { Mail, Lock, User, Eye, EyeOff, KeyRound, ArrowRight } from 'lucide-react'
@@ -11,7 +11,15 @@ import Input from '@/components/ui/Input'
 
 // Toegangscode wordt dynamisch gevalideerd via API
 
-export default function RegisterPage() {
+export default function RegisterPageWrapper() {
+  return (
+    <Suspense>
+      <RegisterPage />
+    </Suspense>
+  )
+}
+
+function RegisterPage() {
   const supabase = createClient()
   const searchParams = useSearchParams()
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Plus } from 'lucide-react';
@@ -19,7 +19,15 @@ import type { RecipeWithRelations, Source } from '@/types';
 
 type SortOption = 'newest' | 'rating' | 'time' | 'az' | 'za';
 
-export default function ReceptenPage() {
+export default function ReceptenPageWrapper() {
+  return (
+    <Suspense>
+      <ReceptenPage />
+    </Suspense>
+  );
+}
+
+function ReceptenPage() {
   const { user } = useAuth();
   const collectionRecipeIds = useCollectionRecipeIds();
   const supabase = createClient();
