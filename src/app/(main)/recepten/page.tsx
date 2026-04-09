@@ -95,7 +95,7 @@ function ReceptenPage() {
           .from('recipes')
           .select(
             `
-            id, title, image_url, bron, tijd, moeilijkheid, created_at,
+            id, title, subtitle, image_url, bron, tijd, moeilijkheid, created_at,
             ingredients(naam),
             tags:recipe_tags(tag:tags(id, name)),
             ratings(sterren, user_id),
@@ -104,9 +104,13 @@ function ReceptenPage() {
           `
           );
 
-        // Server-side title search (when not also searching ingredients)
+        // Server-side multi-word search on title + subtitle
+        // "kip pasta" matches recipes containing BOTH "kip" AND "pasta" in title or subtitle
         if (search && !searchIngredients) {
-          query = query.ilike('title', `%${search}%`);
+          const words = search.trim().split(/\s+/).filter(Boolean);
+          for (const word of words) {
+            query = query.or(`title.ilike.%${word}%,subtitle.ilike.%${word}%`);
+          }
         }
 
         // Server-side source filtering
@@ -157,17 +161,20 @@ function ReceptenPage() {
           };
         });
 
-        // Client-side ingredient search (only when searchIngredients is on)
+        // Client-side multi-word search on title + subtitle + ingredients
         let filtered = processed;
         if (search && searchIngredients) {
-          const q = search.toLowerCase();
-          filtered = filtered.filter((r) => {
-            const titleMatch = r.title.toLowerCase().includes(q);
-            if (titleMatch) return true;
-            return (r.ingredients || []).some((i: any) =>
-              (i.naam || '').toLowerCase().includes(q)
-            );
-          });
+          const words = search.toLowerCase().trim().split(/\s+/).filter(Boolean);
+          filtered = filtered.filter((r) =>
+            words.every((word) => {
+              const titleMatch = r.title.toLowerCase().includes(word);
+              const subtitleMatch = ((r as any).subtitle || '').toLowerCase().includes(word);
+              const ingredientMatch = (r.ingredients || []).some((i: any) =>
+                (i.naam || '').toLowerCase().includes(word)
+              );
+              return titleMatch || subtitleMatch || ingredientMatch;
+            })
+          );
         }
 
         // Client-side category filter — check tags

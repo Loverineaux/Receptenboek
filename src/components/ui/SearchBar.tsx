@@ -32,7 +32,7 @@ export default function SearchBar({
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => {
       onChange(val);
-    }, 300);
+    }, 400);
   };
 
   const handleClear = () => {
