@@ -7,7 +7,10 @@ import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useAdmin } from '@/hooks/useAdmin';
 import Button from '@/components/ui/Button';
-import RecipeForm, { RecipeFormData } from '@/components/recipes/RecipeForm';
+import dynamic from 'next/dynamic';
+import type { RecipeFormData } from '@/components/recipes/RecipeForm';
+
+const RecipeForm = dynamic(() => import('@/components/recipes/RecipeForm'));
 import type { RecipeWithRelations } from '@/types';
 
 export default function BewerkReceptPage() {

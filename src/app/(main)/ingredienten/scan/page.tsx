@@ -4,7 +4,9 @@ import { useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { ArrowLeft, Check, Plus, Search, Camera, Loader2 } from 'lucide-react';
-import BarcodeScanner from '@/components/ingredients/BarcodeScanner';
+import dynamic from 'next/dynamic';
+
+const BarcodeScanner = dynamic(() => import('@/components/ingredients/BarcodeScanner'), { ssr: false });
 import ProductCard from '@/components/ingredients/ProductCard';
 import type { Product, GenericIngredient } from '@/types';
 

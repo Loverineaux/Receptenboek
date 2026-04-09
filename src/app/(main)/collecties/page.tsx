@@ -7,8 +7,10 @@ import { createClient } from '@/lib/supabase/client';
 import CollectionCard from '@/components/recipes/CollectionCard';
 import PullToRefresh from '@/components/ui/PullToRefresh';
 import Button from '@/components/ui/Button';
-import Modal from '@/components/ui/Modal';
-import UserPicker from '@/components/ui/UserPicker';
+import dynamic from 'next/dynamic';
+
+const Modal = dynamic(() => import('@/components/ui/Modal'));
+const UserPicker = dynamic(() => import('@/components/ui/UserPicker'));
 import type { CollectionWithDetails, UserProfile } from '@/types';
 
 type Tab = 'all' | 'mine';

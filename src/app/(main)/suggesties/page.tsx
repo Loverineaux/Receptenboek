@@ -6,7 +6,9 @@ import { useAuth } from '@/hooks/useAuth';
 import { createClient } from '@/lib/supabase/client';
 import IngredientChips from '@/components/ui/IngredientChips';
 import RecipeCard from '@/components/recipes/RecipeCard';
-import AddToCollectionModal from '@/components/recipes/AddToCollectionModal';
+import dynamic from 'next/dynamic';
+
+const AddToCollectionModal = dynamic(() => import('@/components/recipes/AddToCollectionModal'));
 import { useCollectionRecipeIds } from '@/hooks/useCollectionRecipeIds';
 import Button from '@/components/ui/Button';
 
@@ -46,26 +48,21 @@ export default function SuggestiesPage() {
       if (res.ok) {
         const data = await res.json();
 
-        // Check favorites if logged in
+        // Check favorites and ratings in parallel
         if (user) {
-          const { data: favs } = await supabase
-            .from('favorites')
-            .select('recipe_id')
-            .eq('user_id', user.id);
-          const favIds = new Set((favs ?? []).map((f: any) => f.recipe_id));
+          const [favsResult, ratingsResult] = await Promise.all([
+            supabase.from('favorites').select('recipe_id').eq('user_id', user.id),
+            supabase.from('ratings').select('recipe_id, sterren').eq('user_id', user.id),
+          ]);
 
+          const favIds = new Set((favsResult.data ?? []).map((f: any) => f.recipe_id));
           for (const item of data) {
             item.recipe.is_favorited = favIds.has(item.recipe.id);
           }
 
-          // Load user ratings
-          const { data: ratings } = await supabase
-            .from('ratings')
-            .select('recipe_id, sterren')
-            .eq('user_id', user.id);
-          if (ratings) {
+          if (ratingsResult.data) {
             const map: Record<string, number> = {};
-            ratings.forEach((r: any) => { map[r.recipe_id] = r.sterren; });
+            ratingsResult.data.forEach((r: any) => { map[r.recipe_id] = r.sterren; });
             setUserRatings(map);
             setInitialUserRatings(map);
           }

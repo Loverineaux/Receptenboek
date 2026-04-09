@@ -198,14 +198,14 @@ export default function RecipeChat({
   const sendMessage = async (text: string) => {
     if (!text.trim() || isStreaming) return;
 
-    const userMessage: Message = { role: 'user', content: text.trim() };
+    const userMessage: ChatMessage = { role: 'user', content: text.trim() };
     const newMessages = [...messages, userMessage];
     setMessages(newMessages);
     setInput('');
     setIsStreaming(true);
 
     // Add empty assistant message that we'll stream into
-    const assistantMessage: Message = { role: 'assistant', content: '' };
+    const assistantMessage: ChatMessage = { role: 'assistant', content: '' };
     setMessages([...newMessages, assistantMessage]);
 
     try {

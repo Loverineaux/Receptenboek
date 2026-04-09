@@ -1,24 +1,20 @@
-'use client';
-
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { ArrowLeft, ChefHat, Code, Heart, Sparkles } from 'lucide-react';
 import { releaseNotes } from '@/lib/release-notes';
 
 const APP_VERSION = process.env.APP_VERSION || '0.0.0';
 
 export default function OverPage() {
-  const router = useRouter();
-
   return (
     <div className="mx-auto max-w-2xl px-4 pb-24">
       <div className="sticky top-14 z-20 -mx-4 bg-background px-4 pb-2 pt-4 md:top-16">
-        <button
-          onClick={() => router.push('/instellingen')}
+        <Link
+          href="/instellingen"
           className="flex items-center gap-1.5 text-sm font-medium text-text-muted transition-colors hover:text-text-primary"
         >
           <ArrowLeft className="h-4 w-4" />
           Instellingen
-        </button>
+        </Link>
       </div>
 
       {/* App icon + name */}

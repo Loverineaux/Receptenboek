@@ -9,7 +9,6 @@ import Modal from '@/components/ui/Modal';
 import { useAuth } from '@/hooks/useAuth';
 import { useAdmin } from '@/hooks/useAdmin';
 import { useRealtimeRefresh } from '@/hooks/useRealtimeSubscription';
-import { supabaseAdmin } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/client';
 import type { GenericIngredientWithProducts, GenericIngredient } from '@/types';
 
@@ -177,7 +176,7 @@ export default function IngredientDetailPage() {
 
   const fetchIngredient = useCallback(async () => {
     try {
-      const res = await fetch(`/api/ingredients/${id}?_t=${Date.now()}`);
+      const res = await fetch(`/api/ingredients/${id}`, { cache: 'no-store' });
       if (!res.ok) throw new Error('Ingrediënt niet gevonden');
       const data = await res.json();
       setIngredient(data);

@@ -48,7 +48,7 @@ export async function DELETE(
   if (ingredientId) {
     await supabaseAdmin.rpc('recalculate_generic_nutrition', {
       p_ingredient_id: ingredientId,
-    }).catch(() => {});
+    });
 
     // Update product count
     const { count } = await supabaseAdmin

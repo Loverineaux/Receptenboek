@@ -55,15 +55,17 @@ export async function POST(
     }
 
     // 2. Recalculate nutrition for NEW ingredient
-    await supabaseAdmin.rpc('recalculate_generic_nutrition', {
+    const { error: rpcErrNew } = await supabaseAdmin.rpc('recalculate_generic_nutrition', {
       ingredient_id: generic_ingredient_id,
-    }).catch((e) => console.error('[Link] RPC error (new):', e.message));
+    });
+    if (rpcErrNew) console.error('[Link] RPC error (new):', rpcErrNew.message);
 
     // 3. Recalculate nutrition for OLD ingredient (if it was linked before)
     if (oldIngredientId && oldIngredientId !== generic_ingredient_id) {
-      await supabaseAdmin.rpc('recalculate_generic_nutrition', {
+      const { error: rpcErrOld } = await supabaseAdmin.rpc('recalculate_generic_nutrition', {
         ingredient_id: oldIngredientId,
-      }).catch((e) => console.error('[Link] RPC error (old):', e.message));
+      });
+      if (rpcErrOld) console.error('[Link] RPC error (old):', rpcErrOld.message);
 
       // Update product count on old ingredient
       const { count: oldCount } = await supabaseAdmin

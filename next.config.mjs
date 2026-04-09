@@ -16,6 +16,11 @@ const nextConfig = {
     serverActions: {
       bodySizeLimit: '100mb',
     },
+    serverComponentsExternalPackages: [
+      'puppeteer-extra',
+      'puppeteer-extra-plugin-stealth',
+      'puppeteer-core',
+    ],
   },
   images: {
     remotePatterns: [

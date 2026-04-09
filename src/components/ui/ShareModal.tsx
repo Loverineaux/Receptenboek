@@ -123,7 +123,7 @@ export default function ShareModal({ open, onClose, title, url, shareType, itemI
             {copied ? <Check className="h-4 w-4 text-primary" /> : <Link2 className="h-4 w-4" />}
             {copied ? 'Gekopieerd!' : 'Kopieer link'}
           </button>
-          {typeof navigator !== 'undefined' && navigator.share && (
+          {typeof navigator !== 'undefined' && 'share' in navigator && (
             <button
               onClick={handleNativeShare}
               className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm font-medium text-text-primary transition-colors hover:bg-gray-100"

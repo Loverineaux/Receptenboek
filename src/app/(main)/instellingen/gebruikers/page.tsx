@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Search, User, ChefHat, Star, Clock, CalendarDays } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
-import { supabaseAdmin } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/client';
 
 interface UserWithStats {
@@ -41,18 +40,16 @@ export default function GebruikersPage() {
   const fetchUsers = useCallback(async () => {
     setLoading(true);
 
-    // Fetch all profiles
-    const { data: profiles } = await supabase
-      .from('profiles')
-      .select('id, display_name, avatar_url, created_at, last_seen')
-      .order('created_at', { ascending: false });
+    // Fetch profiles and recipes in parallel
+    const [profilesResult, recipesResult] = await Promise.all([
+      supabase.from('profiles').select('id, display_name, avatar_url, created_at, last_seen').order('created_at', { ascending: false }),
+      supabase.from('recipes').select('user_id, created_at, ratings(sterren)'),
+    ]);
+
+    const { data: profiles } = profilesResult;
+    const { data: recipes } = recipesResult;
 
     if (!profiles) { setLoading(false); return; }
-
-    // Fetch recipe counts and stats per user
-    const { data: recipes } = await supabase
-      .from('recipes')
-      .select('user_id, created_at, ratings(sterren)');
 
     const statsMap = new Map<string, { count: number; totalRating: number; ratingCount: number; lastAt: string | null }>();
 

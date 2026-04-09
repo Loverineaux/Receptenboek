@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { Search, User, Shield, ShieldOff, KeyRound, Ban, CheckCircle, ChefHat, Crown } from 'lucide-react';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 
@@ -20,7 +21,6 @@ interface AdminUser {
 export default function AdminGebruikersPage() {
   const router = useRouter();
   const [users, setUsers] = useState<AdminUser[]>([]);
-  const [filtered, setFiltered] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [toast, setToast] = useState<string | null>(null);
@@ -28,21 +28,21 @@ export default function AdminGebruikersPage() {
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
 
+  const filtered = useMemo(() => {
+    if (!search) return users;
+    const q = search.toLowerCase();
+    return users.filter((u) =>
+      (u.display_name || '').toLowerCase().includes(q) ||
+      (u.email || '').toLowerCase().includes(q)
+    );
+  }, [search, users]);
+
   useEffect(() => {
     fetch('/api/admin/users')
       .then((r) => r.json())
-      .then((data) => { setUsers(data); setFiltered(data); })
+      .then((data) => { setUsers(data); })
       .finally(() => setLoading(false));
   }, []);
-
-  useEffect(() => {
-    if (!search) { setFiltered(users); return; }
-    const q = search.toLowerCase();
-    setFiltered(users.filter((u) =>
-      (u.display_name || '').toLowerCase().includes(q) ||
-      (u.email || '').toLowerCase().includes(q)
-    ));
-  }, [search, users]);
 
   const handleBlock = (user: AdminUser) => {
     setConfirmAction({
@@ -127,9 +127,9 @@ export default function AdminGebruikersPage() {
               <div className="flex items-start gap-3">
                 {/* Avatar */}
                 <button onClick={() => router.push(`/profiel/${u.id}`)} className="flex-shrink-0">
-                  <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-primary-light">
+                  <div className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-primary-light">
                     {u.avatar_url ? (
-                      <img src={u.avatar_url} alt="" className="h-full w-full object-cover" />
+                      <Image src={u.avatar_url} alt="" fill className="object-cover" />
                     ) : (
                       <User className="h-5 w-5 text-primary" />
                     )}

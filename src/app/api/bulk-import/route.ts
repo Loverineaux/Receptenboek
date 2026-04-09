@@ -157,7 +157,7 @@ export async function POST(request: NextRequest) {
 
       if (recErr || !rec) throw new Error(recErr?.message || 'Insert failed');
 
-      const promises: Promise<any>[] = [];
+      const promises: PromiseLike<any>[] = [];
 
       // Ingredients
       if (recipe.ingredients?.length) {

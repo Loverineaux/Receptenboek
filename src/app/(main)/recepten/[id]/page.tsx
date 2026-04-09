@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import {
   ArrowLeft,
   Clock,
@@ -27,11 +28,14 @@ import PortieSelector from '@/components/ui/PortieSelector';
 import StarRating from '@/components/ui/StarRating';
 import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
-import CookMode from '@/components/recipes/CookMode';
-import RecipeChat, { type ChatMessage } from '@/components/recipes/RecipeChat';
-import AddToCollectionModal from '@/components/recipes/AddToCollectionModal';
-import ConfirmDialog from '@/components/ui/ConfirmDialog';
-import ShareModal from '@/components/ui/ShareModal';
+import dynamic from 'next/dynamic';
+import type { ChatMessage } from '@/components/recipes/RecipeChat';
+
+const CookMode = dynamic(() => import('@/components/recipes/CookMode'));
+const RecipeChat = dynamic(() => import('@/components/recipes/RecipeChat'));
+const AddToCollectionModal = dynamic(() => import('@/components/recipes/AddToCollectionModal'));
+const ConfirmDialog = dynamic(() => import('@/components/ui/ConfirmDialog'));
+const ShareModal = dynamic(() => import('@/components/ui/ShareModal'));
 import { useAdmin } from '@/hooks/useAdmin';
 import { useRealtimeSubscription, useRealtimeRefresh } from '@/hooks/useRealtimeSubscription';
 import type { RecipeWithRelations, Comment as CommentType } from '@/types';
@@ -229,6 +233,21 @@ export default function RecipeDetailPage() {
   const [calculation, setCalculation] = useState<any>(null);
   const [nutritionOpen, setNutritionOpen] = useState(false);
   const nutritionFetched = useRef(false);
+
+  // Auto-calculate nutrition when tab is 'voeding' and no source nutrition exists
+  useEffect(() => {
+    if (tab !== 'voeding' || !recipe || recipe.nutrition || calculation || calculating || nutritionFetched.current) return;
+    nutritionFetched.current = true;
+    setCalculating(true);
+    fetch(`/api/recipes/${params.id}/calculate-nutrition`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ save: false }),
+    }).then(res => res.ok ? res.json() : null)
+      .then(data => { if (data) setCalculation(data); })
+      .finally(() => setCalculating(false));
+  }, [tab, recipe, calculation, calculating, params.id]);
+
   const [scalingSteps, setScalingSteps] = useState(false);
   const [cookMode, setCookMode] = useState(false);
   const scaledForPortions = useRef<number | null>(null);
@@ -238,10 +257,12 @@ export default function RecipeDetailPage() {
   const fetchRecipe = useCallback(async () => {
     setLoading(true);
 
-    const { data } = await supabase
-      .from('recipes')
-      .select(
-        `
+    // Fetch recipe data and favorite count in parallel
+    const [recipeResult, fcResult] = await Promise.all([
+      supabase
+        .from('recipes')
+        .select(
+          `
         *,
         ingredients(*),
         steps(*),
@@ -252,9 +273,15 @@ export default function RecipeDetailPage() {
         comments(*, user:profiles!comments_user_id_fkey(id, display_name, avatar_url)),
         user:profiles!recipes_user_id_fkey(id, display_name, avatar_url)
       `
-      )
-      .eq('id', params.id)
-      .single();
+        )
+        .eq('id', params.id)
+        .single(),
+      fetch(`/api/recipes/${params.id}/favorite-count`)
+        .then((r) => (r.ok ? r.json() : { count: 0, is_favorited: false }))
+        .catch(() => ({ count: 0, is_favorited: false })),
+    ]);
+
+    const { data } = recipeResult;
 
     if (!data) {
       setLoading(false);
@@ -269,17 +296,8 @@ export default function RecipeDetailPage() {
 
     const flatTags = (data.tags ?? []).map((rt: any) => rt.tag).filter(Boolean);
 
-    // Favorite count + user favorite status via API (bypasses RLS)
-    let fetchedFavCount = 0;
-    let fetchedIsFavorited = false;
-    try {
-      const fcRes = await fetch(`/api/recipes/${params.id}/favorite-count`);
-      if (fcRes.ok) {
-        const fcData = await fcRes.json();
-        fetchedFavCount = fcData.count ?? 0;
-        fetchedIsFavorited = fcData.is_favorited ?? false;
-      }
-    } catch {}
+    const fetchedFavCount = fcResult.count ?? 0;
+    const fetchedIsFavorited = fcResult.is_favorited ?? false;
 
     const r: RecipeWithRelations = {
       ...(data as any),
@@ -442,7 +460,7 @@ export default function RecipeDetailPage() {
     <div key={c.id} className="flex gap-3 rounded-lg border p-3">
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-100">
         {c.user?.avatar_url ? (
-          <img src={c.user.avatar_url} alt="" className="h-8 w-8 rounded-full object-cover" />
+          <Image src={c.user.avatar_url} alt="" width={32} height={32} className="h-8 w-8 rounded-full object-cover" />
         ) : (
           <User className="h-4 w-4 text-text-muted" />
         )}
@@ -666,12 +684,15 @@ export default function RecipeDetailPage() {
     <div className="space-y-6 pb-12">
       {/* ── Hero image ─────────────────────────────── */}
       <div className="relative -mx-4 -mt-6 overflow-hidden sm:-mx-6 sm:rounded-b-2xl">
-        <div className="aspect-[16/7] w-full">
+        <div className="relative aspect-[16/7] w-full">
           {recipe.image_url ? (
-            <img
+            <Image
               src={recipe.image_url}
               alt={recipe.title}
-              className="h-full w-full object-cover"
+              fill
+              className="object-cover"
+              priority
+              sizes="100vw"
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary/30 to-primary/60">
@@ -995,11 +1016,15 @@ export default function RecipeDetailPage() {
                     {scaledSteps ? step.beschrijving : scaleStepText(step.beschrijving, ratio)}
                   </p>
                   {step.afbeelding_url && (
-                    <img
-                      src={step.afbeelding_url}
-                      alt={`Stap ${idx + 1}`}
-                      className="mt-2 max-h-48 rounded-lg object-cover"
-                    />
+                    <div className="relative mt-2 h-48 w-full">
+                      <Image
+                        src={step.afbeelding_url}
+                        alt={`Stap ${idx + 1}`}
+                        fill
+                        className="rounded-lg object-cover"
+                        sizes="(max-width: 768px) 100vw, 50vw"
+                      />
+                    </div>
                   )}
                 </div>
               </li>
@@ -1010,19 +1035,6 @@ export default function RecipeDetailPage() {
 
       {tab === 'voeding' && (() => {
         const hasSourceNutrition = !!recipe.nutrition;
-
-        // Auto-calculate only when NO source nutrition exists
-        if (!hasSourceNutrition && !calculation && !calculating && !nutritionFetched.current) {
-          nutritionFetched.current = true;
-          setCalculating(true);
-          fetch(`/api/recipes/${params.id}/calculate-nutrition`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ save: false }),
-          }).then(res => res.ok ? res.json() : null)
-            .then(data => { if (data) setCalculation(data); })
-            .finally(() => setCalculating(false));
-        }
 
         return (
           <div className="space-y-4">

@@ -6,6 +6,17 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '0.6.0',
+    date: '9 april 2026',
+    highlights: [
+      'Recepten importeren via foto werkt nu veel beter — Instagram-screenshots, handgeschreven recepten en kookboekpagina\'s worden nauwkeuriger herkend',
+      'Websites met Cloudflare-beveiliging (zoals eefkooktzo.nl) worden nu automatisch omzeild bij het importeren van recepten via URL',
+      'Ingrediënten worden nu slimmer gesplitst in hoeveelheid, eenheid en naam (bijv. "handje basilicum" wordt correct herkend)',
+      'De receptenbibliotheek laadt nu sneller door recepten in kleine groepen op te halen in plaats van alles tegelijk',
+      'Alle TypeScript-fouten in de app zijn opgelost voor een stabielere ervaring',
+    ],
+  },
+  {
     version: '0.5.1',
     date: '9 april 2026',
     highlights: [
@@ -24,15 +35,6 @@ export const releaseNotes: ReleaseNote[] = [
       'Zoeken werkt nu met meerdere woorden: "kip pasta" vindt alle recepten met beide woorden',
       'Zoekresultaten omvatten nu ook de beschrijving van recepten',
       'Nieuwe recepten en favorieten worden sneller bijgewerkt op je scherm',
-    ],
-  },
-  {
-    version: '0.4.2',
-    date: '9 april 2026',
-    highlights: [
-      'Bereidingsstappen worden nu netjes weergegeven zonder dubbele tekst',
-      'De staptitel herhaalt niet meer dezelfde tekst als de beschrijving',
-      'Recepten importeren van websites levert nu schonere bereidingsstappen op',
     ],
   },
 ];

@@ -71,7 +71,7 @@ async function extractLargestImage(page: any): Promise<string | undefined> {
   // Collect image object names from the operator list
   const imageNames: string[] = [];
   for (let i = 0; i < ops.fnArray.length; i++) {
-    if (ops.fnArray[i] === OPS.paintImageXObject || ops.fnArray[i] === OPS.paintJpegXObject) {
+    if (ops.fnArray[i] === OPS.paintImageXObject || ops.fnArray[i] === OPS.paintXObject) {
       const name = ops.argsArray[i]?.[0];
       if (name) imageNames.push(name);
     }

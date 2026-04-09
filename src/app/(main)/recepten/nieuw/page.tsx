@@ -7,8 +7,12 @@ import { useAuth } from '@/hooks/useAuth';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import BronInput from '@/components/ui/BronInput';
-import ConfirmDialog from '@/components/ui/ConfirmDialog';
-import RecipeForm, { RecipeFormData } from '@/components/recipes/RecipeForm';
+import Image from 'next/image';
+import dynamic from 'next/dynamic';
+import type { RecipeFormData } from '@/components/recipes/RecipeForm';
+
+const ConfirmDialog = dynamic(() => import('@/components/ui/ConfirmDialog'));
+const RecipeForm = dynamic(() => import('@/components/recipes/RecipeForm'));
 import type { Source, Difficulty } from '@/types';
 
 type ImportTab = 'url' | 'foto' | 'pdf' | 'handmatig' | 'preview';
@@ -906,7 +910,9 @@ export default function NieuwReceptPage() {
           {/* Recipe preview */}
           <div className="space-y-4">
             {extractedPreview.image_url && (
-              <img src={extractedPreview.image_url} alt="" className="h-48 w-full rounded-lg object-cover" />
+              <div className="relative h-48 w-full">
+                <Image src={extractedPreview.image_url} alt="" fill className="rounded-lg object-cover" sizes="(max-width: 768px) 100vw, 50vw" />
+              </div>
             )}
 
             <div>

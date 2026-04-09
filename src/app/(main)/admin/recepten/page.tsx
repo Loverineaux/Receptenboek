@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { Search, Pencil, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 
@@ -98,7 +99,7 @@ export default function AdminReceptenPage() {
           {recipes.map((r) => (
             <div key={r.id} className="flex items-center gap-3 rounded-xl border border-gray-200 bg-surface p-3">
               {r.image_url ? (
-                <img src={r.image_url} alt="" className="h-12 w-12 flex-shrink-0 rounded-lg object-cover" />
+                <Image src={r.image_url} alt="" width={48} height={48} className="h-12 w-12 flex-shrink-0 rounded-lg object-cover" />
               ) : (
                 <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-gray-100 text-xl">🍽️</div>
               )}

@@ -21,24 +21,25 @@ export default function MijnReceptenPage() {
     if (!user) return;
     setLoading(true);
 
-    // Total recipe count
-    const { count } = await supabase
-      .from('recipes')
-      .select('*', { count: 'exact', head: true });
-    setTotalCount(count ?? 0);
+    // Fetch count and recipes in parallel
+    const [countResult, recipesResult] = await Promise.all([
+      supabase.from('recipes').select('*', { count: 'exact', head: true }),
+      supabase
+        .from('recipes')
+        .select(`
+          *,
+          ingredients(naam),
+          tags:recipe_tags(tag:tags(id, name)),
+          ratings(sterren, user_id),
+          comments(id),
+          user:profiles!recipes_user_id_fkey(id, display_name, avatar_url)
+        `)
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false }),
+    ]);
 
-    const { data } = await supabase
-      .from('recipes')
-      .select(`
-        *,
-        ingredients(naam),
-        tags:recipe_tags(tag:tags(id, name)),
-        ratings(sterren, user_id),
-        comments(id),
-        user:profiles!recipes_user_id_fkey(id, display_name, avatar_url)
-      `)
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
+    setTotalCount(countResult.count ?? 0);
+    const { data } = recipesResult;
 
     const processed: RecipeWithRelations[] = (data ?? []).map((r: any) => {
       const ratings = r.ratings ?? [];

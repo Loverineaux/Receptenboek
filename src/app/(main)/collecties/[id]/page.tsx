@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { ArrowLeft, Pencil, Share2, Trash2, User, Users, X as XIcon, Copy, UserPlus, Info } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useAdmin } from '@/hooks/useAdmin';
@@ -11,11 +12,13 @@ import { createClient } from '@/lib/supabase/client';
 import RecipeCard from '@/components/recipes/RecipeCard';
 import Button from '@/components/ui/Button';
 import StarRating from '@/components/ui/StarRating';
-import ConfirmDialog from '@/components/ui/ConfirmDialog';
-import ShareModal from '@/components/ui/ShareModal';
-import AddToCollectionModal from '@/components/recipes/AddToCollectionModal';
-import Modal from '@/components/ui/Modal';
-import UserPicker from '@/components/ui/UserPicker';
+import dynamic from 'next/dynamic';
+
+const ConfirmDialog = dynamic(() => import('@/components/ui/ConfirmDialog'));
+const ShareModal = dynamic(() => import('@/components/ui/ShareModal'));
+const AddToCollectionModal = dynamic(() => import('@/components/recipes/AddToCollectionModal'));
+const Modal = dynamic(() => import('@/components/ui/Modal'));
+const UserPicker = dynamic(() => import('@/components/ui/UserPicker'));
 import { useCollectionRecipeIds } from '@/hooks/useCollectionRecipeIds';
 import type { RecipeWithRelations, UserProfile } from '@/types';
 
@@ -324,7 +327,7 @@ export default function CollectionDetailPage() {
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-1.5 text-sm text-text-muted">
                 {collection.user?.avatar_url ? (
-                  <img src={collection.user.avatar_url} alt="" className="h-5 w-5 rounded-full object-cover" />
+                  <Image src={collection.user.avatar_url} alt="" width={20} height={20} className="h-5 w-5 rounded-full object-cover" />
                 ) : (
                   <User className="h-4 w-4" />
                 )}
@@ -342,7 +345,7 @@ export default function CollectionDetailPage() {
                 <div className="flex -space-x-2">
                   {collaborators.slice(0, 5).map((c) => (
                     c.avatar_url ? (
-                      <img key={c.id} src={c.avatar_url} alt={c.display_name || ''} title={c.display_name || 'Sous-chef'} className="h-6 w-6 rounded-full border-2 border-white object-cover" />
+                      <Image key={c.id} src={c.avatar_url} alt={c.display_name || ''} title={c.display_name || 'Sous-chef'} width={24} height={24} className="h-6 w-6 rounded-full border-2 border-white object-cover" />
                     ) : (
                       <div key={c.id} title={c.display_name || 'Sous-chef'} className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-gray-100">
                         <User className="h-3 w-3 text-gray-400" />

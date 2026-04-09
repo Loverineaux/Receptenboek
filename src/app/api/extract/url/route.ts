@@ -25,9 +25,10 @@ function respondWithValidation(recipe: any) {
 }
 
 export async function POST(request: NextRequest) {
+  let url = '';
   try {
     const body = await request.json();
-    const { url } = body;
+    url = body.url;
 
     if (!url || typeof url !== "string") {
       return NextResponse.json(
@@ -215,31 +216,40 @@ async function fallbackWebSearch(url: string): Promise<any> {
   console.log("[URL Extract] Using web search fallback for:", url);
   const client = new Anthropic();
 
+  // Extract recipe name from URL slug for better search queries
+  const slug = new URL(url).pathname.split("/").filter(Boolean).pop()?.replace(/-/g, " ") || "";
+  const hostname = new URL(url).hostname.replace("www.", "");
+
   const searchResponse = await client.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 4096,
     system:
-      "Je bent een assistent die recepten opzoekt via het web. Zoek de volledige receptinformatie op van de gegeven URL. Geef ALLE gevonden informatie terug. Het is CRUCIAAL dat je de EXACTE hoeveelheden en eenheden bij elke ingrediënt geeft (bijv. '400 gram kippendijen', niet alleen 'kippendijen'). Geef ook de afbeelding-URL van het recept als je die kunt vinden.",
+      "Je bent een assistent die recepten opzoekt via het web. Zoek de volledige receptinformatie op. Het is CRUCIAAL dat je de EXACTE hoeveelheden en eenheden bij elke ingrediënt geeft (bijv. '400 gram kippendijen', niet alleen 'kippendijen'). Geef ook de afbeelding-URL van het recept als je die kunt vinden. Doe MEERDERE zoekopdrachten als de eerste niet genoeg info geeft.",
     tools: [
       {
         type: "web_search_20250305",
         name: "web_search",
-        max_uses: 5,
+        max_uses: 8,
       },
     ],
     messages: [
       {
         role: "user",
-        content: `Zoek het volledige recept op van deze URL: ${url}
+        content: `Zoek het volledige recept op: "${slug}" van ${hostname} (${url})
 
-STAP 1: Zoek het recept op via de URL. Als de pagina niet direct bereikbaar is, zoek dan op de receptnaam + website naam.
-STAP 2: Zoek SPECIFIEK naar de ingrediëntenlijst met EXACTE hoeveelheden. Zoek eventueel apart op "[receptnaam] ingrediënten" als je ze niet vindt.
-STAP 3: Zoek ook naar de afbeelding van het gerecht.
+De website is mogelijk niet direct bereikbaar. Gebruik daarom MEERDERE zoekstrategieën:
+
+STAP 1: Zoek eerst op "${slug} ${hostname} recept ingredienten" om het recept met ingrediënten te vinden.
+STAP 2: Als stap 1 niet genoeg oplevert, zoek op "${slug} ${hostname}" voor de volledige receptpagina.
+STAP 3: Zoek op "${slug} ${hostname} ingredienten hoeveelheden" voor specifiek de ingrediëntenlijst met exacte hoeveelheden.
+STAP 4: Zoek ook naar de afbeelding via "${slug} ${hostname}" en zoek in de resultaten naar directe afbeelding-URLs (.jpg/.png/.webp).
+
+BELANGRIJK: Gebruik ALLEEN informatie van ${hostname}. Gebruik GEEN recepten van andere websites.
 
 Geef ALLE informatie die je vindt:
 - Titel van het recept
-- Afbeelding URL (de directe URL naar de receptfoto, bijv. eindigend op .jpg/.png/.webp)
-- Ingrediënten met EXACTE hoeveelheden en eenheden. Elk ingrediënt MOET een hoeveelheid hebben als die op de website staat (bijv. "400 gram kippendijen", "3 eetlepels ketjap manis", "½ theelepel nootmuskaat"). Als je geen hoeveelheid kunt vinden, geef dan "naar smaak" aan.
+- Afbeelding URL (directe URL naar de receptfoto)
+- Ingrediënten met EXACTE hoeveelheden en eenheden (bijv. "400 gram kippendijen", "3 eetlepels ketjap manis")
 - Alle bereidingsstappen in de juiste volgorde
 - Bereidingstijd en aantal porties
 - Voedingswaarden als beschikbaar

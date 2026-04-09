@@ -98,7 +98,20 @@ export async function scrapePage(url: string): Promise<ScrapedRecipe> {
 
 async function tryHeadlessBrowser(url: string): Promise<ScrapedRecipe | null> {
   try {
-    const puppeteer = await import("puppeteer-core");
+    let puppeteer: any;
+    try {
+      // Prefer puppeteer-extra with stealth plugin for Cloudflare bypass
+      puppeteer = require("puppeteer-extra");
+      const StealthPlugin = require("puppeteer-extra-plugin-stealth");
+      puppeteer.use(StealthPlugin());
+      console.log("[Scrape] Using puppeteer-extra with stealth");
+    } catch {
+      // Fall back to puppeteer-core
+      puppeteer = await import("puppeteer-core");
+      puppeteer = puppeteer.default;
+      console.log("[Scrape] Using puppeteer-core (no stealth)");
+    }
+
     const fs = await import("fs");
 
     // Find browser executable
@@ -115,26 +128,75 @@ async function tryHeadlessBrowser(url: string): Promise<ScrapedRecipe | null> {
       return null;
     }
 
-    const browser = await puppeteer.default.launch({
+    const browser = await puppeteer.launch({
       executablePath: execPath,
-      headless: "new" as any,
-      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu"],
+      headless: "new",
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu", "--disable-blink-features=AutomationControlled"],
     });
 
     try {
       const page = await browser.newPage();
-      await page.setUserAgent(CHROME_UA);
-      await page.goto(url, { waitUntil: "networkidle2", timeout: 20000 });
 
-      const html = await page.content();
+      // Strategy A: Direct navigation
+      await page.goto(url, { waitUntil: "networkidle2", timeout: 20000 });
+      let html = await page.content();
+
+      // If blocked by bot detection, try cookie warming: visit homepage first, then retry
+      if (html.includes("Just a moment") || html.includes("Checking your browser")) {
+        console.log("[Scrape] Bot detection detected, warming cookies via homepage...");
+        const origin = new URL(url).origin;
+        await page.goto(origin, { waitUntil: "networkidle2", timeout: 15000 }).catch(() => {});
+        // Wait for challenge to resolve
+        await new Promise((r) => setTimeout(r, 5000));
+
+        const homeTitle = await page.title();
+        if (!homeTitle.includes("moment") && !homeTitle.includes("Checking")) {
+          console.log("[Scrape] Homepage loaded, cookie obtained. Navigating to recipe...");
+          await page.goto(url, { waitUntil: "networkidle2", timeout: 20000 });
+          await new Promise((r) => setTimeout(r, 3000));
+          html = await page.content();
+        } else {
+          console.log("[Scrape] Homepage also blocked");
+        }
+      }
 
       if (html.length < 5000 && (html.includes("Just a moment") || html.includes("Checking your browser"))) {
-        console.log("[Scrape] Headless browser also blocked by Cloudflare");
+        console.log("[Scrape] Headless browser blocked even after cookie warming");
         return null;
       }
 
       console.log(`[Scrape] Headless browser success: ${html.length} bytes`);
-      return parseHtml(html, url);
+      const result = parseHtml(html, url);
+
+      // If we have an og:image, download it via the browser session (same cookies)
+      // to avoid Cloudflare blocking when the frontend tries to load it
+      if (result.ogImage) {
+        try {
+          console.log("[Scrape] Downloading og:image via browser session...");
+          const base64Image = await page.evaluate(async (imgUrl: string) => {
+            try {
+              const res = await fetch(imgUrl);
+              if (!res.ok) return null;
+              const blob = await res.blob();
+              return await new Promise<string | null>((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.onerror = () => resolve(null);
+                reader.readAsDataURL(blob);
+              });
+            } catch { return null; }
+          }, result.ogImage);
+
+          if (base64Image && base64Image.startsWith("data:image")) {
+            console.log(`[Scrape] Image downloaded: ${Math.round(base64Image.length / 1024)}KB`);
+            result.ogImage = base64Image;
+          }
+        } catch (imgErr: any) {
+          console.log("[Scrape] Image download failed:", imgErr.message);
+        }
+      }
+
+      return result;
     } finally {
       await browser.close();
     }
@@ -157,9 +219,14 @@ async function tryFetch(url: string, headers: Record<string, string>): Promise<S
 
     clearTimeout(timeout);
 
-    if (!res.ok) return null;
-
     const html = await res.text();
+
+    // Some sites (e.g. eefkooktzo.nl) return 403 but still serve full HTML with JSON-LD
+    // Only reject if truly empty or error page
+    if (!res.ok && (html.length < 5000 || !html.includes("application/ld+json"))) {
+      console.log(`[Scrape] HTTP ${res.status} with ${html.length} bytes — no structured data, skipping`);
+      return null;
+    }
 
     // Check for Cloudflare / Akamai / bot detection challenge pages
     if (html.length < 5000 && (html.includes("Just a moment") || html.includes("Checking your browser"))) {

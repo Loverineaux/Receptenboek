@@ -10,10 +10,12 @@ import SearchBar from '@/components/ui/SearchBar';
 import CategoryFilter from '@/components/ui/CategoryFilter';
 import Button from '@/components/ui/Button';
 import RecipeCard from '@/components/recipes/RecipeCard';
-import AddToCollectionModal from '@/components/recipes/AddToCollectionModal';
-import ShareModal from '@/components/ui/ShareModal';
+import dynamic from 'next/dynamic';
 import PullToRefresh from '@/components/ui/PullToRefresh';
-import MobileFilterSheet from '@/components/ui/MobileFilterSheet';
+
+const AddToCollectionModal = dynamic(() => import('@/components/recipes/AddToCollectionModal'));
+const ShareModal = dynamic(() => import('@/components/ui/ShareModal'));
+const MobileFilterSheet = dynamic(() => import('@/components/ui/MobileFilterSheet'));
 import { useCollectionRecipeIds } from '@/hooks/useCollectionRecipeIds';
 import type { RecipeWithRelations, Source } from '@/types';
 
@@ -38,7 +40,9 @@ function ReceptenPage() {
 
   const [recipes, setRecipes] = useState<RecipeWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
-  const [displayCount, setDisplayCount] = useState(PAGE_SIZE);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [totalCount, setTotalCount] = useState(0);
+  const pageRef = useRef(0);
 
   // Initialize filters from URL params
   const [search, setSearch] = useState(searchParams.get('q') || '');
@@ -73,11 +77,13 @@ function ReceptenPage() {
   // Fetch unique sources from DB
   useEffect(() => {
     const fetchSources = async () => {
+      // Only fetch the bron column, deduplicate client-side
       const { data } = await supabase
         .from('recipes')
-        .select('bron');
+        .select('bron')
+        .not('bron', 'is', null);
       if (data) {
-        const unique = [...new Set(data.map((r: any) => r.bron).filter(Boolean))] as string[];
+        const unique = Array.from(new Set(data.map((r: any) => r.bron).filter(Boolean))) as string[];
         unique.sort((a, b) => a.localeCompare(b));
         setSourceOptions(unique);
       }
@@ -87,10 +93,81 @@ function ReceptenPage() {
   }, []);
 
   const fetchRecipes = useCallback(
-    async () => {
-      setLoading(true);
+    async (loadMore = false) => {
+      if (loadMore) {
+        setLoadingMore(true);
+      } else {
+        setLoading(true);
+        pageRef.current = 0;
+      }
 
       try {
+        const page = loadMore ? pageRef.current + 1 : 0;
+        const from = page * PAGE_SIZE;
+        const to = from + PAGE_SIZE - 1;
+
+        // Pre-query: if category filter is active, get matching recipe IDs via tags
+        let categoryRecipeIds: string[] | null = null;
+        if (category) {
+          const { data: tagMatches } = await supabase
+            .from('recipe_tags')
+            .select('recipe_id, tag:tags!inner(name)')
+            .ilike('tags.name', category);
+          categoryRecipeIds = (tagMatches ?? []).map((t: any) => t.recipe_id);
+          if (categoryRecipeIds.length === 0) {
+            if (!loadMore) setRecipes([]);
+            setTotalCount(0);
+            setLoading(false);
+            setLoadingMore(false);
+            return;
+          }
+        }
+
+        // Pre-query: if searching by ingredients, get matching recipe IDs
+        let ingredientRecipeIds: string[] | null = null;
+        if (search && searchIngredients) {
+          const words = search.trim().split(/\s+/).filter(Boolean);
+          // Find recipes where ingredients match ALL words
+          const matchSets: Set<string>[] = [];
+          for (const word of words) {
+            const { data: ingMatches } = await supabase
+              .from('ingredients')
+              .select('recipe_id')
+              .ilike('naam', `%${word}%`);
+            // Also check title/subtitle matches
+            const { data: titleMatches } = await supabase
+              .from('recipes')
+              .select('id')
+              .or(`title.ilike.%${word}%,subtitle.ilike.%${word}%`);
+            const ids = new Set([
+              ...(ingMatches ?? []).map((i: any) => i.recipe_id),
+              ...(titleMatches ?? []).map((t: any) => t.id),
+            ]);
+            matchSets.push(ids);
+          }
+          // Intersect all sets — recipe must match ALL words
+          if (matchSets.length > 0) {
+            const intersection = matchSets.reduce((a, b) => new Set([...a].filter((x) => b.has(x))));
+            ingredientRecipeIds = [...intersection];
+            if (ingredientRecipeIds.length === 0) {
+              if (!loadMore) setRecipes([]);
+              setTotalCount(0);
+              setLoading(false);
+              setLoadingMore(false);
+              return;
+            }
+          }
+        }
+
+        // Combine ID filters
+        let filteredIds: string[] | null = null;
+        if (categoryRecipeIds && ingredientRecipeIds) {
+          const catSet = new Set(categoryRecipeIds);
+          filteredIds = ingredientRecipeIds.filter((id) => catSet.has(id));
+        } else {
+          filteredIds = categoryRecipeIds || ingredientRecipeIds;
+        }
+
         let query = supabase
           .from('recipes')
           .select(
@@ -101,11 +178,16 @@ function ReceptenPage() {
             ratings(sterren, user_id),
             comments(id),
             user:profiles!recipes_user_id_fkey(id, display_name, avatar_url)
-          `
+          `,
+            { count: 'exact' }
           );
 
+        // Apply pre-queried ID filter
+        if (filteredIds) {
+          query = query.in('id', filteredIds);
+        }
+
         // Server-side multi-word search on title + subtitle
-        // "kip pasta" matches recipes containing BOTH "kip" AND "pasta" in title or subtitle
         if (search && !searchIngredients) {
           const words = search.trim().split(/\s+/).filter(Boolean);
           for (const word of words) {
@@ -123,9 +205,16 @@ function ReceptenPage() {
           query = query.not('bron', 'in', `(${[...excludedSources].join(',')})`);
         }
 
+        // Server-side sorting
         switch (sort) {
           case 'time':
             query = query.order('tijd', { ascending: true, nullsFirst: false });
+            break;
+          case 'az':
+            query = query.order('title', { ascending: true });
+            break;
+          case 'za':
+            query = query.order('title', { ascending: false });
             break;
           case 'rating':
           case 'newest':
@@ -133,7 +222,10 @@ function ReceptenPage() {
             query = query.order('created_at', { ascending: false });
         }
 
-        const { data, error: queryError } = await query;
+        // Apply pagination
+        query = query.range(from, to);
+
+        const { data, count, error: queryError } = await query;
 
         if (queryError) {
           console.error('[Recepten] Supabase error:', queryError);
@@ -161,42 +253,15 @@ function ReceptenPage() {
           };
         });
 
-        // Client-side multi-word search on title + subtitle + ingredients
-        let filtered = processed;
-        if (search && searchIngredients) {
-          const words = search.toLowerCase().trim().split(/\s+/).filter(Boolean);
-          filtered = filtered.filter((r) =>
-            words.every((word) => {
-              const titleMatch = r.title.toLowerCase().includes(word);
-              const subtitleMatch = ((r as any).subtitle || '').toLowerCase().includes(word);
-              const ingredientMatch = (r.ingredients || []).some((i: any) =>
-                (i.naam || '').toLowerCase().includes(word)
-              );
-              return titleMatch || subtitleMatch || ingredientMatch;
-            })
-          );
-        }
-
-        // Client-side category filter — check tags
-        if (category) {
-          const cat = category.toLowerCase();
-          filtered = filtered.filter((r) =>
-            r.tags.some((t: any) => (t.name || '').toLowerCase() === cat)
-          );
-        }
-
-        // Client-side sorting
-        if (sort === 'rating') {
-          filtered.sort((a, b) => (b.average_rating ?? 0) - (a.average_rating ?? 0));
-        } else if (sort === 'az') {
-          filtered.sort((a, b) => a.title.localeCompare(b.title, 'nl'));
-        } else if (sort === 'za') {
-          filtered.sort((a, b) => b.title.localeCompare(a.title, 'nl'));
+        // Client-side sorting for rating (needs all loaded data)
+        if (sort === 'rating' && !loadMore) {
+          processed.sort((a, b) => (b.average_rating ?? 0) - (a.average_rating ?? 0));
         }
 
         // Fetch favorites + counts in parallel
-        if (user) {
-          const ids = filtered.map((r) => r.id);
+        let result = processed;
+        if (user && result.length > 0) {
+          const ids = result.map((r) => r.id);
           const [favsResult, fcResult] = await Promise.all([
             supabase
               .from('favorites')
@@ -212,17 +277,23 @@ function ReceptenPage() {
           const favIds = new Set((favsResult.data ?? []).map((f: any) => f.recipe_id));
           const favCounts: Record<string, number> = fcResult.counts ?? {};
 
-          filtered = filtered.map((r) => ({
+          result = result.map((r) => ({
             ...r,
             is_favorited: favIds.has(r.id),
             favorite_count: favCounts[r.id] || 0,
           }));
         }
 
-        setRecipes(filtered);
-        setDisplayCount(PAGE_SIZE);
+        if (loadMore) {
+          setRecipes((prev) => [...prev, ...result]);
+        } else {
+          setRecipes(result);
+        }
+        setTotalCount(count ?? 0);
+        pageRef.current = page;
       } finally {
         setLoading(false);
+        setLoadingMore(false);
       }
     },
     [supabase, user, search, searchIngredients, category, source, includedSources, excludedSources, sort]
@@ -518,7 +589,7 @@ function ReceptenPage() {
       {!loading && recipes.length > 0 && (
         <>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {recipes.slice(0, displayCount).map((recipe) => (
+            {recipes.map((recipe) => (
               <RecipeCard
                 key={recipe.id}
                 recipe={recipe}
@@ -533,14 +604,15 @@ function ReceptenPage() {
             ))}
           </div>
 
-          {displayCount < recipes.length && (
+          {recipes.length < totalCount && (
             <div className="flex justify-center pt-2">
               <Button
                 variant="secondary"
                 size="lg"
-                onClick={() => setDisplayCount((prev) => prev + PAGE_SIZE)}
+                loading={loadingMore}
+                onClick={() => fetchRecipes(true)}
               >
-                Laad meer ({recipes.length - displayCount} resterend)
+                Laad meer ({totalCount - recipes.length} resterend)
               </Button>
             </div>
           )}

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
+import Image from 'next/image';
 import { User, ChefHat, Star, CalendarDays, Clock } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useRealtimeRefresh } from '@/hooks/useRealtimeSubscription';
@@ -70,30 +71,23 @@ export default function PublicProfilePage() {
       };
     });
 
-    // Check favorites for current user
+    // Check favorites and favorite counts in parallel
     if (currentUser) {
       const { createClient } = await import('@/lib/supabase/client');
       const supabase = createClient();
-      const { data: favs } = await supabase
-        .from('favorites')
-        .select('recipe_id')
-        .eq('user_id', currentUser.id);
+      const ids = processed.map((r) => r.id);
 
-      const favIds = new Set((favs ?? []).map((f: any) => f.recipe_id));
-
-      let favCounts: Record<string, number> = {};
-      try {
-        const ids = processed.map((r) => r.id);
-        const fcRes = await fetch('/api/recipes/favorite-counts', {
+      const [favsResult, fcResult] = await Promise.all([
+        supabase.from('favorites').select('recipe_id').eq('user_id', currentUser.id),
+        fetch('/api/recipes/favorite-counts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ recipe_ids: ids }),
-        });
-        if (fcRes.ok) {
-          const fcData = await fcRes.json();
-          favCounts = fcData.counts ?? {};
-        }
-      } catch {}
+        }).then((r) => (r.ok ? r.json() : { counts: {} })).catch(() => ({ counts: {} })),
+      ]);
+
+      const favIds = new Set((favsResult.data ?? []).map((f: any) => f.recipe_id));
+      const favCounts: Record<string, number> = fcResult.counts ?? {};
 
       setRecipes(processed.map((r) => ({
         ...r,
@@ -171,12 +165,13 @@ export default function PublicProfilePage() {
     <div className="space-y-8">
       {/* Profile header */}
       <div className="flex flex-col items-center gap-3 pt-4 text-center">
-        <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-gray-100">
+        <div className="relative flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-gray-100">
           {profile.avatar_url ? (
-            <img
+            <Image
               src={profile.avatar_url}
               alt={profile.display_name ?? ''}
-              className="h-full w-full object-cover"
+              fill
+              className="object-cover"
             />
           ) : (
             <User className="h-8 w-8 text-text-muted" />

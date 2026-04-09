@@ -102,7 +102,7 @@ async function matchImagesWithVision(
   pageImages: Map<number, string>,
   send: (data: any) => void
 ) {
-  const availImages = [...pageImages.entries()]
+  const availImages = Array.from(pageImages.entries())
     .filter(([_, img]) => img)
     .sort(([a], [b]) => a - b);
 
@@ -215,8 +215,8 @@ export async function POST(request: NextRequest) {
 
             // Generic PDF: AI extraction
             const allPages = pythonResult.pages;
-            const pageImages = new Map(allPages.map((p: any) => [p.pageNum, p.image]));
-            const imgCount = [...pageImages.values()].filter(Boolean).length;
+            const pageImages = new Map<number, string>(allPages.map((p: any) => [p.pageNum, p.image]));
+            const imgCount = Array.from(pageImages.values()).filter(Boolean).length;
             const textPages = allPages.filter((p: any) => p.text && p.text.length > 30);
             const bron = file.name.toLowerCase().includes("broodje") ? "Broodje Dunner" : null;
 

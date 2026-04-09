@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { Trash2, User, MessageCircle } from 'lucide-react';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 
@@ -57,9 +58,9 @@ export default function AdminReactiesPage() {
         <div className="space-y-2">
           {comments.map((c) => (
             <div key={c.id} className="flex items-start gap-3 rounded-xl border border-gray-200 bg-surface p-3">
-              <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-light">
+              <div className="relative flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-light">
                 {c.user?.avatar_url ? (
-                  <img src={c.user.avatar_url} alt="" className="h-full w-full object-cover" />
+                  <Image src={c.user.avatar_url} alt="" fill className="object-cover" />
                 ) : (
                   <User className="h-4 w-4 text-primary" />
                 )}

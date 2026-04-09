@@ -33,6 +33,14 @@ export default function NieuwsteReceptenPage() {
         .order('created_at', { ascending: false })
         .limit(5);
 
+      // Fetch favorites in parallel with processing
+      const favsPromise = user
+        ? supabase
+            .from('favorites')
+            .select('recipe_id')
+            .eq('user_id', user.id)
+        : null;
+
       const processed: RecipeWithRelations[] = (data ?? []).map((r: any) => {
         const ratings = r.ratings ?? [];
         const avg =
@@ -52,13 +60,8 @@ export default function NieuwsteReceptenPage() {
         };
       });
 
-      // Check favorites
-      if (user) {
-        const { data: favs } = await supabase
-          .from('favorites')
-          .select('recipe_id')
-          .eq('user_id', user.id);
-
+      if (favsPromise) {
+        const { data: favs } = await favsPromise;
         const favIds = new Set((favs ?? []).map((f: any) => f.recipe_id));
         setRecipes(
           processed.map((r) => ({

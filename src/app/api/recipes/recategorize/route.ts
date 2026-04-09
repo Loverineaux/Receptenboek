@@ -46,7 +46,7 @@ Antwoord ALLEEN als JSON array, bijv. ["Kip", "Pasta"]. Geen tekst.`
 
   const text = response.content.filter((b) => b.type === 'text').map((b) => (b as any).text).join('').trim();
 
-  const rawMatch = text.match(/\[.*\]/s);
+  const rawMatch = text.match(/\[[\s\S]*\]/);
   if (!rawMatch) return [];
   const rawParsed = JSON.parse(rawMatch[0]);
 

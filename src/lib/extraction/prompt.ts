@@ -90,39 +90,39 @@ export interface ExtractedIngredient {
 }
 
 export interface ExtractedStep {
-  titel?: string;
+  titel?: string | null;
   beschrijving: string;
   afbeelding_url?: string;
 }
 
 export interface ExtractedNutrition {
-  energie_kcal?: string;
-  energie_kj?: string;
-  vetten?: string;
-  verzadigd?: string;
-  koolhydraten?: string;
-  suikers?: string;
-  vezels?: string;
-  eiwitten?: string;
-  zout?: string;
+  energie_kcal?: string | null;
+  energie_kj?: string | null;
+  vetten?: string | null;
+  verzadigd?: string | null;
+  koolhydraten?: string | null;
+  suikers?: string | null;
+  vezels?: string | null;
+  eiwitten?: string | null;
+  zout?: string | null;
 }
 
 export interface ExtractedRecipe {
   title: string;
-  subtitle?: string;
-  image_url?: string;
-  tijd?: string;
-  moeilijkheid?: "Makkelijk" | "Gemiddeld" | "Moeilijk";
-  categorie?: string;
-  bron?: string;
-  basis_porties?: number;
-  weetje?: string;
-  allergenen?: string;
+  subtitle?: string | null;
+  image_url?: string | null;
+  tijd?: string | null;
+  moeilijkheid?: "Makkelijk" | "Gemiddeld" | "Moeilijk" | null;
+  categorie?: string | null;
+  bron?: string | null;
+  basis_porties?: number | null;
+  weetje?: string | null;
+  allergenen?: string | null;
   ingredients: ExtractedIngredient[];
   steps: ExtractedStep[];
-  nutrition?: ExtractedNutrition;
-  benodigdheden?: Array<{ naam: string }>;
-  tags?: string[];
+  nutrition?: ExtractedNutrition | null;
+  benodigdheden?: Array<{ naam: string }> | null;
+  tags?: string[] | null;
 }
 
 /**
@@ -163,7 +163,7 @@ export function parseRecipeResponse(responseText: string): ExtractedRecipe {
   // Ensure title exists
   if (!parsed.title || typeof parsed.title !== "string" || parsed.title.trim() === "") {
     // Try common fallback fields
-    parsed.title = parsed.name || parsed.headline || null;
+    parsed.title = (parsed as any).name || (parsed as any).headline || null;
     if (!parsed.title) {
       throw new Error("Extracted recipe is missing a valid title");
     }

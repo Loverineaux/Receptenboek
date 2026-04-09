@@ -1,9 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, Trash2, User, FolderOpen } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 
 interface AdminCollection {
@@ -17,9 +16,7 @@ interface AdminCollection {
 
 export default function AdminCollectiesPage() {
   const router = useRouter();
-  const supabase = createClient();
   const [collections, setCollections] = useState<AdminCollection[]>([]);
-  const [filtered, setFiltered] = useState<AdminCollection[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -27,21 +24,20 @@ export default function AdminCollectiesPage() {
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
 
+  const filtered = useMemo(() => {
+    if (!search) return collections;
+    const q = search.toLowerCase();
+    return collections.filter((c) => c.title.toLowerCase().includes(q));
+  }, [search, collections]);
+
   useEffect(() => {
     fetch('/api/collections')
       .then((r) => r.json())
       .then((data) => {
         setCollections(data ?? []);
-        setFiltered(data ?? []);
       })
       .finally(() => setLoading(false));
   }, []);
-
-  useEffect(() => {
-    if (!search) { setFiltered(collections); return; }
-    const q = search.toLowerCase();
-    setFiltered(collections.filter((c) => c.title.toLowerCase().includes(q)));
-  }, [search, collections]);
 
   const handleDelete = async () => {
     if (!deleteId) return;

@@ -5,7 +5,9 @@ import { Heart } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import RecipeCard from '@/components/recipes/RecipeCard';
-import AddToCollectionModal from '@/components/recipes/AddToCollectionModal';
+import dynamic from 'next/dynamic';
+
+const AddToCollectionModal = dynamic(() => import('@/components/recipes/AddToCollectionModal'));
 import { useCollectionRecipeIds } from '@/hooks/useCollectionRecipeIds';
 import type { RecipeWithRelations } from '@/types';
 

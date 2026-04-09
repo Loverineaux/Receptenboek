@@ -65,13 +65,13 @@ export async function DELETE(request: NextRequest) {
   const days = parseInt(url.searchParams.get('days') || '90');
   const cutoff = new Date(Date.now() - days * 86400000).toISOString();
 
+  // Count notifications to delete
   const { count } = await supabaseAdmin
     .from('notifications')
-    .delete()
-    .lt('created_at', cutoff)
-    .select('*', { count: 'exact', head: true });
+    .select('*', { count: 'exact', head: true })
+    .lt('created_at', cutoff);
 
-  // Actually delete (the above select doesn't delete, need separate call)
+  // Delete them
   await supabaseAdmin
     .from('notifications')
     .delete()

@@ -25,7 +25,7 @@ export default function BronInput({ value, onChange, disabled }: BronInputProps)
       .select('bron')
       .then(({ data }) => {
         if (data) {
-          const unique = [...new Set(data.map((r: any) => r.bron).filter(Boolean))] as string[];
+          const unique = Array.from(new Set(data.map((r: any) => r.bron).filter(Boolean))) as string[];
           unique.sort((a, b) => a.localeCompare(b));
           setAllBronnen(unique);
         }

@@ -2,11 +2,14 @@
 
 import { useState, useEffect, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { ArrowLeft, User, Camera, KeyRound, Mail, Check } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { createClient } from '@/lib/supabase/client';
-import ConfirmDialog from '@/components/ui/ConfirmDialog';
-import AvatarCropModal from '@/components/ui/AvatarCropModal';
+import dynamic from 'next/dynamic';
+
+const ConfirmDialog = dynamic(() => import('@/components/ui/ConfirmDialog'));
+const AvatarCropModal = dynamic(() => import('@/components/ui/AvatarCropModal'));
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 
@@ -157,7 +160,7 @@ export default function AccountInstellingenPage() {
       <div className="mb-6 flex items-center gap-4">
         <label className="group relative h-20 w-20 cursor-pointer overflow-hidden rounded-full bg-gray-100">
           {avatarUrl ? (
-            <img src={avatarUrl} alt="Avatar" className="h-full w-full object-cover" />
+            <Image src={avatarUrl} alt="Avatar" fill className="object-cover" />
           ) : (
             <div className="flex h-full w-full items-center justify-center">
               <User className="h-8 w-8 text-text-muted" />

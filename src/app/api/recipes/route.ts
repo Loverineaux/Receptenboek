@@ -293,7 +293,7 @@ export async function POST(request: NextRequest) {
   const recipeId = recipe.id;
 
   // Run all inserts in parallel
-  const promises: Promise<any>[] = [];
+  const promises: PromiseLike<any>[] = [];
 
   // Ingredients
   if (body.ingredients?.length) {

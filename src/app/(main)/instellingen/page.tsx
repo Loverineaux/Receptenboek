@@ -6,9 +6,9 @@ import {
   ArrowLeft, Loader2, Bell, User, Shield, LogOut,
   ChevronRight, Trash2, ChefHat, Users, Info,
 } from 'lucide-react';
+import Image from 'next/image';
 import { useAuth } from '@/hooks/useAuth';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
-import { createClient } from '@/lib/supabase/client';
 
 function SettingsItem({
   icon: Icon,
@@ -64,7 +64,6 @@ function SectionLabel({ children }: { children: string }) {
 
 export default function InstellingenPage() {
   const router = useRouter();
-  const supabase = createClient();
   const { user, profile, loading: authLoading, signOut } = useAuth();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [confirmLogout, setConfirmLogout] = useState(false);
@@ -131,9 +130,9 @@ export default function InstellingenPage() {
         onClick={() => router.push('/instellingen/account')}
         className="mb-2 flex w-full flex-col items-center gap-2 py-4"
       >
-        <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-primary-light">
+        <div className="relative flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-primary-light">
           {profile?.avatar_url ? (
-            <img src={profile.avatar_url} alt="" className="h-full w-full object-cover" />
+            <Image src={profile.avatar_url} alt="" fill className="object-cover" />
           ) : (
             <User className="h-8 w-8 text-primary" />
           )}

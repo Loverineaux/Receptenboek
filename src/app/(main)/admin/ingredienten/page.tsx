@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Image from 'next/image';
 import { Check, X, ExternalLink, Image as ImageIcon } from 'lucide-react';
 
 interface Ingredient {
@@ -84,9 +85,9 @@ export default function AdminIngredientenPage() {
         {filtered.map((ing) => (
           <div key={ing.id} className="flex items-center gap-3 rounded-xl border border-gray-200 bg-surface px-3 py-2">
             {/* Thumbnail */}
-            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg bg-gray-100">
+            <div className="relative flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg bg-gray-100">
               {ing.image_url ? (
-                <img src={ing.image_url} alt="" className="h-full w-full object-cover" />
+                <Image src={ing.image_url} alt="" fill className="object-cover" />
               ) : (
                 <ImageIcon className="h-4 w-4 text-text-muted" />
               )}

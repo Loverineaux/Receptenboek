@@ -39,7 +39,7 @@ export async function GET() {
     .in('collection_id', collectionIds);
 
   // Return unique recipe IDs
-  const ids = [...new Set((recipes ?? []).map((r: any) => r.recipe_id))];
+  const ids = Array.from(new Set((recipes ?? []).map((r: any) => r.recipe_id)));
 
   return NextResponse.json(ids);
 }
