@@ -363,23 +363,34 @@ export async function POST(request: NextRequest) {
           name.charAt(0).toUpperCase() + name.slice(1).toLowerCase()
         );
 
-        const tagIds: string[] = [];
-        for (const name of normalizedNames) {
-          let { data: tag } = await supabaseAdmin
-            .from('tags')
-            .select()
-            .ilike('name', name)
-            .maybeSingle();
+        // Batch lookup: fetch all existing tags in one query
+        const { data: existingTags } = await supabaseAdmin
+          .from('tags')
+          .select('id, name');
+        const tagNameMap = new Map(
+          (existingTags ?? []).map((t: any) => [t.name.toLowerCase(), t.id])
+        );
 
-          if (!tag) {
-            const { data: newTag } = await supabaseAdmin
-              .from('tags')
-              .insert({ name })
-              .select()
-              .single();
-            tag = newTag;
+        const tagIds: string[] = [];
+        const toCreate: string[] = [];
+        for (const name of normalizedNames) {
+          const existing = tagNameMap.get(name.toLowerCase());
+          if (existing) {
+            tagIds.push(existing);
+          } else {
+            toCreate.push(name);
           }
-          if (tag) tagIds.push(tag.id);
+        }
+
+        // Batch insert new tags in one query
+        if (toCreate.length > 0) {
+          const { data: newTags } = await supabaseAdmin
+            .from('tags')
+            .insert(toCreate.map((name) => ({ name })))
+            .select('id');
+          if (newTags) {
+            tagIds.push(...newTags.map((t: any) => t.id));
+          }
         }
 
         console.log(`[POST /api/recipes] Tags resolved: ${tagIds.length}`);

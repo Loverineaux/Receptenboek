@@ -201,7 +201,7 @@ export default function ProductCard({ product: initialProduct, onUpdated, onDele
           onClick={() => product.image_url && setLightboxOpen(true)}
         >
           {product.image_url ? (
-            <Image src={product.image_url} alt={product.product_name} fill sizes="64px" className="object-cover" unoptimized />
+            <Image src={product.image_url} alt={product.product_name} fill sizes="64px" className="object-cover" />
           ) : (
             <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200">
               <span className="text-2xl">📦</span>

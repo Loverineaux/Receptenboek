@@ -19,6 +19,8 @@ import type { RecipeWithRelations, Source } from '@/types';
 
 type SortOption = 'newest' | 'rating' | 'time' | 'az' | 'za';
 
+const PAGE_SIZE = 24;
+
 export default function ReceptenPageWrapper() {
   return (
     <Suspense>
@@ -36,6 +38,7 @@ function ReceptenPage() {
 
   const [recipes, setRecipes] = useState<RecipeWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
+  const [displayCount, setDisplayCount] = useState(PAGE_SIZE);
 
   // Initialize filters from URL params
   const [search, setSearch] = useState(searchParams.get('q') || '');
@@ -92,7 +95,7 @@ function ReceptenPage() {
           .from('recipes')
           .select(
             `
-            id, title, subtitle, image_url, bron, tijd, moeilijkheid, categorie, created_at,
+            id, title, image_url, bron, tijd, moeilijkheid, created_at,
             ingredients(naam),
             tags:recipe_tags(tag:tags(id, name)),
             ratings(sterren, user_id),
@@ -101,9 +104,20 @@ function ReceptenPage() {
           `
           );
 
-        // Don't server-filter when searching ingredients (need all recipes for client-side filter)
+        // Server-side title search (when not also searching ingredients)
+        if (search && !searchIngredients) {
+          query = query.ilike('title', `%${search}%`);
+        }
 
-        // Source filtering done client-side (supports exclude mode)
+        // Server-side source filtering
+        if (source) {
+          query = query.eq('bron', source);
+        } else if (includedSources.size > 0) {
+          query = query.in('bron', [...includedSources]);
+        }
+        if (excludedSources.size > 0) {
+          query = query.not('bron', 'in', `(${[...excludedSources].join(',')})`);
+        }
 
         switch (sort) {
           case 'time':
@@ -143,37 +157,23 @@ function ReceptenPage() {
           };
         });
 
-        // Client-side search filter
+        // Client-side ingredient search (only when searchIngredients is on)
         let filtered = processed;
-        if (search) {
+        if (search && searchIngredients) {
           const q = search.toLowerCase();
           filtered = filtered.filter((r) => {
             const titleMatch = r.title.toLowerCase().includes(q);
             if (titleMatch) return true;
-            if (searchIngredients) {
-              return (r.ingredients || []).some((i: any) =>
-                (i.naam || '').toLowerCase().includes(q)
-              );
-            }
-            return false;
+            return (r.ingredients || []).some((i: any) =>
+              (i.naam || '').toLowerCase().includes(q)
+            );
           });
         }
 
-        // Client-side source filter (include or exclude)
-        if (source) {
-          filtered = filtered.filter((r) => (r.bron || '') === source);
-        }
-        if (includedSources.size > 0) {
-          filtered = filtered.filter((r) => includedSources.has(r.bron || ''));
-        }
-        if (excludedSources.size > 0) {
-          filtered = filtered.filter((r) => !excludedSources.has(r.bron || ''));
-        }
-
-        // Client-side category filter — simply check tags
+        // Client-side category filter — check tags
         if (category) {
           const cat = category.toLowerCase();
-          filtered = processed.filter((r) =>
+          filtered = filtered.filter((r) =>
             r.tags.some((t: any) => (t.name || '').toLowerCase() === cat)
           );
         }
@@ -187,29 +187,23 @@ function ReceptenPage() {
           filtered.sort((a, b) => b.title.localeCompare(a.title, 'nl'));
         }
 
-        // Check favorites + counts
+        // Fetch favorites + counts in parallel
         if (user) {
-          const { data: favs } = await supabase
-            .from('favorites')
-            .select('recipe_id')
-            .eq('user_id', user.id);
-
-          const favIds = new Set((favs ?? []).map((f: any) => f.recipe_id));
-
-          // Fetch favorite counts in bulk
-          let favCounts: Record<string, number> = {};
-          try {
-            const ids = filtered.map((r) => r.id);
-            const fcRes = await fetch('/api/recipes/favorite-counts', {
+          const ids = filtered.map((r) => r.id);
+          const [favsResult, fcResult] = await Promise.all([
+            supabase
+              .from('favorites')
+              .select('recipe_id')
+              .eq('user_id', user.id),
+            fetch('/api/recipes/favorite-counts', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ recipe_ids: ids }),
-            });
-            if (fcRes.ok) {
-              const fcData = await fcRes.json();
-              favCounts = fcData.counts ?? {};
-            }
-          } catch {}
+            }).then((r) => r.ok ? r.json() : { counts: {} }).catch(() => ({ counts: {} })),
+          ]);
+
+          const favIds = new Set((favsResult.data ?? []).map((f: any) => f.recipe_id));
+          const favCounts: Record<string, number> = fcResult.counts ?? {};
 
           filtered = filtered.map((r) => ({
             ...r,
@@ -219,6 +213,7 @@ function ReceptenPage() {
         }
 
         setRecipes(filtered);
+        setDisplayCount(PAGE_SIZE);
       } finally {
         setLoading(false);
       }
@@ -245,9 +240,25 @@ function ReceptenPage() {
     const sb = createClient();
     const channel = sb.channel('library-realtime');
 
-    // Recipes: new → refetch list, update → patch in place, delete → remove
-    channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'recipes' }, () => {
-      fetchRecipesRef.current();
+    // Recipes: new → fetch just the new recipe and prepend, update → patch in place, delete → remove
+    channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'recipes' }, async (payload) => {
+      const newId = payload.new?.id;
+      if (!newId) return;
+      const { data } = await sb.from('recipes').select(`
+        id, title, image_url, bron, tijd, moeilijkheid, created_at,
+        ingredients(naam),
+        tags:recipe_tags(tag:tags(id, name)),
+        ratings(sterren, user_id),
+        comments(id),
+        user:profiles!recipes_user_id_fkey(id, display_name, avatar_url)
+      `).eq('id', newId).single();
+      if (data) {
+        const ratings = (data as any).ratings ?? [];
+        const avg = ratings.length > 0 ? ratings.reduce((s: number, r: any) => s + r.sterren, 0) / ratings.length : null;
+        const flatTags = ((data as any).tags ?? []).map((rt: any) => rt.tag).filter(Boolean);
+        const newRecipe = { ...data, tags: flatTags, average_rating: avg, nutrition: null, steps: [], is_favorited: false, favorite_count: 0 } as any;
+        setRecipes((prev) => [newRecipe, ...prev]);
+      }
     });
     channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'recipes' }, (payload) => {
       setRecipes((prev) => prev.map((r) =>
@@ -258,28 +269,20 @@ function ReceptenPage() {
       setRecipes((prev) => prev.filter((r) => r.id !== payload.old.id));
     });
 
-    // Favorites: refetch actual count from DB
-    const refetchFavoriteCount = async (recipeId: string) => {
-      try {
-        const res = await fetch('/api/recipes/favorite-counts', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ recipe_ids: [recipeId] }),
-        });
-        if (res.ok) {
-          const { counts } = await res.json();
-          const count = counts?.[recipeId] || 0;
-          setRecipes((prev) => prev.map((r) =>
-            r.id === recipeId ? { ...r, favorite_count: count } : r
-          ));
-        }
-      } catch {}
-    };
+    // Favorites: optimistic count update (no API call needed)
     channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'favorites' }, (payload) => {
-      if (payload.new?.recipe_id) refetchFavoriteCount(payload.new.recipe_id);
+      const recipeId = payload.new?.recipe_id;
+      if (!recipeId) return;
+      setRecipes((prev) => prev.map((r) =>
+        r.id === recipeId ? { ...r, favorite_count: Math.max(0, ((r as any).favorite_count || 0) + 1) } : r
+      ));
     });
     channel.on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'favorites' }, (payload) => {
-      if (payload.old?.recipe_id) refetchFavoriteCount(payload.old.recipe_id);
+      const recipeId = payload.old?.recipe_id;
+      if (!recipeId) return;
+      setRecipes((prev) => prev.map((r) =>
+        r.id === recipeId ? { ...r, favorite_count: Math.max(0, ((r as any).favorite_count || 0) - 1) } : r
+      ));
     });
 
     // Ratings: refetch from DB and sync initialUserRatings to prevent double-counting
@@ -318,13 +321,16 @@ function ReceptenPage() {
     return () => { sb.removeChannel(channel); };
   }, []);
 
-  // Silently refresh tags after 5s to pick up auto-categorize results
+  // Silently refresh tags after 5s for recipes without tags (to pick up auto-categorize results)
   useEffect(() => {
-    if (recipes.length === 0) return;
+    const recipesWithoutTags = recipes.filter((r) => !r.tags || r.tags.length === 0);
+    if (recipesWithoutTags.length === 0) return;
     const timer = setTimeout(async () => {
+      const ids = recipesWithoutTags.map((r) => r.id);
       const { data } = await supabase
         .from('recipes')
-        .select('id, tags:recipe_tags(tag:tags(id, name))');
+        .select('id, tags:recipe_tags(tag:tags(id, name))')
+        .in('id', ids);
       if (!data) return;
       const tagMap = new Map(data.map((r: any) => [
         r.id,
@@ -333,7 +339,7 @@ function ReceptenPage() {
       setRecipes((prev) =>
         prev.map((r) => {
           const newTags = tagMap.get(r.id);
-          if (newTags && JSON.stringify(newTags) !== JSON.stringify(r.tags)) {
+          if (newTags && newTags.length > 0 && JSON.stringify(newTags) !== JSON.stringify(r.tags)) {
             return { ...r, tags: newTags };
           }
           return r;
@@ -505,7 +511,7 @@ function ReceptenPage() {
       {!loading && recipes.length > 0 && (
         <>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {recipes.map((recipe) => (
+            {recipes.slice(0, displayCount).map((recipe) => (
               <RecipeCard
                 key={recipe.id}
                 recipe={recipe}
@@ -520,6 +526,17 @@ function ReceptenPage() {
             ))}
           </div>
 
+          {displayCount < recipes.length && (
+            <div className="flex justify-center pt-2">
+              <Button
+                variant="secondary"
+                size="lg"
+                onClick={() => setDisplayCount((prev) => prev + PAGE_SIZE)}
+              >
+                Laad meer ({recipes.length - displayCount} resterend)
+              </Button>
+            </div>
+          )}
         </>
       )}
 

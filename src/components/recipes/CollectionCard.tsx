@@ -52,7 +52,6 @@ export default function CollectionCard({ collection, onRate, userRating, initial
                     fill
                     sizes="(max-width: 640px) 50vw, 25vw"
                     className="object-cover transition-transform duration-300 group-hover:scale-105"
-                    unoptimized
                   />
                 ) : (
                   <div className="h-full w-full bg-gray-100" />

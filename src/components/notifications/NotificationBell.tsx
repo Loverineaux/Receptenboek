@@ -179,7 +179,6 @@ export default function NotificationBell() {
                           width={32}
                           height={32}
                           className="h-full w-full object-cover"
-                          unoptimized
                         />
                       ) : (
                         <span className="text-xs font-medium text-text-muted">

@@ -40,7 +40,7 @@ function UserAvatar({ url, name }: { url?: string | null; name?: string | null }
   return (
     <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-100">
       {url ? (
-        <Image src={url} alt={name || ''} width={28} height={28} className="h-full w-full object-cover" unoptimized />
+        <Image src={url} alt={name || ''} width={28} height={28} className="h-full w-full object-cover" />
       ) : (
         <span className="text-[10px] font-medium text-text-muted">
           {(name || '?')[0].toUpperCase()}

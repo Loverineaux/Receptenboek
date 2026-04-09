@@ -321,7 +321,6 @@ export default function IngredientDetailPage() {
               sizes="(max-width: 672px) 100vw, 672px"
               className="object-cover"
               priority
-              unoptimized
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary/20 to-primary/50">

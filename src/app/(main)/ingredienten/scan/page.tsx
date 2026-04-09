@@ -313,7 +313,6 @@ export default function ScanPage() {
                     fill
                     sizes="96px"
                     className="object-cover"
-                    unoptimized
                   />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200">

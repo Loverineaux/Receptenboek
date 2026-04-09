@@ -8,7 +8,7 @@ export async function GET() {
   const { data: collections, error } = await supabase
     .from('collections')
     .select(`
-      *,
+      id, user_id, title, description, image_url, created_at, updated_at,
       user:profiles!collections_user_id_fkey(id, display_name, avatar_url),
       collection_recipes(
         recipe:recipes(id, image_url)
