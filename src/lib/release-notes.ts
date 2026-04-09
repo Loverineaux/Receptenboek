@@ -6,6 +6,17 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '0.5.0',
+    date: '9 april 2026',
+    highlights: [
+      'De app laadt nu veel sneller — pagina\'s en afbeeldingen worden geoptimaliseerd geladen',
+      'Recepten worden in groepen van 24 getoond met een "Laad meer" knop voor een vlottere ervaring',
+      'Zoeken werkt nu met meerdere woorden: "kip pasta" vindt alle recepten met beide woorden',
+      'Zoekresultaten omvatten nu ook de beschrijving van recepten',
+      'Nieuwe recepten en favorieten worden sneller bijgewerkt op je scherm',
+    ],
+  },
+  {
     version: '0.4.2',
     date: '9 april 2026',
     highlights: [
@@ -22,16 +33,6 @@ export const releaseNotes: ReleaseNote[] = [
       'Apostrofs in ingrediëntnamen (zoals paprika\'s, avocado\'s) worden nu goed weergegeven',
       'Bij het bewerken van een recept kun je nu kiezen uit alle bronnen die in de app bestaan',
       'Recepten importeren van websites werkt beter voor ingrediënten zonder eenheid',
-    ],
-  },
-  {
-    version: '0.4.0',
-    date: '8 april 2026',
-    highlights: [
-      'Veranderingen van andere gebruikers verschijnen nu direct op je scherm',
-      'Nieuwe reacties, favorieten en beoordelingen zie je zonder te refreshen',
-      'Meldingen komen nu instant binnen in plaats van met vertraging',
-      'Nieuwe recepten en collecties verschijnen automatisch in de lijst',
     ],
   },
 ];
