@@ -4,6 +4,7 @@ import { useState, FormEvent } from 'react';
 import { Plus, Trash2, ChevronDown, ChevronUp, X } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
+import BronInput from '@/components/ui/BronInput';
 import type {
   Source,
   Difficulty,
@@ -63,14 +64,6 @@ interface RecipeFormProps {
   initialData?: RecipeWithRelations | ExtractedRecipe | null;
   onSubmit: (data: RecipeFormData) => Promise<void>;
 }
-
-const sources: Source[] = [
-  'HelloFresh',
-  'Albert Heijn',
-  'Jumbo',
-  'Broodje Dunner',
-  'Eigen recept',
-];
 
 const difficulties: Difficulty[] = ['Makkelijk', 'Gemiddeld', 'Moeilijk'];
 
@@ -391,18 +384,10 @@ export default function RecipeForm({ initialData, onSubmit }: RecipeFormProps) {
           </div>
 
           <div>
-            <label className={labelClass}>Bron</label>
-            <select
-              className={selectClass}
+            <BronInput
               value={bron}
-              onChange={(e) => setBron(e.target.value as Source)}
-            >
-              {sources.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
+              onChange={(val) => setBron(val)}
+            />
           </div>
         </div>
 

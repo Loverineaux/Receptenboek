@@ -6,6 +6,17 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '0.4.1',
+    date: '9 april 2026',
+    highlights: [
+      'Ingrediënten zoals "1-2 paprika\'s" worden nu correct herkend met het juiste aantal',
+      'Apostrofs in ingrediëntnamen (zoals paprika\'s, avocado\'s) worden nu goed weergegeven',
+      'Bij het bewerken van een recept kun je nu kiezen uit alle bronnen die in de app bestaan',
+      'Recepten importeren van websites werkt beter voor ingrediënten zonder eenheid',
+      'Diverse verbeteringen aan de stabiliteit van de app',
+    ],
+  },
+  {
     version: '0.4.0',
     date: '8 april 2026',
     highlights: [
@@ -25,17 +36,6 @@ export const releaseNotes: ReleaseNote[] = [
       'Bij het scannen van een barcode kun je de ingrediënt-suggestie wijzigen',
       'Recepten importeren herkent nu meer eenheden zoals snuf, scheut en teentje',
       'Alle ingrediënten hebben nu een afbeelding',
-    ],
-  },
-  {
-    version: '0.2.0',
-    date: '7 april 2026',
-    highlights: [
-      'Je krijgt nu meldingen als iemand je recept beoordeelt, een reactie plaatst of als favoriet opslaat',
-      'Nieuwe instellingenpagina waar je je profiel, meldingen en account kunt beheren',
-      'Het hartje op receptkaarten werkt nu direct — geen vertraging meer',
-      'Je kunt nu je wachtwoord wijzigen via een e-mail link',
-      'Alle meldingen en foutberichten zijn nu in het Nederlands',
     ],
   },
 ];

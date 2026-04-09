@@ -291,9 +291,14 @@ function decodeHtmlEntities(text: string): string {
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&#039;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&rsquo;/g, "\u2019")
+    .replace(/&lsquo;/g, "\u2018")
     .replace(/&nbsp;/g, " ")
     .replace(/&#(\d+);/g, (_, num) => String.fromCharCode(parseInt(num)))
-    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+    // Normalize curly/smart quotes to straight apostrophe for Dutch words like paprika's
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'");
 }
 
 /**
@@ -441,41 +446,63 @@ function parseIngredientString(text: any) {
       return {
         hoeveelheid: text.amount || text.quantity || null,
         eenheid: normalizeUnit(text.unit || text.unitText || null),
-        naam: text.name || text.ingredient || JSON.stringify(text),
+        naam: decodeHtmlEntities(text.name || text.ingredient || JSON.stringify(text)),
       };
     }
     return { hoeveelheid: null, eenheid: null, naam: String(text || "") };
   }
 
+  // Decode HTML entities first (e.g. &#039; &apos; &rsquo; → ')
+  const clean = decodeHtmlEntities(text);
+
   // Handle "snuf peper", "Snuf tijm", "snufje kaneel" — no number prefix
-  const snufMatch = text.match(/^(snuf|snufje|mespunt|mespuntje)\s+(.+)/i);
+  const snufMatch = clean.match(/^(snuf|snufje|mespunt|mespuntje)\s+(.+)/i);
   if (snufMatch) {
     return { hoeveelheid: '1', eenheid: 'snuf', naam: snufMatch[2].trim() };
   }
 
   // Handle "naar smaak" items
-  if (/naar smaak/i.test(text)) {
-    const cleanName = text.replace(/,?\s*naar smaak/i, '').trim();
-    return { hoeveelheid: null, eenheid: null, naam: cleanName ? `${cleanName} (naar smaak)` : text.trim() };
+  if (/naar smaak/i.test(clean)) {
+    const cleanName = clean.replace(/,?\s*naar smaak/i, '').trim();
+    return { hoeveelheid: null, eenheid: null, naam: cleanName ? `${cleanName} (naar smaak)` : clean.trim() };
   }
 
+  // Quantity pattern: supports single numbers (2), decimals (1.5), fractions (½), ranges (1-2)
+  const qtyPattern = '([\\d.,/½¼¾⅓⅔⅛]+(?:\\s*-\\s*[\\d.,/½¼¾⅓⅔⅛]+)?)';
+
   // Try to split "200 gr. kipfilet" into hoeveelheid/eenheid/naam
-  const match = text.match(
-    /^([\d.,/½¼¾⅓⅔⅛]+)\s*(gr\.?|g|kg|ml\.?|l|dl|cl|el|tl|eetlepels?|theelepels?|stuks?|st\.?|plakjes?|sneetjes?|blaadjes?|teentjes?|tenen?|takjes?|snufjes?|snuf|mespuntje?|scheutje?|scheut|handvol|handje|bosje?|blik(?:jes?)?|zakjes?|potjes?|beker|cup|oz|lb|tbsp|tsp|stuk)\.?\s+(.+)/i
+  const matchWithUnit = clean.match(
+    new RegExp(
+      `^${qtyPattern}\\s*(gr\\.?|g|kg|ml\\.?|l|dl|cl|el|tl|eetlepels?|theelepels?|stuks?|st\\.?|plakjes?|sneetjes?|blaadjes?|teentjes?|tenen?|takjes?|snufjes?|snuf|mespuntje?|scheutje?|scheut|handvol|handje|bosje?|blik(?:jes?)?|zakjes?|potjes?|beker|cup|oz|lb|tbsp|tsp|stuk)\\.?\\s+(.+)`,
+      'i'
+    )
   );
-  if (match) {
+  if (matchWithUnit) {
     return {
-      hoeveelheid: match[1],
-      eenheid: normalizeUnit(match[2]),
-      naam: match[3].trim(),
+      hoeveelheid: matchWithUnit[1].replace(/\s/g, ''),
+      eenheid: normalizeUnit(matchWithUnit[2]),
+      naam: matchWithUnit[3].trim(),
     };
   }
 
-  return { hoeveelheid: null, eenheid: null, naam: text.trim() };
+  // Handle "2 paprika's", "1 ui", "1-2 avocado's" — number + name without unit
+  const matchNoUnit = clean.match(
+    new RegExp(`^${qtyPattern}\\s+([a-zA-ZÀ-ÿ].+)`)
+  );
+  if (matchNoUnit) {
+    return {
+      hoeveelheid: matchNoUnit[1].replace(/\s/g, ''),
+      eenheid: null,
+      naam: matchNoUnit[2].trim(),
+    };
+  }
+
+  return { hoeveelheid: null, eenheid: null, naam: clean.trim() };
 }
 
 function stripHtml(html: string): string {
-  return html.replace(/<[^>]*>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+  const text = html.replace(/<[^>]*>/g, ' ');
+  return decodeHtmlEntities(text).replace(/\s+/g, ' ').trim();
 }
 
 function parseInstructions(instructions: any): Array<{ titel: string | null; beschrijving: string }> {
