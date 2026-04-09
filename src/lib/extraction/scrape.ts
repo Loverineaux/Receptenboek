@@ -524,10 +524,14 @@ function parseInstructions(instructions: any): Array<{ titel: string | null; bes
       if (typeof item === "string") {
         result.push({ titel: null, beschrijving: stripHtml(item) });
       } else if (item["@type"] === "HowToStep") {
-        result.push({
-          titel: cleanStepTitel(item.name ? stripHtml(item.name) : null),
-          beschrijving: stripHtml(item.text || item.description || ""),
-        });
+        const rawTitel = cleanStepTitel(item.name ? stripHtml(item.name) : null);
+        const beschrijving = stripHtml(item.text || item.description || "");
+        // If titel and beschrijving are (nearly) identical, drop the titel
+        const titel = rawTitel && beschrijving &&
+          (rawTitel === beschrijving || beschrijving.startsWith(rawTitel) || rawTitel.startsWith(beschrijving))
+          ? null
+          : rawTitel;
+        result.push({ titel, beschrijving });
       } else if (item["@type"] === "HowToSection") {
         // Section with sub-steps
         const sectionName = cleanStepTitel(item.name ? stripHtml(item.name) : null);

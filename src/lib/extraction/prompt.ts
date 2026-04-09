@@ -42,8 +42,8 @@ JSON SCHEMA:
   ],
   "steps": [
     {
-      "titel": "string | null",
-      "beschrijving": "string (verplicht)",
+      "titel": "string | null (kort kopje, bijv. 'Voorbereiding', 'De saus' — NIET de hele beschrijving herhalen! Zet op null als er geen apart kopje is)",
+      "beschrijving": "string (verplicht, de volledige instructie)",
       "afbeelding_url": "string | null"
     }
   ],
@@ -177,11 +177,16 @@ export function parseRecipeResponse(responseText: string): ExtractedRecipe {
     parsed.steps = [];
   }
 
-  // Strip generic step numbering from step titles (e.g. "Stap 1", "Step 3")
-  parsed.steps = parsed.steps.map((s) => ({
-    ...s,
-    titel: cleanStepTitle(s.titel),
-  }));
+  // Strip generic step numbering and deduplicate titel/beschrijving
+  parsed.steps = parsed.steps.map((s) => {
+    const titel = cleanStepTitle(s.titel);
+    // Drop titel if it's the same as (or contained in) beschrijving
+    if (titel && s.beschrijving &&
+      (titel === s.beschrijving || s.beschrijving.startsWith(titel) || titel.startsWith(s.beschrijving))) {
+      return { ...s, titel: null };
+    }
+    return { ...s, titel };
+  });
 
   return parsed;
 }
