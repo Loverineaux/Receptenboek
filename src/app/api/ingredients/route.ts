@@ -2,15 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 
-export const dynamic = 'force-dynamic';
-
 // GET /api/ingredients — list/search generic ingredients
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const search = searchParams.get('search') || '';
   const category = searchParams.get('category') || '';
   const offset = parseInt(searchParams.get('offset') || '0', 10);
-  const limit = parseInt(searchParams.get('limit') || '200', 10);
+  const limit = parseInt(searchParams.get('limit') || '50', 10);
 
   let query = supabaseAdmin
     .from('generic_ingredients')

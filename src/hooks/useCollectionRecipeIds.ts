@@ -14,17 +14,12 @@ export function useCollectionRecipeIds() {
       return;
     }
 
-    // Small delay to avoid racing with other auth calls on page load
-    const timer = setTimeout(() => {
-      fetch('/api/collections/my-recipe-ids')
-        .then((res) => res.json())
-        .then((data) => {
-          if (Array.isArray(data)) setIds(new Set(data));
-        })
-        .catch(() => {});
-    }, 100);
-
-    return () => clearTimeout(timer);
+    fetch('/api/collections/my-recipe-ids')
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) setIds(new Set(data));
+      })
+      .catch(() => {});
   }, [user?.id, loading]);
 
   return ids;

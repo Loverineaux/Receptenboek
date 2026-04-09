@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
+import Link from 'next/link';
 import { LayoutDashboard, Users, ChefHat, MessageCircle, FolderOpen, Bell, Settings, Loader2, ShieldAlert, Apple } from 'lucide-react';
 import { useAdmin } from '@/hooks/useAdmin';
 
@@ -51,9 +52,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           const Icon = link.icon;
           const isActive = pathname === link.href || (link.href !== '/admin' && pathname.startsWith(link.href));
           return (
-            <button
+            <Link
               key={link.href}
-              onClick={() => router.push(link.href)}
+              href={link.href}
+              prefetch={true}
               className={`flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
                 isActive
                   ? 'bg-primary text-white'
@@ -62,7 +64,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             >
               <Icon className="h-3.5 w-3.5" />
               {link.label}
-            </button>
+            </Link>
           );
         })}
       </div>

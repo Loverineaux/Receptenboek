@@ -31,7 +31,7 @@ export function useAuth() {
     async (userId: string) => {
       const { data } = await supabase
         .from('profiles')
-        .select('*')
+        .select('id, email, display_name, avatar_url, bio')
         .eq('id', userId)
         .single()
 
@@ -50,8 +50,8 @@ export function useAuth() {
       setAuthState((prev) => ({ ...prev, user, loading: false }))
 
       if (user) {
-        await fetchProfile(user.id)
-        // Update last_seen
+        // Non-blocking: profile loads in background, pages can render immediately
+        fetchProfile(user.id)
         fetch('/api/users/heartbeat', { method: 'POST' }).catch(() => {})
       }
     }

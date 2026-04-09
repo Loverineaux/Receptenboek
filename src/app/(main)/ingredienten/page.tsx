@@ -23,29 +23,48 @@ export default function IngrediëntenPage() {
 
   const [ingredients, setIngredients] = useState<GenericIngredient[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<string | null>(null);
 
-  const fetchIngredients = useCallback(async () => {
-    setLoading(true);
+  const PAGE_SIZE = 50;
+
+  const fetchIngredients = useCallback(async (loadMore = false) => {
+    if (loadMore) {
+      setLoadingMore(true);
+    } else {
+      setLoading(true);
+    }
     try {
       const params = new URLSearchParams();
       if (search) params.set('search', search);
       if (category) params.set('category', category);
+      params.set('limit', String(PAGE_SIZE));
+      if (loadMore) params.set('offset', String(ingredients.length));
       const qs = params.toString();
-      const res = await fetch(`/api/ingredients${qs ? `?${qs}` : ''}`);
+      const res = await fetch(`/api/ingredients?${qs}`);
       if (res.ok) {
         const data = await res.json();
-        setIngredients(data.ingredients ?? data);
+        const items = data.ingredients ?? data;
+        if (loadMore) {
+          setIngredients((prev) => [...prev, ...items]);
+        } else {
+          setIngredients(items);
+        }
+        setHasMore(items.length >= PAGE_SIZE);
       }
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
-  }, [search, category]);
+  }, [search, category, ingredients.length]);
 
   useEffect(() => {
-    fetchIngredients();
-  }, [fetchIngredients]);
+    setHasMore(true);
+    fetchIngredients(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, category]);
 
   return (
     <div className="space-y-6">
@@ -116,11 +135,26 @@ export default function IngrediëntenPage() {
 
       {/* Ingredient grid */}
       {!loading && ingredients.length > 0 && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {ingredients.map((ingredient) => (
-            <IngredientCard key={ingredient.id} ingredient={ingredient} />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            {ingredients.map((ingredient) => (
+              <IngredientCard key={ingredient.id} ingredient={ingredient} />
+            ))}
+          </div>
+
+          {hasMore && (
+            <div className="flex justify-center pt-2">
+              <button
+                type="button"
+                onClick={() => fetchIngredients(true)}
+                disabled={loadingMore}
+                className="rounded-lg bg-gray-100 px-6 py-2.5 text-sm font-medium text-text-secondary transition-colors hover:bg-gray-200 disabled:opacity-50"
+              >
+                {loadingMore ? 'Laden...' : 'Laad meer'}
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       {/* Empty state */}
