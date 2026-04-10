@@ -6,6 +6,15 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '1.0.1',
+    date: '10 april 2026',
+    highlights: [
+      'Je profielfoto, naam en admin-badge verschijnen nu direct bij het openen van de app',
+      'Geen lege avatar of "Gebruiker" meer te zien terwijl je profiel laadt',
+      'De admin-check is sneller doordat de app geen extra opvraging meer doet',
+    ],
+  },
+  {
     version: '1.0.0',
     date: '10 april 2026',
     highlights: [
@@ -24,16 +33,6 @@ export const releaseNotes: ReleaseNote[] = [
       'Ingrediënten worden nu slimmer gesplitst in hoeveelheid, eenheid en naam (bijv. "handje basilicum" wordt correct herkend)',
       'De receptenbibliotheek laadt nu sneller door recepten in kleine groepen op te halen in plaats van alles tegelijk',
       'Alle TypeScript-fouten in de app zijn opgelost voor een stabielere ervaring',
-    ],
-  },
-  {
-    version: '0.5.1',
-    date: '9 april 2026',
-    highlights: [
-      'Alle pagina\'s laden nu sneller — de app wacht niet meer op je profiel voordat de inhoud verschijnt',
-      'De ingrediëntenpagina laadt nu in groepen met een "Laad meer" knop',
-      'Admin tabbladen schakelen nu sneller door vooraf te laden',
-      'Kleine verbeteringen in laadtijd door slimmere gegevensopvraging',
     ],
   },
 ];
