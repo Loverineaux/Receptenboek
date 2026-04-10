@@ -6,6 +6,16 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '1.0.0',
+    date: '10 april 2026',
+    highlights: [
+      'PDF-bestanden met alleen afbeeldingen (zoals gescande recepten of screenshots) worden nu herkend via slimme beeldherkenning',
+      'Als de server een PDF niet kan lezen, wordt automatisch een andere methode geprobeerd zodat het importeren niet meer mislukt',
+      'Een fout waardoor de app soms niet laadde bij het openen of verversen is opgelost',
+      'Meerdere recepten uit één PDF worden nu betrouwbaarder herkend en gesplitst',
+    ],
+  },
+  {
     version: '0.6.0',
     date: '9 april 2026',
     highlights: [
@@ -24,17 +34,6 @@ export const releaseNotes: ReleaseNote[] = [
       'De ingrediëntenpagina laadt nu in groepen met een "Laad meer" knop',
       'Admin tabbladen schakelen nu sneller door vooraf te laden',
       'Kleine verbeteringen in laadtijd door slimmere gegevensopvraging',
-    ],
-  },
-  {
-    version: '0.5.0',
-    date: '9 april 2026',
-    highlights: [
-      'De app laadt nu veel sneller — pagina\'s en afbeeldingen worden geoptimaliseerd geladen',
-      'Recepten worden in groepen van 24 getoond met een "Laad meer" knop voor een vlottere ervaring',
-      'Zoeken werkt nu met meerdere woorden: "kip pasta" vindt alle recepten met beide woorden',
-      'Zoekresultaten omvatten nu ook de beschrijving van recepten',
-      'Nieuwe recepten en favorieten worden sneller bijgewerkt op je scherm',
     ],
   },
 ];
