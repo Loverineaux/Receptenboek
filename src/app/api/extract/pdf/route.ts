@@ -199,7 +199,8 @@ export async function POST(request: NextRequest) {
 
             const pythonResult = await tryPythonExtraction(file);
             if (!pythonResult || pythonResult.error) {
-              send({ type: "error", error: pythonResult?.error || "PDF extractie mislukt" });
+              send({ type: "status", message: "Python extractie niet beschikbaar, client-side fallback..." });
+              send({ type: "fallback_to_client" });
               controller.close();
               return;
             }
@@ -218,63 +219,129 @@ export async function POST(request: NextRequest) {
             const pageImages = new Map<number, string>(allPages.map((p: any) => [p.pageNum, p.image]));
             const imgCount = Array.from(pageImages.values()).filter(Boolean).length;
             const textPages = allPages.filter((p: any) => p.text && p.text.length > 30);
+            const imageOnlyPages = allPages.filter((p: any) => (!p.text || p.text.length <= 30) && p.image);
             const bron = file.name.toLowerCase().includes("broodje") ? "Broodje Dunner" : null;
 
             send({ type: "status", message: `${allPages.length} pagina's, ${textPages.length} met tekst, ${imgCount} met foto` });
 
-            // Batch processing with Haiku
-            const BATCH_SIZE = 4;
-            const batches: any[][] = [];
-            for (let i = 0; i < textPages.length; i += BATCH_SIZE) {
-              batches.push(textPages.slice(i, i + BATCH_SIZE));
-            }
-
             const client = new Anthropic();
             const allRecipes: any[] = [];
-            let completed = 0;
 
-            for (let b = 0; b < batches.length; b += 3) {
-              const chunk = batches.slice(b, b + 3);
-              const startPage = chunk[0][0]?.pageNum || "?";
-              const endPage = chunk[chunk.length - 1][chunk[chunk.length - 1].length - 1]?.pageNum || "?";
-              send({ type: "status", message: `Recepten herkennen: pagina ${startPage}-${endPage} (batch ${b / 3 + 1}/${Math.ceil(batches.length / 3)})...` });
+            // If pages have text, use text-based extraction with Haiku
+            if (textPages.length > 0) {
+              const BATCH_SIZE = 4;
+              const batches: any[][] = [];
+              for (let i = 0; i < textPages.length; i += BATCH_SIZE) {
+                batches.push(textPages.slice(i, i + BATCH_SIZE));
+              }
 
-              await Promise.all(
-                chunk.map(async (batch, j) => {
-                  const batchIdx = b + j;
-                  try {
-                    const pageText = batch.map((p: any) => `--- PAGINA ${p.pageNum} ---\n${p.text}`).join("\n\n");
-                    const response = await client.messages.create({
-                      model: "claude-haiku-4-5-20251001",
-                      max_tokens: 16384,
-                      system: buildAiPrompt(bron),
-                      messages: [{ role: "user", content: `Vind alle recepten:\n\n${pageText}` }],
-                    });
+              let completed = 0;
 
-                    const text = response.content.filter((bl: any) => bl.type === "text").map((bl: any) => bl.text).join("\n");
-                    const recipes = parseAiJson(text).filter((r: any) => r.title && r.ingredients?.length > 0);
+              for (let b = 0; b < batches.length; b += 3) {
+                const chunk = batches.slice(b, b + 3);
+                const startPage = chunk[0][0]?.pageNum || "?";
+                const endPage = chunk[chunk.length - 1][chunk[chunk.length - 1].length - 1]?.pageNum || "?";
+                send({ type: "status", message: `Recepten herkennen: pagina ${startPage}-${endPage} (batch ${b / 3 + 1}/${Math.ceil(batches.length / 3)})...` });
 
-                    completed++;
-                    allRecipes.push(...recipes);
-                    const names = recipes.map((r: any) => r.title).slice(0, 3).join(", ");
-                    send({
-                      type: "batch_done",
-                      batch: batchIdx + 1,
-                      total_batches: batches.length,
-                      completed,
-                      found: recipes.length,
-                      recipes,
-                    });
-                  } catch (err: any) {
-                    completed++;
-                    send({ type: "batch_error", batch: batchIdx + 1, total_batches: batches.length, completed, error: err.message });
-                  }
-                })
-              );
+                await Promise.all(
+                  chunk.map(async (batch, j) => {
+                    const batchIdx = b + j;
+                    try {
+                      const pageText = batch.map((p: any) => `--- PAGINA ${p.pageNum} ---\n${p.text}`).join("\n\n");
+                      const response = await client.messages.create({
+                        model: "claude-haiku-4-5-20251001",
+                        max_tokens: 16384,
+                        system: buildAiPrompt(bron),
+                        messages: [{ role: "user", content: `Vind alle recepten:\n\n${pageText}` }],
+                      });
+
+                      const text = response.content.filter((bl: any) => bl.type === "text").map((bl: any) => bl.text).join("\n");
+                      const recipes = parseAiJson(text).filter((r: any) => r.title && r.ingredients?.length > 0);
+
+                      completed++;
+                      allRecipes.push(...recipes);
+                      send({
+                        type: "batch_done",
+                        batch: batchIdx + 1,
+                        total_batches: batches.length,
+                        completed,
+                        found: recipes.length,
+                        recipes,
+                      });
+                    } catch (err: any) {
+                      completed++;
+                      send({ type: "batch_error", batch: batchIdx + 1, total_batches: batches.length, completed, error: err.message });
+                    }
+                  })
+                );
+              }
+            }
+
+            // If pages only have images (no text), use Vision to read recipes from images
+            if (imageOnlyPages.length > 0 && allRecipes.length === 0) {
+              send({ type: "status", message: `${imageOnlyPages.length} pagina's met alleen afbeeldingen, Vision wordt gebruikt om tekst te lezen...` });
+
+              const IMG_BATCH = 4;
+              const imgBatches: any[][] = [];
+              for (let i = 0; i < imageOnlyPages.length; i += IMG_BATCH) {
+                imgBatches.push(imageOnlyPages.slice(i, i + IMG_BATCH));
+              }
+
+              let imgCompleted = 0;
+
+              for (let b = 0; b < imgBatches.length; b += 2) {
+                const chunk = imgBatches.slice(b, b + 2);
+                await Promise.all(
+                  chunk.map(async (batch, j) => {
+                    const batchIdx = b + j;
+                    try {
+                      const contentBlocks: any[] = [];
+                      for (const page of batch) {
+                        const base64 = page.image.replace(/^data:image\/\w+;base64,/, "");
+                        contentBlocks.push({ type: "text", text: `--- PAGINA ${page.pageNum} ---` });
+                        contentBlocks.push({
+                          type: "image",
+                          source: { type: "base64", media_type: "image/jpeg", data: base64 },
+                        });
+                      }
+                      contentBlocks.push({
+                        type: "text",
+                        text: "Lees de tekst in deze afbeeldingen en vind alle recepten. Retourneer ze als JSON array.",
+                      });
+
+                      const response = await client.messages.create({
+                        model: "claude-sonnet-4-6",
+                        max_tokens: 16384,
+                        system: buildAiPrompt(bron),
+                        messages: [{ role: "user", content: contentBlocks }],
+                      });
+
+                      const text = response.content.filter((bl: any) => bl.type === "text").map((bl: any) => bl.text).join("\n");
+                      const recipes = parseAiJson(text).filter((r: any) => r.title && r.ingredients?.length > 0);
+
+                      imgCompleted++;
+                      allRecipes.push(...recipes);
+                      send({
+                        type: "batch_done",
+                        batch: batchIdx + 1,
+                        total_batches: imgBatches.length,
+                        completed: imgCompleted,
+                        found: recipes.length,
+                        recipes,
+                      });
+                    } catch (err: any) {
+                      imgCompleted++;
+                      send({ type: "batch_error", batch: batchIdx + 1, total_batches: imgBatches.length, completed: imgCompleted, error: err.message });
+                    }
+                  })
+                );
+              }
             }
 
             // Match images with Sonnet Vision
-            await matchImagesWithVision(client, allRecipes, pageImages, send);
+            if (textPages.length > 0) {
+              await matchImagesWithVision(client, allRecipes, pageImages, send);
+            }
 
             send({ type: "done", recipes: allRecipes, total: allRecipes.length });
           } catch (err: any) {
@@ -324,48 +391,117 @@ export async function POST(request: NextRequest) {
         const send = (data: any) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
 
         try {
-          const BATCH_SIZE = 10;
-          const batches: typeof pageData[] = [];
-          for (let i = 0; i < pageData.length; i += BATCH_SIZE) {
-            batches.push(pageData.slice(i, i + BATCH_SIZE));
-          }
+          const textPages = pageData.filter((p: any) => p.text && p.text.length > 30);
 
-          send({ type: "status", message: `${pageData.length} pagina's in ${batches.length} batch(es)` });
+          send({ type: "status", message: `${pageData.length} pagina's, ${textPages.length} met tekst` });
 
           const client = new Anthropic();
           const allRecipes: any[] = [];
-          let completed = 0;
 
-          for (let b = 0; b < batches.length; b += 3) {
-            const chunk = batches.slice(b, b + 3);
-            await Promise.all(
-              chunk.map(async (batch, j) => {
-                const batchIdx = b + j;
-                try {
-                  const pageText = batch.map((p) => `--- PAGINA ${p.pageNum} ---\n${p.text}`).join("\n\n");
-                  const response = await client.messages.create({
-                    model: "claude-haiku-4-5-20251001",
-                    max_tokens: 16384,
-                    system: buildAiPrompt(bron),
-                    messages: [{ role: "user", content: `Vind alle recepten:\n\n${pageText}` }],
-                  });
+          // Text-based extraction with Haiku
+          if (textPages.length > 0) {
+            const BATCH_SIZE = 10;
+            const batches: typeof textPages[] = [];
+            for (let i = 0; i < textPages.length; i += BATCH_SIZE) {
+              batches.push(textPages.slice(i, i + BATCH_SIZE));
+            }
 
-                  const text = response.content.filter((bl) => bl.type === "text").map((bl) => (bl as any).text).join("\n");
-                  const recipes = parseAiJson(text).filter((r: any) => r.title && r.ingredients?.length > 0);
+            let completed = 0;
 
-                  completed++;
-                  allRecipes.push(...recipes);
-                  send({ type: "batch_done", batch: batchIdx + 1, total_batches: batches.length, completed, found: recipes.length, recipes });
-                } catch (err: any) {
-                  completed++;
-                  send({ type: "batch_error", batch: batchIdx + 1, error: err.message });
-                }
-              })
-            );
+            for (let b = 0; b < batches.length; b += 3) {
+              const chunk = batches.slice(b, b + 3);
+              await Promise.all(
+                chunk.map(async (batch, j) => {
+                  const batchIdx = b + j;
+                  try {
+                    const pageText = batch.map((p) => `--- PAGINA ${p.pageNum} ---\n${p.text}`).join("\n\n");
+                    const response = await client.messages.create({
+                      model: "claude-haiku-4-5-20251001",
+                      max_tokens: 16384,
+                      system: buildAiPrompt(bron),
+                      messages: [{ role: "user", content: `Vind alle recepten:\n\n${pageText}` }],
+                    });
+
+                    const text = response.content.filter((bl) => bl.type === "text").map((bl) => (bl as any).text).join("\n");
+                    const recipes = parseAiJson(text).filter((r: any) => r.title && r.ingredients?.length > 0);
+
+                    completed++;
+                    allRecipes.push(...recipes);
+                    send({ type: "batch_done", batch: batchIdx + 1, total_batches: batches.length, completed, found: recipes.length, recipes });
+                  } catch (err: any) {
+                    completed++;
+                    send({ type: "batch_error", batch: batchIdx + 1, error: err.message });
+                  }
+                })
+              );
+            }
           }
 
-          // Match images with Sonnet Vision
-          await matchImagesWithVision(client, allRecipes, pageImageMap, send);
+          // Vision-based extraction for image-only pages
+          const imageOnlyPageNums = pageData
+            .filter((p: any) => (!p.text || p.text.length <= 30))
+            .map((p: any) => p.pageNum);
+          const visionImages = imageOnlyPageNums
+            .filter((pn: number) => pageImageMap.has(pn) && pageImageMap.get(pn))
+            .map((pn: number) => ({ pageNum: pn, image: pageImageMap.get(pn)! }));
+
+          if (visionImages.length > 0 && allRecipes.length === 0) {
+            send({ type: "status", message: `${visionImages.length} pagina's met alleen afbeeldingen, Vision wordt gebruikt...` });
+
+            const IMG_BATCH = 4;
+            const imgBatches: typeof visionImages[] = [];
+            for (let i = 0; i < visionImages.length; i += IMG_BATCH) {
+              imgBatches.push(visionImages.slice(i, i + IMG_BATCH));
+            }
+
+            let imgCompleted = 0;
+
+            for (let b = 0; b < imgBatches.length; b += 2) {
+              const chunk = imgBatches.slice(b, b + 2);
+              await Promise.all(
+                chunk.map(async (batch, j) => {
+                  const batchIdx = b + j;
+                  try {
+                    const contentBlocks: any[] = [];
+                    for (const page of batch) {
+                      const base64 = page.image.replace(/^data:image\/\w+;base64,/, "");
+                      contentBlocks.push({ type: "text", text: `--- PAGINA ${page.pageNum} ---` });
+                      contentBlocks.push({
+                        type: "image",
+                        source: { type: "base64", media_type: "image/jpeg", data: base64 },
+                      });
+                    }
+                    contentBlocks.push({
+                      type: "text",
+                      text: "Lees de tekst in deze afbeeldingen en vind alle recepten. Retourneer ze als JSON array.",
+                    });
+
+                    const response = await client.messages.create({
+                      model: "claude-sonnet-4-6",
+                      max_tokens: 16384,
+                      system: buildAiPrompt(bron),
+                      messages: [{ role: "user", content: contentBlocks }],
+                    });
+
+                    const text = response.content.filter((bl) => bl.type === "text").map((bl) => (bl as any).text).join("\n");
+                    const recipes = parseAiJson(text).filter((r: any) => r.title && r.ingredients?.length > 0);
+
+                    imgCompleted++;
+                    allRecipes.push(...recipes);
+                    send({ type: "batch_done", batch: batchIdx + 1, total_batches: imgBatches.length, completed: imgCompleted, found: recipes.length, recipes });
+                  } catch (err: any) {
+                    imgCompleted++;
+                    send({ type: "batch_error", batch: batchIdx + 1, total_batches: imgBatches.length, completed: imgCompleted, error: err.message });
+                  }
+                })
+              );
+            }
+          }
+
+          // Match images with Sonnet Vision (only for text-extracted recipes)
+          if (textPages.length > 0) {
+            await matchImagesWithVision(client, allRecipes, pageImageMap, send);
+          }
 
           send({ type: "done", recipes: allRecipes, total: allRecipes.length });
         } catch (err: any) {

@@ -695,6 +695,76 @@ export default function NieuwReceptPage() {
             } else if (event.type === 'done') {
               addPdfLog(`Klaar! ${event.total} recepten gevonden`);
               setPdfRecipes(event.recipes);
+            } else if (event.type === 'fallback_to_client') {
+              addPdfLog('Server kan PDF niet lezen, client-side extractie...');
+              await reader.cancel();
+              await handleClientSidePdfExtract(pdfFile!, foundRecipes);
+              return;
+            } else if (event.type === 'error') {
+              throw new Error(event.error);
+            }
+          } catch (parseErr: any) {
+            if (parseErr.message && !parseErr.message.includes('JSON')) throw parseErr;
+          }
+        }
+      }
+    } catch (err: any) {
+      addPdfLog(`Fout: ${err.message}`);
+      setExtractError(err.message);
+    } finally {
+      setExtracting(false);
+    }
+  };
+
+  const handleClientSidePdfExtract = async (file: File, foundRecipes: any[]) => {
+    try {
+      addPdfLog('PDF client-side inlezen...');
+      const { extractPdfText } = await import('@/lib/pdf-reader');
+      const pages = await extractPdfText(file, (current, total) => {
+        addPdfLog(`Pagina ${current}/${total} inlezen...`);
+      });
+
+      const images = pages.map(p => p.image || null);
+
+      addPdfLog(`${pages.length} pagina's geëxtraheerd, versturen naar AI...`);
+      const res = await fetch('/api/extract/pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pages, images, filename: file.name, bron: pdfBron.trim() || null }),
+      });
+
+      if (!res.ok && res.headers.get('content-type')?.includes('application/json')) {
+        const err = await res.json();
+        throw new Error(err.error || 'PDF extractie mislukt');
+      }
+
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || '';
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const event = JSON.parse(line.slice(6));
+            if (event.type === 'status') {
+              addPdfLog(event.message);
+            } else if (event.type === 'batch_done') {
+              for (const r of event.recipes) {
+                foundRecipes.push(r);
+                addPdfLog(`Recept ${foundRecipes.length}: ${r.title}`);
+              }
+              setPdfRecipes([...foundRecipes]);
+            } else if (event.type === 'batch_error') {
+              addPdfLog(`Batch ${event.batch} mislukt: ${event.error}`);
+            } else if (event.type === 'done') {
+              addPdfLog(`Klaar! ${event.total} recepten gevonden`);
+              setPdfRecipes(event.recipes);
             } else if (event.type === 'error') {
               throw new Error(event.error);
             }
