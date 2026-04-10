@@ -15,7 +15,7 @@ import PullToRefresh from '@/components/ui/PullToRefresh';
 
 const AddToCollectionModal = dynamic(() => import('@/components/recipes/AddToCollectionModal'));
 const ShareModal = dynamic(() => import('@/components/ui/ShareModal'));
-const MobileFilterSheet = dynamic(() => import('@/components/ui/MobileFilterSheet'));
+import MobileFilterSheet from '@/components/ui/MobileFilterSheet';
 import { useCollectionRecipeIds } from '@/hooks/useCollectionRecipeIds';
 import type { RecipeWithRelations, Source } from '@/types';
 

@@ -6,6 +6,17 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '1.1.0',
+    date: '10 april 2026',
+    highlights: [
+      'De AI-kookassistent werkt nu weer — antwoorden worden correct weergegeven tijdens het chatten',
+      'In de kookmodus kun je nu spaties typen in het chatveld zonder dat de stap wisselt',
+      'Nieuw: een subtiele donatie-mogelijkheid om de AI-kosten te helpen dekken, zichtbaar na het extraheren van recepten',
+      'Op de Over-pagina vind je nu ook een donatie-sectie',
+      'Een fout bij het verversen van de receptenpagina is opgelost',
+    ],
+  },
+  {
     version: '1.0.1',
     date: '10 april 2026',
     highlights: [
@@ -22,17 +33,6 @@ export const releaseNotes: ReleaseNote[] = [
       'Als de server een PDF niet kan lezen, wordt automatisch een andere methode geprobeerd zodat het importeren niet meer mislukt',
       'Een fout waardoor de app soms niet laadde bij het openen of verversen is opgelost',
       'Meerdere recepten uit één PDF worden nu betrouwbaarder herkend en gesplitst',
-    ],
-  },
-  {
-    version: '0.6.0',
-    date: '9 april 2026',
-    highlights: [
-      'Recepten importeren via foto werkt nu veel beter — Instagram-screenshots, handgeschreven recepten en kookboekpagina\'s worden nauwkeuriger herkend',
-      'Websites met Cloudflare-beveiliging (zoals eefkooktzo.nl) worden nu automatisch omzeild bij het importeren van recepten via URL',
-      'Ingrediënten worden nu slimmer gesplitst in hoeveelheid, eenheid en naam (bijv. "handje basilicum" wordt correct herkend)',
-      'De receptenbibliotheek laadt nu sneller door recepten in kleine groepen op te halen in plaats van alles tegelijk',
-      'Alle TypeScript-fouten in de app zijn opgelost voor een stabielere ervaring',
     ],
   },
 ];

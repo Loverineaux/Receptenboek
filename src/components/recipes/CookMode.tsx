@@ -35,9 +35,12 @@ export default function CookMode({ title, steps, ingredients, portions, onClose,
     return () => { wakeLock?.release(); };
   }, []);
 
-  // Keyboard navigation
+  // Keyboard navigation — skip when typing in chat input
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
       if (e.key === 'ArrowRight' || e.key === ' ') {
         e.preventDefault();
         setCurrentStep((prev) => Math.min(prev + 1, totalSteps - 1));

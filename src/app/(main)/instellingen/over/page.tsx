@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ArrowLeft, ChefHat, Code, Heart, Sparkles } from 'lucide-react';
+import { ArrowLeft, ChefHat, Code, Heart, Sparkles, Coffee } from 'lucide-react';
 import { releaseNotes } from '@/lib/release-notes';
 
 const APP_VERSION = process.env.APP_VERSION || '0.0.0';
@@ -77,6 +77,40 @@ export default function OverPage() {
               </ul>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Donatie */}
+      <div className="mt-6">
+        <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-text-primary">
+          <Coffee className="h-4 w-4 text-primary" />
+          Steun dit project
+        </h2>
+        <div className="overflow-hidden rounded-xl border border-primary/20 bg-primary/5 p-4">
+          <p className="text-sm leading-relaxed text-text-secondary">
+            Receptenboek gebruikt AI om recepten te extraheren uit URL&apos;s, foto&apos;s en
+            PDF&apos;s. Dat kost per extractie een paar cent aan API-kosten. Met een kleine
+            donatie help je dit project draaiende te houden.
+          </p>
+          <div className="mt-3 flex items-center gap-3">
+            <a
+              href="https://paypal.me/Receptenboek/2,50"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90"
+            >
+              <Heart className="h-4 w-4" />
+              Doneer &euro;2,50
+            </a>
+            <a
+              href="https://paypal.me/Receptenboek"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-text-muted underline-offset-2 hover:text-text-secondary hover:underline"
+            >
+              Ander bedrag
+            </a>
+          </div>
         </div>
       </div>
 

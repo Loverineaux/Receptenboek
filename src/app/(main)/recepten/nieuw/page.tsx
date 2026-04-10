@@ -13,6 +13,7 @@ import type { RecipeFormData } from '@/components/recipes/RecipeForm';
 
 const ConfirmDialog = dynamic(() => import('@/components/ui/ConfirmDialog'));
 const RecipeForm = dynamic(() => import('@/components/recipes/RecipeForm'));
+const DonationCard = dynamic(() => import('@/components/ui/DonationCard'));
 import type { Source, Difficulty } from '@/types';
 
 type ImportTab = 'url' | 'foto' | 'pdf' | 'handmatig' | 'preview';
@@ -229,6 +230,20 @@ export default function NieuwReceptPage() {
   const [saving, setSaving] = useState(false);
   const [navBlockToast, setNavBlockToast] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{ title: string; message: string; resolve: (v: boolean) => void } | null>(null);
+  const [donationCount, setDonationCount] = useState<number | null>(null);
+
+  /** Increment extraction counter and check if donation nudge should show */
+  const trackExtraction = async () => {
+    try {
+      const res = await fetch('/api/users/extraction-count', { method: 'POST' });
+      if (res.ok) {
+        const { count } = await res.json();
+        if (count === 1 || count % 10 === 0) {
+          setDonationCount(count);
+        }
+      }
+    } catch {}
+  };
 
   const showConfirm = (title: string, message: string): Promise<boolean> => {
     return new Promise((resolve) => {
@@ -379,6 +394,7 @@ export default function NieuwReceptPage() {
       };
       setExtractedPreview(extracted);
       setActiveTab('preview');
+      trackExtraction();
     } catch (err: any) {
       console.error('[Photo Import] Error:', err.message);
       setExtractError(err.message);
@@ -466,6 +482,7 @@ export default function NieuwReceptPage() {
       extracted.ingredients = parseExtractedIngredients(extracted.ingredients);
       setExtractedPreview(extracted);
       setActiveTab('preview');
+      trackExtraction();
     } catch (err: any) {
       clearInterval(interval);
       console.error('[URL Import] ERROR:', err.message);
@@ -576,6 +593,7 @@ export default function NieuwReceptPage() {
 
     setBulkImporting(false);
     setBulkDone(true);
+    trackExtraction();
   };
 
   const retryFailedBulk = async () => {
@@ -695,6 +713,7 @@ export default function NieuwReceptPage() {
             } else if (event.type === 'done') {
               addPdfLog(`Klaar! ${event.total} recepten gevonden`);
               setPdfRecipes(event.recipes);
+              trackExtraction();
             } else if (event.type === 'fallback_to_client') {
               addPdfLog('Server kan PDF niet lezen, client-side extractie...');
               await reader.cancel();
@@ -765,6 +784,7 @@ export default function NieuwReceptPage() {
             } else if (event.type === 'done') {
               addPdfLog(`Klaar! ${event.total} recepten gevonden`);
               setPdfRecipes(event.recipes);
+              trackExtraction();
             } else if (event.type === 'error') {
               throw new Error(event.error);
             }
@@ -942,6 +962,13 @@ export default function NieuwReceptPage() {
       {extractError && (
         <div className="rounded-lg bg-error/10 px-4 py-3 text-sm text-error">
           {extractError}
+        </div>
+      )}
+
+      {/* ── Donation nudge ──────────────────────────── */}
+      {donationCount !== null && (
+        <div className="fixed top-16 left-4 right-4 z-40 mx-auto max-w-2xl md:top-20">
+          <DonationCard extractionCount={donationCount} />
         </div>
       )}
 

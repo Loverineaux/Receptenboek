@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { Bot, Send, X } from 'lucide-react';
 import type { RecipeWithRelations } from '@/types';
 
@@ -164,15 +164,20 @@ export default function RecipeChat({
 
   // Use external state if provided, otherwise internal
   const messages = externalMessages ?? internalMessages;
-  const setMessages = onMessagesChange
-    ? (update: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => {
-        if (typeof update === 'function') {
-          onMessagesChange(update(messages));
-        } else {
-          onMessagesChange(update);
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+  const setMessages = useMemo(() =>
+    onMessagesChange
+      ? (update: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => {
+          if (typeof update === 'function') {
+            onMessagesChange(update(messagesRef.current));
+          } else {
+            onMessagesChange(update);
+          }
         }
-      }
-    : setInternalMessages;
+      : setInternalMessages,
+    [onMessagesChange]
+  );
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
