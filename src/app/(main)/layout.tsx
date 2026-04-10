@@ -1,7 +1,5 @@
-import dynamic from 'next/dynamic';
 import Header from '@/components/layout/Header';
-
-const FabButton = dynamic(() => import('@/components/layout/FabButton'));
+import FabButton from '@/components/layout/FabButton';
 
 export default function MainLayout({
   children,

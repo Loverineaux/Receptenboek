@@ -1,8 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
-import dynamic from 'next/dynamic';
-
-const PWAInstall = dynamic(() => import('@/components/layout/PWAInstall'), { ssr: false });
+import PWAInstall from '@/components/layout/PWAInstall';
 
 export const metadata: Metadata = {
   title: 'Receptenboek',
