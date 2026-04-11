@@ -977,6 +977,16 @@ export default function NieuwReceptPage() {
         <div className="space-y-5 rounded-xl border bg-surface p-6">
           <h2 className="text-lg font-semibold text-text-primary">Recept controleren</h2>
 
+          {/* Hash-SPA warning */}
+          {extractedPreview._hashSPA && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              <p className="font-medium">Deze website kon niet volledig worden uitgelezen</p>
+              <p className="mt-1 text-xs text-amber-600">
+                Het resultaat is mogelijk incompleet. Upload liever een foto of screenshot van het recept via het tabblad &quot;Foto&quot; voor een beter resultaat.
+              </p>
+            </div>
+          )}
+
           {/* Validation issues */}
           {extractedPreview._validation && (
             <div className="space-y-2">

@@ -69,6 +69,7 @@ export async function POST(request: NextRequest) {
       console.log(`[URL Extract] Hash-based SPA detected, using web search`);
       const recipe = await fallbackWebSearch(url);
       if (!recipe.bron) recipe.bron = detectBronFromUrl(url);
+      recipe._hashSPA = true;
       setCachedRecipe(url, recipe);
       return respondWithValidation(recipe);
     }
