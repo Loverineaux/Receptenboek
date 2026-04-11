@@ -662,6 +662,8 @@ const HOSTNAME_MAP: Record<string, string> = {
   "24kitchen.nl": "24Kitchen",
   "eatertainment.nl": "Eatertainment",
   "lekkermakkelijk.nl": "Lekkermakkelijk",
+  "projectgezond.nl": "Project Gezond",
+  "app.projectgezond.nl": "Project Gezond",
   // Social media platforms
   "instagram.com": "Instagram",
   "instagr.am": "Instagram",

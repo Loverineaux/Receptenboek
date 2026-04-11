@@ -63,6 +63,16 @@ export async function POST(request: NextRequest) {
       return respondWithValidation(recipe);
     }
 
+    // Hash-based SPA detection (e.g. app.projectgezond.nl/#/recepten/...)
+    // The # fragment is never sent to the server, so scraping gets an empty shell
+    if (url.includes('#/') || url.includes('#!')) {
+      console.log(`[URL Extract] Hash-based SPA detected, skipping scrape, using web search`);
+      const recipe = await fallbackWebSearch(url);
+      if (!recipe.bron) recipe.bron = detectBronFromUrl(url);
+      setCachedRecipe(url, recipe);
+      return respondWithValidation(recipe);
+    }
+
     console.log("[URL Extract] Scraping:", url);
 
     // Step 1: Scrape the page directly
@@ -217,8 +227,13 @@ async function fallbackWebSearch(url: string): Promise<any> {
   const client = new Anthropic();
 
   // Extract recipe name from URL slug for better search queries
-  const slug = new URL(url).pathname.split("/").filter(Boolean).pop()?.replace(/-/g, " ") || "";
-  const hostname = new URL(url).hostname.replace("www.", "");
+  // For hash-based SPAs (e.g. #/recepten/orak-arik), extract from hash fragment
+  const urlObj = new URL(url);
+  const hashPath = urlObj.hash.replace(/^#\/?/, '');
+  const slug = hashPath.split("/").filter(Boolean).pop()?.replace(/-/g, " ")
+    || urlObj.pathname.split("/").filter(Boolean).pop()?.replace(/-/g, " ")
+    || "";
+  const hostname = urlObj.hostname.replace("www.", "");
 
   const searchResponse = await client.messages.create({
     model: "claude-sonnet-4-6",
