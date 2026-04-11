@@ -79,25 +79,17 @@ export async function scrapePage(url: string): Promise<ScrapedRecipe> {
   // Resolve short/redirect URLs first (e.g. ah.nl/r/123 → full allerhande URL)
   const resolvedUrl = await resolveRedirects(url);
 
-  // Hash-based SPAs (e.g. app.projectgezond.nl/#/recepten/...) need a real browser
-  // Direct fetch only gets an empty SPA shell — skip straight to puppeteer
-  const isHashSPA = resolvedUrl.includes('#/') || resolvedUrl.includes('#!');
+  // Strategy 1: Direct fetch with full browser headers (fast)
+  const directResult = await tryFetch(resolvedUrl, BROWSER_HEADERS);
+  if (directResult) return directResult;
 
-  if (!isHashSPA) {
-    // Strategy 1: Direct fetch with full browser headers (fast)
-    const directResult = await tryFetch(resolvedUrl, BROWSER_HEADERS);
-    if (directResult) return directResult;
+  // Strategy 1b: Try with simpler headers (some CDNs block Sec-Fetch-* headers)
+  console.log("[Scrape] Full headers failed, trying simple headers...");
+  const simpleResult = await tryFetch(resolvedUrl, SIMPLE_HEADERS);
+  if (simpleResult) return simpleResult;
 
-    // Strategy 1b: Try with simpler headers (some CDNs block Sec-Fetch-* headers)
-    console.log("[Scrape] Full headers failed, trying simple headers...");
-    const simpleResult = await tryFetch(resolvedUrl, SIMPLE_HEADERS);
-    if (simpleResult) return simpleResult;
-  } else {
-    console.log("[Scrape] Hash-based SPA detected, skipping fetch, using headless browser...");
-  }
-
-  // Strategy 2: Headless browser (handles SPAs + Cloudflare JS challenges)
-  console.log("[Scrape] Trying headless browser...");
+  // Strategy 2: Headless browser (bypasses Cloudflare JS challenge)
+  console.log("[Scrape] Simple headers failed, trying headless browser...");
   const browserResult = await tryHeadlessBrowser(resolvedUrl);
   if (browserResult) return browserResult;
 

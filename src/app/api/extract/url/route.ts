@@ -63,6 +63,16 @@ export async function POST(request: NextRequest) {
       return respondWithValidation(recipe);
     }
 
+    // Hash-based SPA detection (e.g. app.projectgezond.nl/#/recepten/...)
+    // Direct fetch/puppeteer can't render these on Vercel — use web search
+    if (url.includes('#/') || url.includes('#!')) {
+      console.log(`[URL Extract] Hash-based SPA detected, using web search`);
+      const recipe = await fallbackWebSearch(url);
+      if (!recipe.bron) recipe.bron = detectBronFromUrl(url);
+      setCachedRecipe(url, recipe);
+      return respondWithValidation(recipe);
+    }
+
     console.log("[URL Extract] Scraping:", url);
 
     // Step 1: Scrape the page directly
