@@ -48,18 +48,13 @@ export function useAuth() {
         data: { user },
       } = await supabase.auth.getUser()
 
-      if (user) {
-        // Fetch profile + user in parallel, so avatar/name/role appear immediately
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('id, email, display_name, avatar_url, bio, role')
-          .eq('id', user.id)
-          .single()
+      // Set loading=false immediately so pages can render and fetch data
+      setAuthState((prev) => ({ ...prev, user, loading: false }))
 
-        setAuthState({ user, profile: profileData as Profile | null, loading: false })
+      if (user) {
+        // Profile loads in background — Header shows skeleton until ready
+        fetchProfile(user.id)
         fetch('/api/users/heartbeat', { method: 'POST' }).catch(() => {})
-      } else {
-        setAuthState({ user: null, profile: null, loading: false })
       }
     }
 

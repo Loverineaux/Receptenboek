@@ -81,7 +81,9 @@ export default function Header() {
                   className="flex items-center gap-2 rounded-full py-1 pl-1 pr-1 transition-colors hover:bg-gray-100 md:pr-3"
                 >
                   <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-light text-primary md:h-9 md:w-9">
-                    {profile?.avatar_url ? (
+                    {!profile ? (
+                      <div className="h-full w-full animate-pulse rounded-full bg-gray-200" />
+                    ) : profile.avatar_url ? (
                       <img
                         src={profile.avatar_url}
                         alt={profile.display_name || ''}
@@ -97,7 +99,11 @@ export default function Header() {
                     )}
                   </div>
                   <span className="hidden text-sm font-medium text-text-primary md:inline">
-                    {profile?.display_name || 'Gebruiker'}
+                    {!profile ? (
+                      <span className="inline-block h-4 w-16 animate-pulse rounded bg-gray-200" />
+                    ) : (
+                      profile.display_name || 'Gebruiker'
+                    )}
                   </span>
                 </button>
 
