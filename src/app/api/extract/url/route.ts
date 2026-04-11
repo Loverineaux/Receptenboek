@@ -271,7 +271,8 @@ Geef ALLE informatie die je vindt:
 - Afbeelding URL (directe URL naar de receptfoto)
 - Ingrediënten met EXACTE hoeveelheden en eenheden
 - Alle bereidingsstappen in de juiste volgorde
-- Bereidingstijd en aantal porties
+- Bereidingstijd (bijv. "25 min")
+- Aantal porties/personen (bijv. "Twee personen" = 2, "Voor 4 personen" = 4) — dit staat vaak bovenaan de ingrediëntenlijst
 - Voedingswaarden als beschikbaar
 
 Als het recept in het Engels is, vertaal dan alles naar het Nederlands.`,
@@ -319,7 +320,7 @@ Als het recept in het Engels is, vertaal dan alles naar het Nederlands.`,
     messages: [
       {
         role: "user",
-        content: `Hier is de receptinformatie gevonden op ${url}:\n\n${fullText}\n\nRetourneer dit als een enkel JSON-object volgens het opgegeven schema. Zorg dat ELKE ingrediënt een hoeveelheid en eenheid heeft als die beschikbaar is. Zorg dat image_url wordt ingevuld als je een afbeelding hebt gevonden. ALLEEN JSON, geen andere tekst.`,
+        content: `Hier is de receptinformatie gevonden op ${url}:\n\n${fullText}\n\nRetourneer dit als een enkel JSON-object volgens het opgegeven schema. Zorg dat ELKE ingrediënt een hoeveelheid en eenheid heeft als die beschikbaar is. Zorg dat image_url wordt ingevuld als je een afbeelding hebt gevonden. Let op: als er een aantal porties/personen vermeld wordt (bijv. "Twee personen", "4 porties", "Voor 2 personen"), vul dan basis_porties in als getal. ALLEEN JSON, geen andere tekst.`,
       },
     ],
   });
