@@ -6,6 +6,15 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '1.2.0',
+    date: '11 april 2026',
+    highlights: [
+      'Je kunt nu een afbeelding uploaden bij het aanmaken of bewerken van een recept',
+      'Naast een URL plakken kun je ook direct een foto vanaf je telefoon of computer kiezen',
+      'Tijdens het uploaden zie je een laadanimatie en daarna een preview van de afbeelding',
+    ],
+  },
+  {
     version: '1.1.1',
     date: '11 april 2026',
     highlights: [
@@ -23,15 +32,6 @@ export const releaseNotes: ReleaseNote[] = [
       'Nieuw: een subtiele donatie-mogelijkheid om de AI-kosten te helpen dekken, zichtbaar na het extraheren van recepten',
       'Op de Over-pagina vind je nu ook een donatie-sectie',
       'Een fout bij het verversen van de receptenpagina is opgelost',
-    ],
-  },
-  {
-    version: '1.0.1',
-    date: '10 april 2026',
-    highlights: [
-      'Je profielfoto, naam en admin-badge verschijnen nu direct bij het openen van de app',
-      'Geen lege avatar of "Gebruiker" meer te zien terwijl je profiel laadt',
-      'De admin-check is sneller doordat de app geen extra opvraging meer doet',
     ],
   },
 ];
