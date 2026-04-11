@@ -235,8 +235,6 @@ async function fallbackWebSearch(url: string): Promise<any> {
     || "";
   const hostname = urlObj.hostname.replace("www.", "");
 
-  const isHashSPA = url.includes('#/') || url.includes('#!');
-
   const searchResponse = await client.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 4096,
@@ -261,10 +259,7 @@ STAP 2: Als stap 1 niet genoeg oplevert, zoek op "${slug} recept ingredienten ho
 STAP 3: Zoek op "${slug} recept bereidingswijze" voor de stappen.
 STAP 4: Zoek naar een afbeelding via "${slug} ${hostname}" en zoek naar directe afbeelding-URLs.
 
-${isHashSPA
-  ? `De website (${hostname}) is een app waarvan de content moeilijk te vinden is. Als je het recept niet kunt vinden op ${hostname}, zoek dan naar hetzelfde recept "${slug}" op andere Nederlandse receptensites. Vermeld wel "${hostname}" als bron.`
-  : `Gebruik bij voorkeur informatie van ${hostname}. Als dat niet lukt, zoek op andere bronnen maar vermeld ${hostname} als bron.`
-}
+BELANGRIJK: Gebruik ALLEEN informatie van ${hostname}. Gebruik GEEN recepten van andere websites.
 
 BELANGRIJK — Ingrediënten:
 - Zoek ALLE ingrediënten, niet maar een paar. Tel ze na: als het originele recept 7 ingrediënten heeft, moeten er 7 in je antwoord staan.
@@ -298,7 +293,7 @@ Als het recept in het Engels is, vertaal dan alles naar het Nederlands.`,
       const ingSearch = await client.messages.create({
         model: "claude-sonnet-4-6",
         max_tokens: 2048,
-        system: "Zoek specifiek de ingrediëntenlijst met hoeveelheden van dit recept. Geef ALLE ingrediënten met exacte hoeveelheden. Zoek ook op andere Nederlandse receptensites als de originele bron niet genoeg info geeft.",
+        system: `Zoek specifiek de ingrediëntenlijst met hoeveelheden van dit recept op ${hostname}. Geef ALLE ingrediënten met exacte hoeveelheden. Gebruik ALLEEN informatie van ${hostname}.`,
         tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }],
         messages: [{
           role: "user",
