@@ -63,16 +63,6 @@ export async function POST(request: NextRequest) {
       return respondWithValidation(recipe);
     }
 
-    // Hash-based SPA detection (e.g. app.projectgezond.nl/#/recepten/...)
-    // The # fragment is never sent to the server, so scraping gets an empty shell
-    if (url.includes('#/') || url.includes('#!')) {
-      console.log(`[URL Extract] Hash-based SPA detected, skipping scrape, using web search`);
-      const recipe = await fallbackWebSearch(url);
-      if (!recipe.bron) recipe.bron = detectBronFromUrl(url);
-      setCachedRecipe(url, recipe);
-      return respondWithValidation(recipe);
-    }
-
     console.log("[URL Extract] Scraping:", url);
 
     // Step 1: Scrape the page directly
