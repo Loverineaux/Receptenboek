@@ -6,6 +6,15 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '1.1.1',
+    date: '11 april 2026',
+    highlights: [
+      'De app opent nu direct — recepten en afbeeldingen laden niet meer pas na je profiel',
+      'Je profielfoto en naam verschijnen met een subtiele animatie zodra ze geladen zijn',
+      'Geen lange wachttijd meer bij het openen van de app als de server even traag is',
+    ],
+  },
+  {
     version: '1.1.0',
     date: '10 april 2026',
     highlights: [
@@ -23,16 +32,6 @@ export const releaseNotes: ReleaseNote[] = [
       'Je profielfoto, naam en admin-badge verschijnen nu direct bij het openen van de app',
       'Geen lege avatar of "Gebruiker" meer te zien terwijl je profiel laadt',
       'De admin-check is sneller doordat de app geen extra opvraging meer doet',
-    ],
-  },
-  {
-    version: '1.0.0',
-    date: '10 april 2026',
-    highlights: [
-      'PDF-bestanden met alleen afbeeldingen (zoals gescande recepten of screenshots) worden nu herkend via slimme beeldherkenning',
-      'Als de server een PDF niet kan lezen, wordt automatisch een andere methode geprobeerd zodat het importeren niet meer mislukt',
-      'Een fout waardoor de app soms niet laadde bij het openen of verversen is opgelost',
-      'Meerdere recepten uit één PDF worden nu betrouwbaarder herkend en gesplitst',
     ],
   },
 ];
