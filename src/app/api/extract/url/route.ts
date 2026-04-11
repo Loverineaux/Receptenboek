@@ -235,11 +235,13 @@ async function fallbackWebSearch(url: string): Promise<any> {
     || "";
   const hostname = urlObj.hostname.replace("www.", "");
 
+  const isHashSPA = url.includes('#/') || url.includes('#!');
+
   const searchResponse = await client.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 4096,
     system:
-      "Je bent een assistent die recepten opzoekt via het web. Zoek de volledige receptinformatie op. Het is CRUCIAAL dat je de EXACTE hoeveelheden en eenheden bij elke ingrediënt geeft (bijv. '400 gram kippendijen', niet alleen 'kippendijen'). Geef ook de afbeelding-URL van het recept als je die kunt vinden. Doe MEERDERE zoekopdrachten als de eerste niet genoeg info geeft.",
+      "Je bent een assistent die recepten opzoekt via het web. Zoek de volledige receptinformatie op. Het is CRUCIAAL dat je ALLE ingrediënten vindt met de EXACTE hoeveelheden en eenheden (bijv. '300 gram spitskool', '1 ui', '2 eieren', '30 ml ketjap manis'). Doe MEERDERE zoekopdrachten als de eerste niet alle ingrediënten met hoeveelheden geeft.",
     tools: [
       {
         type: "web_search_20250305",
@@ -254,17 +256,25 @@ async function fallbackWebSearch(url: string): Promise<any> {
 
 De website is mogelijk niet direct bereikbaar. Gebruik daarom MEERDERE zoekstrategieën:
 
-STAP 1: Zoek eerst op "${slug} ${hostname} recept ingredienten" om het recept met ingrediënten te vinden.
-STAP 2: Als stap 1 niet genoeg oplevert, zoek op "${slug} ${hostname}" voor de volledige receptpagina.
-STAP 3: Zoek op "${slug} ${hostname} ingredienten hoeveelheden" voor specifiek de ingrediëntenlijst met exacte hoeveelheden.
-STAP 4: Zoek ook naar de afbeelding via "${slug} ${hostname}" en zoek in de resultaten naar directe afbeelding-URLs (.jpg/.png/.webp).
+STAP 1: Zoek op "${slug} recept ingredienten ${hostname}".
+STAP 2: Als stap 1 niet genoeg oplevert, zoek op "${slug} recept ingredienten hoeveelheden".
+STAP 3: Zoek op "${slug} recept bereidingswijze" voor de stappen.
+STAP 4: Zoek naar een afbeelding via "${slug} ${hostname}" en zoek naar directe afbeelding-URLs.
 
-BELANGRIJK: Gebruik ALLEEN informatie van ${hostname}. Gebruik GEEN recepten van andere websites.
+${isHashSPA
+  ? `De website (${hostname}) is een app waarvan de content moeilijk te vinden is. Als je het recept niet kunt vinden op ${hostname}, zoek dan naar hetzelfde recept "${slug}" op andere Nederlandse receptensites. Vermeld wel "${hostname}" als bron.`
+  : `Gebruik bij voorkeur informatie van ${hostname}. Als dat niet lukt, zoek op andere bronnen maar vermeld ${hostname} als bron.`
+}
+
+BELANGRIJK — Ingrediënten:
+- Zoek ALLE ingrediënten, niet maar een paar. Tel ze na: als het originele recept 7 ingrediënten heeft, moeten er 7 in je antwoord staan.
+- ELKE ingrediënt MOET een hoeveelheid hebben als die op de website staat (bijv. "300 gram spitskool", niet alleen "spitskool").
+- Ingrediënten zonder specifieke hoeveelheid (bijv. "peper") markeer je als "naar smaak".
 
 Geef ALLE informatie die je vindt:
 - Titel van het recept
 - Afbeelding URL (directe URL naar de receptfoto)
-- Ingrediënten met EXACTE hoeveelheden en eenheden (bijv. "400 gram kippendijen", "3 eetlepels ketjap manis")
+- Ingrediënten met EXACTE hoeveelheden en eenheden
 - Alle bereidingsstappen in de juiste volgorde
 - Bereidingstijd en aantal porties
 - Voedingswaarden als beschikbaar
@@ -280,21 +290,19 @@ Als het recept in het Engels is, vertaal dan alles naar het Nederlands.`,
     .join("\n");
 
   // If no quantities found in first search, do a targeted ingredient search
-  const hasQuantities = /\d+\s*(gram|g|ml|el|tl|eetlepel|theelepel|stuk)/i.test(searchText);
+  const hasQuantities = /\d+\s*(gram|g|ml|el|tl|eetlepel|theelepel|stuk|stuks|ui|eieren?|teen)/i.test(searchText);
   let extraIngredientText = "";
   if (!hasQuantities) {
     console.log("[URL Extract] No quantities found, doing targeted ingredient search");
     try {
-      const slug = new URL(url).pathname.split("/").filter(Boolean).pop()?.replace(/-/g, " ") || "";
-      const hostname = new URL(url).hostname.replace("www.", "");
       const ingSearch = await client.messages.create({
         model: "claude-sonnet-4-6",
         max_tokens: 2048,
-        system: "Zoek specifiek de ingrediëntenlijst met hoeveelheden van dit recept. Geef ALLE ingrediënten met exacte hoeveelheden.",
+        system: "Zoek specifiek de ingrediëntenlijst met hoeveelheden van dit recept. Geef ALLE ingrediënten met exacte hoeveelheden. Zoek ook op andere Nederlandse receptensites als de originele bron niet genoeg info geeft.",
         tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }],
         messages: [{
           role: "user",
-          content: `Zoek de ingrediëntenlijst met exacte hoeveelheden voor het recept "${slug}" van ${hostname}. Ik heb de hoeveelheden nodig zoals "400 gram kippendijen", "3 el ketjap manis" etc.`,
+          content: `Zoek de VOLLEDIGE ingrediëntenlijst met exacte hoeveelheden voor het recept "${slug}". Ik heb ALLE ingrediënten nodig met hoeveelheden zoals "300 gram spitskool", "1 ui", "2 eieren", "30 ml ketjap manis" etc.`,
         }],
       });
       extraIngredientText = ingSearch.content

@@ -92,7 +92,8 @@ export default function BewerkReceptPage() {
     });
 
     if (res.ok) {
-      router.push(`/recepten/${params.id}`);
+      // Replace instead of push so "back" goes to recipe list, not back to edit
+      router.replace(`/recepten/${params.id}`);
     } else {
       const err = await res.json();
       setError(err.error || 'Kon recept niet bijwerken');
