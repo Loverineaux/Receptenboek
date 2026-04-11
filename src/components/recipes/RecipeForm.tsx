@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, FormEvent } from 'react';
-import { Plus, Trash2, ChevronDown, ChevronUp, X } from 'lucide-react';
+import { useState, FormEvent, useRef } from 'react';
+import { Plus, Trash2, ChevronDown, ChevronUp, X, Upload, Loader2 } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import BronInput from '@/components/ui/BronInput';
+import { createClient } from '@/lib/supabase/client';
 import type {
   Source,
   Difficulty,
@@ -204,6 +205,28 @@ export default function RecipeForm({ initialData, onSubmit }: RecipeFormProps) {
   const [tagInput, setTagInput] = useState('');
 
   const [submitting, setSubmitting] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageUpload = async (file: File) => {
+    if (!file.type.startsWith('image/')) return;
+    setUploadingImage(true);
+    try {
+      const supabase = createClient();
+      const ext = file.name.split('.').pop() || 'jpg';
+      const path = `recipes/${Date.now()}.${ext}`;
+      const { error } = await supabase.storage.from('recipe-images').upload(path, file, {
+        contentType: file.type,
+        upsert: true,
+      });
+      if (!error) {
+        const { data: urlData } = supabase.storage.from('recipe-images').getPublicUrl(path);
+        setImageUrl(urlData.publicUrl);
+      }
+    } finally {
+      setUploadingImage(false);
+    }
+  };
 
   // ---------- ingredient helpers ----------
 
@@ -338,13 +361,59 @@ export default function RecipeForm({ initialData, onSubmit }: RecipeFormProps) {
           />
         </div>
 
-        <Input
-          label="Afbeelding URL"
-          type="url"
-          placeholder="https://..."
-          value={imageUrl}
-          onChange={(e) => setImageUrl(e.target.value)}
-        />
+        <div>
+          <label className={labelClass}>Afbeelding</label>
+          <div className="flex gap-3">
+            <div className="flex-1 space-y-2">
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <Input
+                    placeholder="https://... of upload een afbeelding"
+                    type="url"
+                    value={imageUrl}
+                    onChange={(e) => setImageUrl(e.target.value)}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => imageInputRef.current?.click()}
+                  disabled={uploadingImage}
+                  className="flex items-center gap-1.5 rounded-lg border border-gray-300 bg-surface px-3 py-2 text-sm font-medium text-text-secondary transition-colors hover:bg-gray-50 disabled:opacity-50"
+                >
+                  {uploadingImage ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Upload className="h-4 w-4" />
+                  )}
+                  <span className="hidden sm:inline">Upload</span>
+                </button>
+                <input
+                  ref={imageInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleImageUpload(file);
+                    e.target.value = '';
+                  }}
+                />
+              </div>
+            </div>
+            {imageUrl && (
+              <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border">
+                <img src={imageUrl} alt="Preview" className="h-full w-full object-cover" />
+                <button
+                  type="button"
+                  onClick={() => setImageUrl('')}
+                  className="absolute right-0.5 top-0.5 rounded-full bg-black/50 p-0.5 text-white hover:bg-black/70"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
 
         <Input
           label="Tijd (bijv. 25 min)"
