@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Users, ChefHat, MessageCircle, FolderOpen, Apple, Package, UserPlus, Sparkles, Heart } from 'lucide-react';
+import { Users, ChefHat, MessageCircle, FolderOpen, Apple, Package, UserPlus, Sparkles, Heart, Flame } from 'lucide-react';
 
 interface Stats {
   users: number;
@@ -58,6 +58,8 @@ export default function AdminDashboard() {
   const [donationUserId, setDonationUserId] = useState<string | null>(null);
   const [donationAmount, setDonationAmount] = useState('2.50');
   const [donationSaving, setDonationSaving] = useState(false);
+  const [backfillResult, setBackfillResult] = useState<string | null>(null);
+  const [backfilling, setBackfilling] = useState(false);
 
   const fetchData = () => {
     Promise.all([
@@ -120,6 +122,34 @@ export default function AdminDashboard() {
           </>
         )}
       </div>
+
+      {/* Admin actions */}
+      <div className="mt-8 flex flex-wrap gap-3">
+        <button
+          type="button"
+          disabled={backfilling}
+          onClick={async () => {
+            setBackfilling(true);
+            setBackfillResult(null);
+            try {
+              const res = await fetch('/api/admin/backfill-temperature', { method: 'POST' });
+              const data = await res.json();
+              setBackfillResult(`${data.updated} van ${data.total} recepten bijgewerkt met temperatuur`);
+            } catch {
+              setBackfillResult('Fout bij bijwerken');
+            } finally {
+              setBackfilling(false);
+            }
+          }}
+          className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-surface px-4 py-2 text-sm font-medium text-text-secondary transition-colors hover:bg-gray-50 disabled:opacity-50"
+        >
+          <Flame className="h-4 w-4 text-amber-500" />
+          {backfilling ? 'Bezig...' : 'Temperaturen invullen'}
+        </button>
+      </div>
+      {backfillResult && (
+        <p className="mt-2 text-sm text-text-secondary">{backfillResult}</p>
+      )}
 
       {/* Extraction stats per user */}
       {extractionStats && extractionStats.users.length > 0 && (
