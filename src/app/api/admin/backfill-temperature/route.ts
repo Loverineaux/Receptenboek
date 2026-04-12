@@ -10,10 +10,11 @@ export async function POST() {
   }
 
   // Fetch all recipes without temperature that have steps
+  // Fetch recipes missing either temperature field
   const { data: recipes, error } = await supabaseAdmin
     .from('recipes')
-    .select('id, title, steps(beschrijving)')
-    .is('temperatuur', null);
+    .select('id, title, temperatuur, kerntemperatuur, steps(beschrijving)')
+    .or('temperatuur.is.null,kerntemperatuur.is.null');
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -24,7 +25,7 @@ export async function POST() {
   }
 
   let updated = 0;
-  const results: Array<{ id: string; title: string; temperatuur: string }> = [];
+  const results: Array<{ id: string; title: string; temperatuur: string | null; kerntemperatuur: string | null }> = [];
   const skipped: Array<{ id: string; title: string; stepCount: number }> = [];
 
   for (const recipe of recipes) {
@@ -33,10 +34,8 @@ export async function POST() {
 
     if (steps.length === 0) continue;
 
-    // Broad matching for temperature patterns:
-    // "180°C", "180 °C", "180° C", "180 graden", "200 graden Celsius"
-    // "oven op 180", "oven 200°", "voorverwarm de oven op 180"
-    const match = allText.match(
+    // --- Oven/BBQ temperature ---
+    const ovenMatch = allText.match(
       /(?:oven|voorverwarm|verwarm|grill|bbq|barbecue)[\w\s]*?(\d{2,3})\s*°?\s*(?:C|graden)?/i
     ) || allText.match(
       /(\d{2,3})\s*°\s*C?(?:\s*(hetelucht|boven[\s\/\-]?onderwarmte|onder[\s\/\-]?bovenwarmte|grillen|grill))?/i
@@ -44,22 +43,48 @@ export async function POST() {
       /(\d{2,3})\s+graden(?:\s+(?:Celsius|C))?(?:\s*(hetelucht|boven[\s\/\-]?onderwarmte|grillen|grill))?/i
     );
 
-    if (match) {
-      const degrees = match[1];
-      const num = parseInt(degrees);
-      // Skip unlikely temps (room temp, cooking times etc)
-      if (num < 80 || num > 300) continue;
+    // --- Core temperature ---
+    const kernMatch = allText.match(
+      /kern(?:temperatuur)?\s*(?:van)?\s*(\d{2,3})\s*°?\s*C?/i
+    ) || allText.match(
+      /(\d{2,3})\s*°?\s*C?\s*kern(?:temperatuur)?/i
+    ) || allText.match(
+      /intern(?:e)?\s*temperatuur\s*(?:van)?\s*(\d{2,3})\s*°?\s*C?/i
+    );
 
-      const suffix = match[2] ? ` ${match[2].toLowerCase()}` : '';
-      const temp = `${degrees}°C${suffix}`;
+    let ovenTemp: string | null = null;
+    let kernTemp: string | null = null;
+
+    if (ovenMatch) {
+      const num = parseInt(ovenMatch[1]);
+      if (num >= 80 && num <= 300) {
+        const suffix = ovenMatch[2] ? ` ${ovenMatch[2].toLowerCase()}` : '';
+        ovenTemp = `${ovenMatch[1]}°C${suffix}`;
+      }
+    }
+
+    if (kernMatch) {
+      const num = parseInt(kernMatch[1]);
+      if (num >= 30 && num <= 100) {
+        kernTemp = `${kernMatch[1]}°C`;
+      }
+    }
+
+    // Only update fields that are currently empty
+    const existingTemp = (recipe as any).temperatuur;
+    const existingKern = (recipe as any).kerntemperatuur;
+    if ((!existingTemp && ovenTemp) || (!existingKern && kernTemp)) {
+      const updateData: any = {};
+      if (!existingTemp && ovenTemp) updateData.temperatuur = ovenTemp;
+      if (!existingKern && kernTemp) updateData.kerntemperatuur = kernTemp;
 
       await supabaseAdmin
         .from('recipes')
-        .update({ temperatuur: temp })
+        .update(updateData)
         .eq('id', recipe.id);
 
       updated++;
-      results.push({ id: recipe.id, title: (recipe as any).title, temperatuur: temp });
+      results.push({ id: recipe.id, title: (recipe as any).title, temperatuur: ovenTemp, kerntemperatuur: kernTemp });
     } else {
       skipped.push({ id: recipe.id, title: (recipe as any).title, stepCount: steps.length });
     }
