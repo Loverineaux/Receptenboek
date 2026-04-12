@@ -175,7 +175,7 @@ function ReceptenPage() {
             id, title, image_url, bron, tijd, created_at,
             tags:recipe_tags(tag:tags(id, name)),
             ratings(sterren),
-            comments(count)
+            comments(id)
           `,
             { count: 'exact' }
           );
@@ -242,16 +242,11 @@ function ReceptenPage() {
             .map((rt: any) => rt.tag)
             .filter(Boolean);
 
-          // comments(count) returns [{count: N}]
-          const commentCount = Array.isArray(r.comments) && r.comments[0]?.count != null
-            ? r.comments[0].count
-            : Array.isArray(r.comments) ? r.comments.length : 0;
-
           return {
             ...r,
             tags: flatTags,
             average_rating: avg,
-            comments: Array.from({ length: commentCount }),
+            comments: r.comments ?? [],
             ingredients: [],
             nutrition: null,
             steps: [],
