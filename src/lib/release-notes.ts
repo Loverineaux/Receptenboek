@@ -6,6 +6,16 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '1.4.0',
+    date: '12 april 2026',
+    highlights: [
+      'De donatie-melding toont nu een persoonlijke boodschap van Robin, de maker van de app',
+      'Als admin kun je donaties registreren per gebruiker en het overzicht bekijken op het dashboard',
+      'Na een donatie verdwijnt de melding voor een aantal extracties (€1 = 10 extracties vrij)',
+      'Gebruikers die nog niet gedoneerd hebben zien de melding vaker',
+    ],
+  },
+  {
     version: '1.3.1',
     date: '12 april 2026',
     highlights: [
@@ -23,15 +33,6 @@ export const releaseNotes: ReleaseNote[] = [
       'Het aantal porties wordt nu beter overgenomen bij het importeren',
       'Na het bewerken van een recept gaat de terugknop nu naar de receptenbibliotheek',
       'Je kunt nu een afbeelding uploaden bij het aanmaken of bewerken van een recept',
-    ],
-  },
-  {
-    version: '1.2.0',
-    date: '11 april 2026',
-    highlights: [
-      'Je kunt nu een afbeelding uploaden bij het aanmaken of bewerken van een recept',
-      'Naast een URL plakken kun je ook direct een foto vanaf je telefoon of computer kiezen',
-      'Tijdens het uploaden zie je een laadanimatie en daarna een preview van de afbeelding',
     ],
   },
 ];
