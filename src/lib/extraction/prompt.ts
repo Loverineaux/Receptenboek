@@ -58,7 +58,8 @@ JSON SCHEMA:
     "eiwitten": "string | null",
     "zout": "string | null"
   } | null,
-  "temperatuur": "string | null (bijv. '180°C', '200°C boven/onderwarmte', '160°C hetelucht'). Zoek in de bereidingsstappen naar oven-, grill- of BBQ-temperaturen. Geef de temperatuur inclusief type (hetelucht, boven/onderwarmte, grillen) als vermeld.",
+  "temperatuur": "string | null (bijv. '180°C', '200°C boven/onderwarmte', '160°C hetelucht'). De oven-, grill- of BBQ-temperatuur waarop het gerecht bereid wordt.",
+  "kerntemperatuur": "string | null (bijv. '54°C', '72°C'). De interne temperatuur van vlees/vis bij gewenste gaarheid. NIET de oventemperatuur!",
   "benodigdheden": [
     {
       "naam": "string (verplicht)"
@@ -120,6 +121,7 @@ export interface ExtractedRecipe {
   weetje?: string | null;
   allergenen?: string | null;
   temperatuur?: string | null;
+  kerntemperatuur?: string | null;
   ingredients: ExtractedIngredient[];
   steps: ExtractedStep[];
   nutrition?: ExtractedNutrition | null;

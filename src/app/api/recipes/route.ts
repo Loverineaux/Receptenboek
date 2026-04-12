@@ -278,6 +278,7 @@ export async function POST(request: NextRequest) {
       weetje: body.weetje || null,
       allergenen: body.allergenen || null,
       temperatuur: body.temperatuur || null,
+      kerntemperatuur: body.kerntemperatuur || null,
     })
     .select()
     .single();

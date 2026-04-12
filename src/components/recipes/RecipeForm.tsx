@@ -54,6 +54,8 @@ export interface RecipeFormData {
   is_public: boolean;
   weetje: string;
   allergenen: string;
+  temperatuur: string;
+  kerntemperatuur: string;
   ingredients: { hoeveelheid: string | null; eenheid: string | null; naam: string }[];
   steps: { titel: string | null; beschrijving: string; afbeelding_url: string | null }[];
   nutrition: NutritionState | null;
@@ -134,6 +136,12 @@ export default function RecipeForm({ initialData, onSubmit }: RecipeFormProps) {
   );
   const [allergenen, setAllergenen] = useState(
     (isFullRecipe ? (initialData as RecipeWithRelations).allergenen : '') ?? ''
+  );
+  const [temperatuur, setTemperatuur] = useState(
+    (initialData as any)?.temperatuur ?? ''
+  );
+  const [kerntemperatuur, setKerntemperatuur] = useState(
+    (initialData as any)?.kerntemperatuur ?? ''
   );
 
   // Dynamic rows
@@ -297,6 +305,8 @@ export default function RecipeForm({ initialData, onSubmit }: RecipeFormProps) {
       is_public: isPublic,
       weetje,
       allergenen,
+      temperatuur,
+      kerntemperatuur,
       ingredients: ingredients
         .filter((i) => i.naam.trim() !== '')
         .map((i) => ({
@@ -421,6 +431,21 @@ export default function RecipeForm({ initialData, onSubmit }: RecipeFormProps) {
           value={tijd}
           onChange={(e) => setTijd(e.target.value)}
         />
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Input
+            label="Oventemperatuur"
+            placeholder="Bijv. 180°C hetelucht"
+            value={temperatuur}
+            onChange={(e) => setTemperatuur(e.target.value)}
+          />
+          <Input
+            label="Kerntemperatuur"
+            placeholder="Bijv. 54°C"
+            value={kerntemperatuur}
+            onChange={(e) => setKerntemperatuur(e.target.value)}
+          />
+        </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div>

@@ -788,11 +788,27 @@ export default function RecipeDetailPage() {
           )}
         </div>
 
-        {/* Temperature badge (oven/BBQ) */}
-        {(recipe as any).temperatuur && (
-          <div className="mt-3 inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-            <span className="text-lg">🔥</span>
-            <span className="text-sm font-medium text-amber-800">{(recipe as any).temperatuur}</span>
+        {/* Temperature badges */}
+        {((recipe as any).temperatuur || (recipe as any).kerntemperatuur) && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {(recipe as any).temperatuur && (
+              <div className="inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                <span className="text-lg">🔥</span>
+                <div>
+                  <span className="text-xs text-amber-600">Oven / BBQ</span>
+                  <p className="text-sm font-medium text-amber-800">{(recipe as any).temperatuur}</p>
+                </div>
+              </div>
+            )}
+            {(recipe as any).kerntemperatuur && (
+              <div className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
+                <span className="text-lg">🌡️</span>
+                <div>
+                  <span className="text-xs text-red-600">Kerntemperatuur</span>
+                  <p className="text-sm font-medium text-red-800">{(recipe as any).kerntemperatuur}</p>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

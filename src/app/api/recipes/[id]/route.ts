@@ -122,6 +122,7 @@ export async function PUT(
         weetje: body.weetje || null,
         allergenen: body.allergenen || null,
         temperatuur: body.temperatuur || null,
+        kerntemperatuur: body.kerntemperatuur || null,
       })
       .eq('id', params.id);
 
