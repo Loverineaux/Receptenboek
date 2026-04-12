@@ -236,8 +236,8 @@ export default function NieuwReceptPage() {
     try {
       const res = await fetch('/api/users/extraction-count', { method: 'POST' });
       if (res.ok) {
-        const { count } = await res.json();
-        if (count === 1 || count % 10 === 0) {
+        const { count, showDonation } = await res.json();
+        if (showDonation) {
           setDonationCount(count);
         }
       }
