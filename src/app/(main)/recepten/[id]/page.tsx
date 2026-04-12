@@ -788,6 +788,14 @@ export default function RecipeDetailPage() {
           )}
         </div>
 
+        {/* Temperature badge (oven/BBQ) */}
+        {(recipe as any).temperatuur && (
+          <div className="mt-3 inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+            <span className="text-lg">🔥</span>
+            <span className="text-sm font-medium text-amber-800">{(recipe as any).temperatuur}</span>
+          </div>
+        )}
+
         {/* Tags — owner can edit category tags */}
         <div className="mt-3 flex flex-wrap gap-2">
           {canEdit ? (

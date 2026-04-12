@@ -445,6 +445,14 @@ export function jsonLdToRecipe(ld: any, ogImage: string | null) {
   }
   // Don't use author as bron — it's usually a person's name, not a website
 
+  // Try to detect temperature from steps (oven/bbq/grill)
+  let temperatuur: string | null = null;
+  const allStepText = steps.map((s) => s.beschrijving).join(' ');
+  const tempMatch = allStepText.match(/(\d{2,3})\s*°?\s*[Cc](?:\s*(hetelucht|boven[\s/-]?onderwarmte|graden|grillen))?/);
+  if (tempMatch) {
+    temperatuur = `${tempMatch[1]}°C${tempMatch[2] ? ` ${tempMatch[2]}` : ''}`;
+  }
+
   return {
     title,
     subtitle: description,
@@ -454,6 +462,7 @@ export function jsonLdToRecipe(ld: any, ogImage: string | null) {
     bron,
     basis_porties,
     categorie: category,
+    temperatuur,
     ingredients,
     steps,
     nutrition,

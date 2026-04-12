@@ -1048,6 +1048,7 @@ export default function NieuwReceptPage() {
                 {extractedPreview.bron && <span>Bron: {extractedPreview.bron}</span>}
                 {extractedPreview.tijd && <span>Tijd: {extractedPreview.tijd}</span>}
                 {extractedPreview.basis_porties && <span>Porties: {extractedPreview.basis_porties}</span>}
+                {extractedPreview.temperatuur && <span>🔥 {extractedPreview.temperatuur}</span>}
               </div>
             </div>
 

@@ -550,6 +550,15 @@ function ReceptenPage() {
           { value: 'az', label: 'A → Z' },
           { value: 'za', label: 'Z → A' },
         ]}
+        onResetAll={() => {
+          setSearch('');
+          setCategory(null);
+          setSource('');
+          setIncludedSources(new Set());
+          setExcludedSources(new Set());
+          setSort('newest');
+          setSearchIngredients(false);
+        }}
       />
 
       {/* Active source filter chips (mobile) */}

@@ -121,6 +121,7 @@ export async function PUT(
         is_public: body.is_public ?? false,
         weetje: body.weetje || null,
         allergenen: body.allergenen || null,
+        temperatuur: body.temperatuur || null,
       })
       .eq('id', params.id);
 

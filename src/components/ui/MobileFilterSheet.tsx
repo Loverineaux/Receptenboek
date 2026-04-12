@@ -22,6 +22,7 @@ interface MobileFilterSheetProps {
   sort: string;
   onSortChange: (value: string) => void;
   sortOptions: FilterOption[];
+  onResetAll?: () => void;
 }
 
 export default function MobileFilterSheet({
@@ -37,6 +38,7 @@ export default function MobileFilterSheet({
   sort,
   onSortChange,
   sortOptions,
+  onResetAll,
 }: MobileFilterSheetProps) {
   const [open, setOpen] = useState(false);
 
@@ -238,11 +240,16 @@ export default function MobileFilterSheet({
               </div>
             </div>
 
-            {/* Apply button */}
-            <div className="px-5 pt-6">
+            {/* Buttons */}
+            <div className="space-y-2 px-5 pb-20 pt-6">
               <Button variant="primary" size="lg" className="w-full" onClick={() => setOpen(false)}>
                 Toepassen
               </Button>
+              {activeFilterCount > 0 && onResetAll && (
+                <Button variant="ghost" size="lg" className="w-full" onClick={() => { onResetAll(); setOpen(false); }}>
+                  Alle filters wissen
+                </Button>
+              )}
             </div>
           </div>
         </div>
