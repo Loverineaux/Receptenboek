@@ -505,7 +505,7 @@ function ReceptenPage() {
       <h1 className="text-2xl font-bold text-text-primary">Receptenbibliotheek</h1>
 
       {/* Sticky filter bar */}
-      <div className="sticky top-0 z-30 -mx-4 space-y-3 bg-background px-4 pb-3 pt-1 shadow-sm md:-mx-6 md:px-6">
+      <div className="sticky top-14 z-30 -mx-4 space-y-3 bg-background px-4 pb-3 pt-1 shadow-sm md:-mx-6 md:top-16 md:px-6">
       <SearchBar
         value={search}
         onChange={setSearch}
