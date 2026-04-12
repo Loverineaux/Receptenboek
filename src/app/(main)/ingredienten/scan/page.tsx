@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { ArrowLeft, Check, Plus, Search, Camera, Loader2 } from 'lucide-react';
+import { ArrowLeft, Check, Plus, Search, Camera, Loader2, ImageIcon } from 'lucide-react';
 import dynamic from 'next/dynamic';
 
 const BarcodeScanner = dynamic(() => import('@/components/ingredients/BarcodeScanner'), { ssr: false });
@@ -407,52 +407,41 @@ export default function ScanPage() {
                   Geen voedingswaarden beschikbaar
                 </p>
                 <div className="flex flex-col gap-2">
-                  <label className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary/90">
-                    {isUploadingLabel ? (
-                      <Loader2 size={16} className="animate-spin" />
-                    ) : (
-                      <Camera size={16} />
-                    )}
-                    Foto van voedingswaardenlabel
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={async (e) => {
+                  <div className="flex gap-2">
+                    <label className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary/90">
+                      {isUploadingLabel ? <Loader2 size={16} className="animate-spin" /> : <Camera size={16} />}
+                      Maak foto
+                      <input type="file" accept="image/*" capture="environment" className="hidden" onChange={async (e) => {
                         const file = e.target.files?.[0];
                         if (!file) return;
                         setIsUploadingLabel(true);
                         setError(null);
                         try {
-                          const reader = new FileReader();
-                          const dataUrl = await new Promise<string>((resolve) => {
-                            reader.onload = () => resolve(reader.result as string);
-                            reader.readAsDataURL(file);
-                          });
-                          const res = await fetch('/api/products/scan-label', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                              barcode: scanResult.product.barcode,
-                              image: dataUrl,
-                              product_name: scanResult.product.product_name,
-                            }),
-                          });
+                          const dataUrl = await new Promise<string>((resolve) => { const r = new FileReader(); r.onload = () => resolve(r.result as string); r.readAsDataURL(file); });
+                          const res = await fetch('/api/products/scan-label', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ barcode: scanResult.product.barcode, image: dataUrl, product_name: scanResult.product.product_name }) });
                           if (!res.ok) throw new Error('Label kon niet verwerkt worden.');
                           const data = await res.json();
-                          // Update the product in our scan result with new nutrition
-                          setScanResult((prev) => prev ? {
-                            ...prev,
-                            product: { ...prev.product, ...data.product },
-                          } : prev);
-                        } catch (err: any) {
-                          setError(err.message);
-                        } finally {
-                          setIsUploadingLabel(false);
-                        }
-                      }}
-                    />
-                  </label>
+                          setScanResult((prev) => prev ? { ...prev, product: { ...prev.product, ...data.product } } : prev);
+                        } catch (err: any) { setError(err.message); } finally { setIsUploadingLabel(false); }
+                      }} />
+                    </label>
+                    <label className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg border border-gray-200 bg-surface px-3 py-2.5 text-sm font-medium text-text-primary transition-colors hover:bg-gray-50">
+                      Kies foto
+                      <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        setIsUploadingLabel(true);
+                        setError(null);
+                        try {
+                          const dataUrl = await new Promise<string>((resolve) => { const r = new FileReader(); r.onload = () => resolve(r.result as string); r.readAsDataURL(file); });
+                          const res = await fetch('/api/products/scan-label', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ barcode: scanResult.product.barcode, image: dataUrl, product_name: scanResult.product.product_name }) });
+                          if (!res.ok) throw new Error('Label kon niet verwerkt worden.');
+                          const data = await res.json();
+                          setScanResult((prev) => prev ? { ...prev, product: { ...prev.product, ...data.product } } : prev);
+                        } catch (err: any) { setError(err.message); } finally { setIsUploadingLabel(false); }
+                      }} />
+                    </label>
+                  </div>
                   <button
                     onClick={() => setShowNutritionForm(true)}
                     className="w-full rounded-lg border border-gray-200 bg-surface py-2.5 text-sm font-medium text-text-primary transition-colors hover:bg-gray-50"
@@ -714,24 +703,18 @@ export default function ScanPage() {
             )}
 
             <div className="space-y-2">
-              {/* Label photo option */}
-              <label className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary/90">
-                {isUploadingLabel ? (
-                  <Loader2 size={16} className="animate-spin" />
-                ) : (
-                  <Camera size={16} />
-                )}
-                Foto van voedingswaardenlabel
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) handleLabelPhoto(file);
-                  }}
-                />
-              </label>
+              {/* Label photo options */}
+              <div className="flex gap-2">
+                <label className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary/90">
+                  {isUploadingLabel ? <Loader2 size={16} className="animate-spin" /> : <Camera size={16} />}
+                  Maak foto
+                  <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleLabelPhoto(file); }} />
+                </label>
+                <label className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg border border-gray-200 bg-surface px-3 py-2.5 text-sm font-medium text-text-primary transition-colors hover:bg-gray-50">
+                  Kies foto
+                  <input type="file" accept="image/*" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleLabelPhoto(file); }} />
+                </label>
+              </div>
 
               {/* Manual entry option */}
               <button
@@ -822,34 +805,40 @@ export default function ScanPage() {
                       >&times;</button>
                     </div>
                   ) : (
-                    <label className="flex h-16 w-16 cursor-pointer items-center justify-center rounded-lg border-2 border-dashed border-gray-300 text-text-muted transition-colors hover:border-primary hover:text-primary">
-                      <Camera size={20} />
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={async (e) => {
+                    <div className="flex gap-1">
+                      <label className="flex h-16 w-16 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 text-text-muted transition-colors hover:border-primary hover:text-primary" title="Maak foto">
+                        <Camera size={16} />
+                        <span className="text-[9px]">Foto</span>
+                        <input type="file" accept="image/*" capture="environment" className="hidden" onChange={async (e) => {
                           const file = e.target.files?.[0];
                           if (!file) return;
                           setManualImagePreview(URL.createObjectURL(file));
-                          // Upload to Supabase Storage
                           setUploadingImage(true);
                           try {
                             const supabase = (await import('@/lib/supabase/client')).createClient();
                             const path = `products/${Date.now()}-${file.name}`;
-                            const { error: upErr } = await supabase.storage
-                              .from('recipe-images')
-                              .upload(path, file, { contentType: file.type, upsert: true });
-                            if (!upErr) {
-                              const { data: urlData } = supabase.storage.from('recipe-images').getPublicUrl(path);
-                              setManualForm(f => ({ ...f, image_url: urlData.publicUrl }));
-                            }
-                          } catch {} finally {
-                            setUploadingImage(false);
-                          }
-                        }}
-                      />
-                    </label>
+                            const { error: upErr } = await supabase.storage.from('recipe-images').upload(path, file, { contentType: file.type, upsert: true });
+                            if (!upErr) { const { data: urlData } = supabase.storage.from('recipe-images').getPublicUrl(path); setManualForm(f => ({ ...f, image_url: urlData.publicUrl })); }
+                          } catch {} finally { setUploadingImage(false); }
+                        }} />
+                      </label>
+                      <label className="flex h-16 w-16 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 text-text-muted transition-colors hover:border-primary hover:text-primary" title="Kies foto">
+                        <ImageIcon size={16} />
+                        <span className="text-[9px]">Galerij</span>
+                        <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          setManualImagePreview(URL.createObjectURL(file));
+                          setUploadingImage(true);
+                          try {
+                            const supabase = (await import('@/lib/supabase/client')).createClient();
+                            const path = `products/${Date.now()}-${file.name}`;
+                            const { error: upErr } = await supabase.storage.from('recipe-images').upload(path, file, { contentType: file.type, upsert: true });
+                            if (!upErr) { const { data: urlData } = supabase.storage.from('recipe-images').getPublicUrl(path); setManualForm(f => ({ ...f, image_url: urlData.publicUrl })); }
+                          } catch {} finally { setUploadingImage(false); }
+                        }} />
+                      </label>
+                    </div>
                   )}
                   {uploadingImage && <Loader2 size={14} className="animate-spin text-text-muted" />}
                 </div>
