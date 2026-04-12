@@ -6,6 +6,18 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '1.8.0',
+    date: '12 april 2026',
+    highlights: [
+      'Recepten laden nu veel sneller — de lijst wacht niet meer op inloggen',
+      'De hoeveelheid data bij het ophalen van recepten is met 70% verminderd',
+      'Bij het scannen van producten kun je nu kiezen tussen camera en fotobibliotheek',
+      'Als je sessie verloopt word je automatisch naar het loginscherm gestuurd',
+      'Het label "Oven" of "BBQ / Grill" wordt nu automatisch bepaald',
+      'Duidelijkere foutmeldingen bij het aanmaken van ingrediënten',
+    ],
+  },
+  {
     version: '1.6.0',
     date: '12 april 2026',
     highlights: [
@@ -26,16 +38,6 @@ export const releaseNotes: ReleaseNote[] = [
       'De knop "Toepassen" bij filters is niet meer verstopt achter de navigatiebalk',
       'De app blijft nu warm draaien zodat je geen lange wachttijd meer hebt bij het openen',
       'Een fout waardoor de hele app soms niet laadde (504 timeout) is opgelost',
-    ],
-  },
-  {
-    version: '1.4.0',
-    date: '12 april 2026',
-    highlights: [
-      'De donatie-melding toont nu een persoonlijke boodschap van Robin, de maker van de app',
-      'Als admin kun je donaties registreren per gebruiker en het overzicht bekijken op het dashboard',
-      'Na een donatie verdwijnt de melding voor een aantal extracties',
-      'Gebruikers die nog niet gedoneerd hebben zien de melding vaker',
     ],
   },
 ];
