@@ -258,32 +258,6 @@ function ReceptenPage() {
           processed.sort((a, b) => (b.average_rating ?? 0) - (a.average_rating ?? 0));
         }
 
-        // Fetch favorites + counts in parallel
-        let result = processed;
-        if (user && result.length > 0) {
-          const ids = result.map((r) => r.id);
-          const [favsResult, fcResult] = await Promise.all([
-            supabase
-              .from('favorites')
-              .select('recipe_id')
-              .eq('user_id', user.id),
-            fetch('/api/recipes/favorite-counts', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ recipe_ids: ids }),
-            }).then((r) => r.ok ? r.json() : { counts: {} }).catch(() => ({ counts: {} })),
-          ]);
-
-          const favIds = new Set((favsResult.data ?? []).map((f: any) => f.recipe_id));
-          const favCounts: Record<string, number> = fcResult.counts ?? {};
-
-          result = result.map((r) => ({
-            ...r,
-            is_favorited: favIds.has(r.id),
-            favorite_count: favCounts[r.id] || 0,
-          }));
-        }
-
         if (loadMore) {
           setRecipes((prev) => [...prev, ...result]);
         } else {
@@ -296,14 +270,40 @@ function ReceptenPage() {
         setLoadingMore(false);
       }
     },
-    [supabase, user, search, searchIngredients, category, source, includedSources, excludedSources, sort]
+    [supabase, search, searchIngredients, category, source, includedSources, excludedSources, sort]
   );
 
-  // Re-fetch when filters change
+  // Fetch recipes immediately on mount + when filters change (don't wait for auth)
   useEffect(() => {
     fetchRecipes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, searchIngredients, category, source, includedSources, excludedSources, sort, user?.id]);
+  }, [search, searchIngredients, category, source, includedSources, excludedSources, sort]);
+
+  // Merge favorites when user becomes available (separate from recipe loading)
+  useEffect(() => {
+    if (!user) return;
+    const mergeFavorites = async () => {
+      const ids = recipes.map((r) => r.id);
+      if (ids.length === 0) return;
+      const [favsResult, fcResult] = await Promise.all([
+        supabase.from('favorites').select('recipe_id').eq('user_id', user.id),
+        fetch('/api/recipes/favorite-counts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recipe_ids: ids }),
+        }).then((r) => r.ok ? r.json() : { counts: {} }).catch(() => ({ counts: {} })),
+      ]);
+      const favIds = new Set((favsResult.data ?? []).map((f: any) => f.recipe_id));
+      const favCounts: Record<string, number> = fcResult.counts ?? {};
+      setRecipes((prev) => prev.map((r) => ({
+        ...r,
+        is_favorited: favIds.has(r.id),
+        favorite_count: favCounts[r.id] || 0,
+      })));
+    };
+    mergeFavorites();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, recipes.length]);
 
   const [userRatings, setUserRatings] = useState<Record<string, number>>({});
   const [initialUserRatings, setInitialUserRatings] = useState<Record<string, number>>({});
