@@ -172,9 +172,9 @@ function ReceptenPage() {
           .from('recipes')
           .select(
             `
-            id, title, image_url, bron, tijd, created_at,
+            id, title, subtitle, image_url, bron, tijd, created_at,
             tags:recipe_tags(tag:tags(id, name)),
-            ratings(sterren),
+            ratings(sterren, user_id),
             comments(id)
           `,
             { count: 'exact' }
@@ -226,7 +226,10 @@ function ReceptenPage() {
         const { data, count, error: queryError } = await query;
 
         if (queryError) {
-          console.error('[Recepten] Supabase error:', queryError);
+          console.error('[Recepten] Supabase error:', queryError.message, queryError.details, queryError.hint);
+          setLoading(false);
+          setLoadingMore(false);
+          return;
         }
 
         // Post-process
