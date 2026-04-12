@@ -791,15 +791,22 @@ export default function RecipeDetailPage() {
         {/* Temperature badges */}
         {((recipe as any).temperatuur || (recipe as any).kerntemperatuur) && (
           <div className="mt-3 flex flex-wrap gap-2">
-            {(recipe as any).temperatuur && (
-              <div className="inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-                <span className="text-lg">🔥</span>
-                <div>
-                  <span className="text-xs text-amber-600">Oven / BBQ</span>
-                  <p className="text-sm font-medium text-amber-800">{(recipe as any).temperatuur}</p>
+            {(recipe as any).temperatuur && (() => {
+              const temp = ((recipe as any).temperatuur as string).toLowerCase();
+              const allSteps = (recipe.steps || []).map((s: any) => (s.beschrijving || '').toLowerCase()).join(' ');
+              const isBBQ = temp.includes('bbq') || temp.includes('barbecue') || temp.includes('grill')
+                || allSteps.includes('bbq') || allSteps.includes('barbecue') || allSteps.includes('grillen');
+              const label = isBBQ ? 'BBQ / Grill' : 'Oven';
+              return (
+                <div className="inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                  <span className="text-lg">🔥</span>
+                  <div>
+                    <span className="text-xs text-amber-600">{label}</span>
+                    <p className="text-sm font-medium text-amber-800">{(recipe as any).temperatuur}</p>
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
             {(recipe as any).kerntemperatuur && (
               <div className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
                 <span className="text-lg">🌡️</span>
