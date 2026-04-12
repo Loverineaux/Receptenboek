@@ -172,12 +172,10 @@ function ReceptenPage() {
           .from('recipes')
           .select(
             `
-            id, title, subtitle, image_url, bron, tijd, moeilijkheid, created_at,
-            ingredients(naam),
+            id, title, image_url, bron, tijd, created_at,
             tags:recipe_tags(tag:tags(id, name)),
-            ratings(sterren, user_id),
-            comments(id),
-            user:profiles!recipes_user_id_fkey(id, display_name, avatar_url)
+            ratings(sterren),
+            comments(count)
           `,
             { count: 'exact' }
           );
@@ -244,10 +242,17 @@ function ReceptenPage() {
             .map((rt: any) => rt.tag)
             .filter(Boolean);
 
+          // comments(count) returns [{count: N}]
+          const commentCount = Array.isArray(r.comments) && r.comments[0]?.count != null
+            ? r.comments[0].count
+            : Array.isArray(r.comments) ? r.comments.length : 0;
+
           return {
             ...r,
             tags: flatTags,
             average_rating: avg,
+            comments: Array.from({ length: commentCount }),
+            ingredients: [],
             nutrition: null,
             steps: [],
           };
@@ -323,18 +328,15 @@ function ReceptenPage() {
       const newId = payload.new?.id;
       if (!newId) return;
       const { data } = await sb.from('recipes').select(`
-        id, title, image_url, bron, tijd, moeilijkheid, created_at,
-        ingredients(naam),
+        id, title, image_url, bron, tijd, created_at,
         tags:recipe_tags(tag:tags(id, name)),
-        ratings(sterren, user_id),
-        comments(id),
-        user:profiles!recipes_user_id_fkey(id, display_name, avatar_url)
+        ratings(sterren)
       `).eq('id', newId).single();
       if (data) {
         const ratings = (data as any).ratings ?? [];
         const avg = ratings.length > 0 ? ratings.reduce((s: number, r: any) => s + r.sterren, 0) / ratings.length : null;
         const flatTags = ((data as any).tags ?? []).map((rt: any) => rt.tag).filter(Boolean);
-        const newRecipe = { ...data, tags: flatTags, average_rating: avg, nutrition: null, steps: [], is_favorited: false, favorite_count: 0 } as any;
+        const newRecipe = { ...data, tags: flatTags, average_rating: avg, comments: [], ingredients: [], nutrition: null, steps: [], is_favorited: false, favorite_count: 0 } as any;
         setRecipes((prev) => [newRecipe, ...prev]);
       }
     });
