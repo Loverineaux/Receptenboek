@@ -193,13 +193,18 @@ export default function ScanPage() {
     setError(null);
 
     try {
-      const formData = new FormData();
-      formData.append('image', file);
-      formData.append('barcode', barcode);
+      // Convert file to base64 data URL for the API
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
 
       const res = await fetch('/api/products/scan-label', {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ barcode, image: base64 }),
       });
 
       if (!res.ok) throw new Error('Label kon niet verwerkt worden.');
