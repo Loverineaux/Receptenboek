@@ -84,6 +84,12 @@ export function useAuth() {
         fetchProfile(currentUser.id)
       } else {
         setAuthState((prev) => ({ ...prev, profile: null }))
+        // Session expired or user signed out — redirect to login
+        if (_event === 'SIGNED_OUT' || _event === 'TOKEN_REFRESHED') {
+          if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login') && !window.location.pathname.startsWith('/register')) {
+            window.location.href = '/login'
+          }
+        }
       }
     })
 
