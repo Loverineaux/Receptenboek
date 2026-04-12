@@ -259,9 +259,9 @@ function ReceptenPage() {
         }
 
         if (loadMore) {
-          setRecipes((prev) => [...prev, ...result]);
+          setRecipes((prev) => [...prev, ...processed]);
         } else {
-          setRecipes(result);
+          setRecipes(processed);
         }
         setTotalCount(count ?? 0);
         pageRef.current = page;
