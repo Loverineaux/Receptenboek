@@ -32,7 +32,7 @@ export default function ReceptenPageWrapper() {
 }
 
 function ReceptenPage() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const collectionRecipeIds = useCollectionRecipeIds();
   const supabase = createClient();
   const router = useRouter();
@@ -276,11 +276,12 @@ function ReceptenPage() {
     [supabase, search, searchIngredients, category, source, includedSources, excludedSources, sort]
   );
 
-  // Fetch recipes immediately on mount + when filters change (don't wait for auth)
+  // Fetch recipes once auth session is ready (don't wait for profile, just session)
   useEffect(() => {
+    if (authLoading) return;
     fetchRecipes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, searchIngredients, category, source, includedSources, excludedSources, sort]);
+  }, [authLoading, search, searchIngredients, category, source, includedSources, excludedSources, sort]);
 
   // Merge favorites when user becomes available (separate from recipe loading)
   useEffect(() => {
