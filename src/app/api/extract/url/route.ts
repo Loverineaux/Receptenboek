@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
     // Direct fetch/puppeteer can't render these on Vercel — use web search
     if (url.includes('#/') || url.includes('#!')) {
       console.log(`[URL Extract] Hash-based SPA detected, using web search`);
-      const recipe = await fallbackWebSearch(url);
+      const recipe = await fallbackWebSearch(url, true);
       if (!recipe.bron) recipe.bron = detectBronFromUrl(url);
       recipe._hashSPA = true;
       setCachedRecipe(url, recipe);
@@ -225,7 +225,7 @@ Retourneer dit als een enkel JSON-object volgens het opgegeven schema. ALLEEN JS
   return respondWithValidation(recipe);
 }
 
-async function fallbackWebSearch(url: string): Promise<any> {
+async function fallbackWebSearch(url: string, quick = false): Promise<any> {
   console.log("[URL Extract] Using web search fallback for:", url);
   const client = new Anthropic();
 
@@ -247,7 +247,7 @@ async function fallbackWebSearch(url: string): Promise<any> {
       {
         type: "web_search_20250305",
         name: "web_search",
-        max_uses: 8,
+        max_uses: quick ? 3 : 8,
       },
     ],
     messages: [
@@ -276,7 +276,7 @@ Geef ALLE informatie die je vindt:
 - Alle bereidingsstappen in de juiste volgorde
 - Bereidingstijd (bijv. "25 min")
 - Aantal porties/personen (bijv. "Twee personen" = 2, "Voor 4 personen" = 4) — dit staat vaak bovenaan de ingrediëntenlijst
-- Voedingswaarden als beschikbaar
+- Voedingswaarden ALLEEN als ze direct zichtbaar zijn — zoek er NIET extra naar, die worden later automatisch berekend
 
 Als het recept in het Engels is, vertaal dan alles naar het Nederlands.`,
       },
@@ -288,10 +288,10 @@ Als het recept in het Engels is, vertaal dan alles naar het Nederlands.`,
     .map((block) => (block.type === "text" ? block.text : ""))
     .join("\n");
 
-  // If no quantities found in first search, do a targeted ingredient search
+  // If no quantities found in first search, do a targeted ingredient search (skip in quick mode)
   const hasQuantities = /\d+\s*(gram|g|ml|el|tl|eetlepel|theelepel|stuk|stuks|ui|eieren?|teen)/i.test(searchText);
   let extraIngredientText = "";
-  if (!hasQuantities) {
+  if (!hasQuantities && !quick) {
     console.log("[URL Extract] No quantities found, doing targeted ingredient search");
     try {
       const ingSearch = await client.messages.create({
