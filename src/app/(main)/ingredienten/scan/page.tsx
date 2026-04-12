@@ -175,7 +175,12 @@ export default function ScanPage() {
         }),
       });
 
-      if (!res.ok) throw new Error('Aanmaken mislukt.');
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 401) throw new Error('Je moet ingelogd zijn om een ingrediënt aan te maken.');
+        if (res.status === 409) throw new Error('Een ingrediënt met deze naam bestaat al.');
+        throw new Error(data.error || 'Aanmaken mislukt.');
+      }
       const created: GenericIngredient = await res.json();
       setSelectedIngredient(created);
       setShowNewForm(false);
