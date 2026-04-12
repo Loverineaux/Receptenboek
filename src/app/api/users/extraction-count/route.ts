@@ -31,13 +31,10 @@ export async function POST(_request: NextRequest) {
 
   // Popup logic:
   // - Within free range (donated): no popup
-  // - Never donated: at #1, then every 5 extractions
-  // - Has donated but free range expired: every 10 extractions
+  // - Outside free range: at #1, then every 5 extractions
   let shouldShowDonation = false;
   if (newCount <= donationFreeUntil) {
     shouldShowDonation = false;
-  } else if (totalDonated > 0) {
-    shouldShowDonation = newCount % 10 === 0;
   } else {
     shouldShowDonation = newCount === 1 || newCount % 5 === 0;
   }
