@@ -38,13 +38,14 @@ export async function updateSession(request: NextRequest) {
     }
   )
 
-  // Refreshing the auth token
-  const { data: { user } } = await supabase.auth.getUser()
+  // Use getSession() instead of getUser() — reads from cookie, no network call
+  // getUser() always calls Supabase which adds 500ms+ latency on every page load
+  const { data: { session } } = await supabase.auth.getSession()
 
   const pathname = request.nextUrl.pathname
 
   // Protect admin routes — require login
-  if (pathname.startsWith('/admin') && !user) {
+  if (pathname.startsWith('/admin') && !session?.user) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
