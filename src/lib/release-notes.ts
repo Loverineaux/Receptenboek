@@ -6,12 +6,24 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '1.5.0',
+    date: '12 april 2026',
+    highlights: [
+      'Oventemperatuur en BBQ-instellingen worden nu automatisch herkend en getoond bij het recept',
+      'De zoekbalk blijft nu altijd zichtbaar als je door recepten scrollt',
+      'Bij de filters kun je nu met één knop alle filters wissen',
+      'De knop "Toepassen" bij filters is niet meer verstopt achter de navigatiebalk',
+      'De app blijft nu warm draaien zodat je geen lange wachttijd meer hebt bij het openen',
+      'Een fout waardoor de hele app soms niet laadde (504 timeout) is opgelost',
+    ],
+  },
+  {
     version: '1.4.0',
     date: '12 april 2026',
     highlights: [
       'De donatie-melding toont nu een persoonlijke boodschap van Robin, de maker van de app',
       'Als admin kun je donaties registreren per gebruiker en het overzicht bekijken op het dashboard',
-      'Na een donatie verdwijnt de melding voor een aantal extracties (€1 = 10 extracties vrij)',
+      'Na een donatie verdwijnt de melding voor een aantal extracties',
       'Gebruikers die nog niet gedoneerd hebben zien de melding vaker',
     ],
   },
@@ -23,16 +35,6 @@ export const releaseNotes: ReleaseNote[] = [
       'Importeren van recepten geeft geen timeout meer bij lastige websites',
       'De voortgangsstappen bij het importeren zijn nu realistischer',
       'Bij de waarschuwing voor lastige websites kun je direct een foto of PDF uploaden',
-    ],
-  },
-  {
-    version: '1.3.0',
-    date: '11 april 2026',
-    highlights: [
-      'Bij websites die niet volledig uitgelezen kunnen worden krijg je nu een melding met het advies om een foto te uploaden',
-      'Het aantal porties wordt nu beter overgenomen bij het importeren',
-      'Na het bewerken van een recept gaat de terugknop nu naar de receptenbibliotheek',
-      'Je kunt nu een afbeelding uploaden bij het aanmaken of bewerken van een recept',
     ],
   },
 ];
