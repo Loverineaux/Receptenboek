@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Heart, X } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
 
 interface DonationCardProps {
   /** Number of extractions the user has done */
@@ -15,6 +16,21 @@ const SUGGESTED_AMOUNT = '2,50';
 
 export default function DonationCard({ extractionCount, compact = false }: DonationCardProps) {
   const [dismissed, setDismissed] = useState(false);
+  const [creatorAvatar, setCreatorAvatar] = useState<string | null>(null);
+
+  // Fetch creator (admin) avatar
+  useEffect(() => {
+    const supabase = createClient();
+    supabase
+      .from('profiles')
+      .select('avatar_url')
+      .eq('role', 'admin')
+      .limit(1)
+      .single()
+      .then(({ data }) => {
+        if (data?.avatar_url) setCreatorAvatar(data.avatar_url);
+      });
+  }, []);
 
   if (dismissed) return null;
 
@@ -31,18 +47,22 @@ export default function DonationCard({ extractionCount, compact = false }: Donat
       </button>
 
       <div className="flex items-start gap-3 pr-6">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10">
-          <Heart className="h-4 w-4 text-primary" />
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/10">
+          {creatorAvatar ? (
+            <img src={creatorAvatar} alt="Robin" className="h-full w-full object-cover" />
+          ) : (
+            <Heart className="h-4 w-4 text-primary" />
+          )}
         </div>
         <div className="space-y-1.5">
           <p className="text-sm font-medium text-text-primary">
             {isFirst
-              ? 'Je eerste recept is geëxtraheerd met AI!'
-              : `Al ${extractionCount} recepten geëxtraheerd met AI!`}
+              ? 'Hey! Je eerste recept is geëxtraheerd!'
+              : `Al ${extractionCount} recepten geëxtraheerd!`}
           </p>
           <p className="text-xs leading-relaxed text-text-secondary">
-            Elke extractie kost een paar cent aan AI-kosten.
-            Vind je het handig? Een kleine bijdrage houdt dit draaiende.
+            Ik ben Robin, de maker van Receptenboek. Elke extractie kost een paar cent aan AI.
+            Vind je de app handig? Met een kleine bijdrage via PayPal help je mij de kosten te dekken.
           </p>
           <a
             href={`${PAYPAL_URL}/${SUGGESTED_AMOUNT}`}
