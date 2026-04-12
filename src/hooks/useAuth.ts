@@ -11,6 +11,7 @@ interface Profile {
   avatar_url: string | null
   bio: string | null
   role: string | null
+  is_blocked: boolean | null
 }
 
 interface AuthState {
@@ -32,9 +33,15 @@ export function useAuth() {
     async (userId: string) => {
       const { data } = await supabase
         .from('profiles')
-        .select('id, email, display_name, avatar_url, bio, role')
+        .select('id, email, display_name, avatar_url, bio, role, is_blocked')
         .eq('id', userId)
         .single()
+
+      // Redirect blocked users
+      if (data?.is_blocked && typeof window !== 'undefined' && !window.location.pathname.includes('/geblokkeerd')) {
+        window.location.href = '/geblokkeerd'
+        return
+      }
 
       setAuthState((prev) => ({ ...prev, profile: data as Profile | null }))
     },
