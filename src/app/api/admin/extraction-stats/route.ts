@@ -22,14 +22,20 @@ export async function GET() {
     const freeUntil = p.donation_free_until ?? 0;
     const totalDonated = parseFloat(p.total_donated) || 0;
 
-    // Next donation popup: every 10th extraction, but skipped if within free range
+    // Next donation popup:
+    // - Within free range: no popup until free range ends
+    // - Never donated: every 5 extractions
+    // - Has donated, free range expired: every 10 extractions
     let nextDonation: number;
     if (count < freeUntil) {
-      // Still within free range from donation
-      nextDonation = freeUntil + (freeUntil % 10 === 0 ? 10 : (10 - freeUntil % 10));
+      const interval = totalDonated > 0 ? 10 : 5;
+      nextDonation = freeUntil + interval - (freeUntil % interval || interval);
+    } else if (totalDonated > 0) {
+      nextDonation = Math.ceil(count / 10) * 10;
+      if (nextDonation <= count) nextDonation += 10;
     } else {
-      nextDonation = count < 1 ? 1 : Math.ceil(count / 10) * 10;
-      if (nextDonation === count) nextDonation += 10;
+      nextDonation = count < 1 ? 1 : Math.ceil(count / 5) * 5;
+      if (nextDonation <= count) nextDonation += 5;
     }
     const extractionsUntilDonation = Math.max(0, nextDonation - count);
 
