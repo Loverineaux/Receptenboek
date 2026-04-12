@@ -55,6 +55,7 @@ export default function SearchBar({
           type="text"
           value={internalValue}
           onChange={(e) => handleChange(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
           placeholder={searchIngredients ? 'Zoek op ingrediënt...' : placeholder}
           className="w-full rounded-lg border border-gray-300 bg-surface py-2 pl-10 pr-9 text-sm text-text-primary placeholder:text-text-muted transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
         />

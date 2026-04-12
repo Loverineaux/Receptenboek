@@ -210,11 +210,10 @@ function mapExtractedToFormData(extracted: any, sourceUrl?: string): RecipeFormD
 
 const PROGRESS_STEPS = [
   'Website ophalen...',
-  'Pagina scrapen met browser...',
-  'Ingrediënten herkennen...',
+  'Recept herkennen...',
+  'Ingrediënten verwerken...',
   'Bereidingsstappen verwerken...',
-  'Voedingswaarden extraheren...',
-  'Recept opslaan...',
+  'Bijna klaar...',
 ];
 
 export default function NieuwReceptPage() {

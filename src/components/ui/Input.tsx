@@ -39,6 +39,12 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
                 ? 'border-error focus:border-error focus:ring-error/20'
                 : 'border-gray-300'
             } ${className}`}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && props.type !== 'search') {
+                (e.target as HTMLInputElement).blur();
+              }
+              props.onKeyDown?.(e);
+            }}
             {...props}
           />
           {endIcon && (
