@@ -49,11 +49,14 @@ export function useAuth() {
   )
 
   useEffect(() => {
-    // Get initial session
+    // Get initial session from cookie (instant, no network call)
+    // Use getSession() instead of getUser() to avoid slow auth server round-trip
     const getInitialSession = async () => {
       const {
-        data: { user },
-      } = await supabase.auth.getUser()
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      const user = session?.user ?? null
 
       // Set loading=false immediately so pages can render and fetch data
       setAuthState((prev) => ({ ...prev, user, loading: false }))
