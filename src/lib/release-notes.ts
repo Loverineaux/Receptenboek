@@ -6,6 +6,16 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '1.8.6',
+    date: '13 april 2026',
+    highlights: [
+      'De app start nu veel sneller op na een periode van inactiviteit',
+      'Je inloggegevens worden nog maar één keer gecontroleerd in plaats van meerdere keren tegelijk',
+      'Je profiel en profielfoto laden sneller bij het openen van de app',
+      'Minder belasting op de server bij het openen van de app',
+    ],
+  },
+  {
     version: '1.8.5',
     date: '13 april 2026',
     highlights: [
@@ -22,18 +32,6 @@ export const releaseNotes: ReleaseNote[] = [
       'De inlogcontrole is versneld waardoor de app veel sneller opstart',
       'Recepten, beoordelingen en favorieten laden nu merkbaar sneller',
       'Zoeken op ingrediënten verwerkt alle zoekwoorden tegelijk',
-    ],
-  },
-  {
-    version: '1.8.0',
-    date: '12 april 2026',
-    highlights: [
-      'Recepten laden nu veel sneller — de lijst wacht niet meer op inloggen',
-      'De hoeveelheid data bij het ophalen van recepten is met 70% verminderd',
-      'Bij het scannen van producten kun je nu kiezen tussen camera en fotobibliotheek',
-      'Als je sessie verloopt word je automatisch naar het loginscherm gestuurd',
-      'Het label "Oven" of "BBQ / Grill" wordt nu automatisch bepaald',
-      'Duidelijkere foutmeldingen bij het aanmaken van ingrediënten',
     ],
   },
 ];

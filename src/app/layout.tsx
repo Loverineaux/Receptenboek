@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import PWAInstall from '@/components/layout/PWAInstall';
+import { AuthProvider } from '@/contexts/AuthContext';
 
 export const metadata: Metadata = {
   title: 'Receptenboek',
@@ -31,8 +32,10 @@ export default function RootLayout({
   return (
     <html lang="nl">
       <body className="font-sans antialiased">
-        {children}
-        <PWAInstall />
+        <AuthProvider>
+          {children}
+          <PWAInstall />
+        </AuthProvider>
       </body>
     </html>
   );
