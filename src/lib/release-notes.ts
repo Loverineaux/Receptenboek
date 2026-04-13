@@ -6,6 +6,16 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '1.8.1',
+    date: '13 april 2026',
+    highlights: [
+      'De receptenbibliotheek laadt nu aanzienlijk sneller door een lichtere database-query',
+      'Beoordelingen, reacties en favorieten worden nu parallel opgehaald in plaats van na elkaar',
+      'Zoeken op ingrediënten is sneller — alle zoekwoorden worden tegelijk verwerkt',
+      'Geen vertraging meer doordat favorieten pas laden nadat de recepten klaar zijn',
+    ],
+  },
+  {
     version: '1.8.0',
     date: '12 april 2026',
     highlights: [
@@ -26,18 +36,6 @@ export const releaseNotes: ReleaseNote[] = [
       'De temperatuur gaat niet meer verloren als je een recept bewerkt',
       'De AI herkent nu het verschil tussen oventemperatuur en kerntemperatuur',
       'Bestaande recepten kun je als admin bijwerken via "Temperaturen invullen"',
-    ],
-  },
-  {
-    version: '1.5.0',
-    date: '12 april 2026',
-    highlights: [
-      'Oventemperatuur en BBQ-instellingen worden nu automatisch herkend en getoond bij het recept',
-      'De zoekbalk blijft nu altijd zichtbaar als je door recepten scrollt',
-      'Bij de filters kun je nu met één knop alle filters wissen',
-      'De knop "Toepassen" bij filters is niet meer verstopt achter de navigatiebalk',
-      'De app blijft nu warm draaien zodat je geen lange wachttijd meer hebt bij het openen',
-      'Een fout waardoor de hele app soms niet laadde (504 timeout) is opgelost',
     ],
   },
 ];

@@ -30,7 +30,7 @@ export default function RecipeCard({ recipe, onFavoriteToggle, onRate, userRatin
   // Live average: recalculate from API average + user's rating change
   const liveAvg = (() => {
     const apiAvg = recipe.average_rating ?? 0;
-    const apiCount = recipe.ratings?.length ?? 0;
+    const apiCount = recipe.rating_count ?? recipe.ratings?.length ?? 0;
     if (!onRate) return { avg: apiAvg, count: apiCount };
 
     const cur = userRating ?? 0;
@@ -183,12 +183,12 @@ export default function RecipeCard({ recipe, onFavoriteToggle, onRate, userRatin
             <StarRating
               value={recipe.average_rating ?? 0}
               readOnly
-              count={recipe.ratings?.length ?? 0}
+              count={recipe.rating_count ?? recipe.ratings?.length ?? 0}
             />
           )}
           <div className="flex items-center gap-1 text-xs text-text-muted">
             <MessageCircle className="h-3.5 w-3.5" />
-            <span>{recipe.comments?.length ?? 0}</span>
+            <span>{recipe.comment_count ?? recipe.comments?.length ?? 0}</span>
           </div>
         </div>
       </div>

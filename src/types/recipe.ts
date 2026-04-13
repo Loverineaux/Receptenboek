@@ -115,6 +115,9 @@ export interface RecipeWithRelations extends Recipe {
   comments: Comment[];
   user: UserProfile | null;
   average_rating: number | null;
+  rating_count?: number;
+  comment_count?: number;
+  favorite_count?: number;
   is_favorited?: boolean;
 }
 
