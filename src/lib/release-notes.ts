@@ -6,6 +6,15 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '1.8.2',
+    date: '13 april 2026',
+    highlights: [
+      'Receptkaarten verschijnen nu direct met foto en titel — je hoeft niet meer te wachten op alle gegevens',
+      'Beoordelingen, reacties en favorieten vullen zich op de achtergrond aan',
+      'De laadtijd van de receptenbibliotheek is hierdoor flink verkort',
+    ],
+  },
+  {
     version: '1.8.1',
     date: '13 april 2026',
     highlights: [
@@ -25,17 +34,6 @@ export const releaseNotes: ReleaseNote[] = [
       'Als je sessie verloopt word je automatisch naar het loginscherm gestuurd',
       'Het label "Oven" of "BBQ / Grill" wordt nu automatisch bepaald',
       'Duidelijkere foutmeldingen bij het aanmaken van ingrediënten',
-    ],
-  },
-  {
-    version: '1.6.0',
-    date: '12 april 2026',
-    highlights: [
-      'Oventemperatuur en kerntemperatuur worden nu apart getoond bij het recept',
-      'Bij het bewerken van een recept kun je nu de oven- en kerntemperatuur invullen',
-      'De temperatuur gaat niet meer verloren als je een recept bewerkt',
-      'De AI herkent nu het verschil tussen oventemperatuur en kerntemperatuur',
-      'Bestaande recepten kun je als admin bijwerken via "Temperaturen invullen"',
     ],
   },
 ];
