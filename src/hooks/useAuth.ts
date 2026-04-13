@@ -84,11 +84,14 @@ export function useAuth() {
       }))
 
       if (currentUser) {
-        fetchProfile(currentUser.id)
+        // Only fetch profile on sign-in, not on token refresh (profile doesn't change)
+        if (_event === 'SIGNED_IN' || _event === 'USER_UPDATED') {
+          fetchProfile(currentUser.id)
+        }
       } else {
         setAuthState((prev) => ({ ...prev, profile: null }))
         // Session expired or user signed out — redirect to login
-        if (_event === 'SIGNED_OUT' || _event === 'TOKEN_REFRESHED') {
+        if (_event === 'SIGNED_OUT') {
           if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login') && !window.location.pathname.startsWith('/register')) {
             window.location.href = '/login'
           }
