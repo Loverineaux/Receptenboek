@@ -6,6 +6,15 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '1.8.3',
+    date: '13 april 2026',
+    highlights: [
+      'Recepten worden nu direct geladen zonder te wachten op het inloggen',
+      'De wachttijd bij het openen van de receptenbibliotheek is hierdoor fors verminderd',
+      'Beoordelingen en favorieten verschijnen kort na de receptkaarten',
+    ],
+  },
+  {
     version: '1.8.2',
     date: '13 april 2026',
     highlights: [
@@ -22,18 +31,6 @@ export const releaseNotes: ReleaseNote[] = [
       'Beoordelingen, reacties en favorieten worden nu parallel opgehaald in plaats van na elkaar',
       'Zoeken op ingrediënten is sneller — alle zoekwoorden worden tegelijk verwerkt',
       'Geen vertraging meer doordat favorieten pas laden nadat de recepten klaar zijn',
-    ],
-  },
-  {
-    version: '1.8.0',
-    date: '12 april 2026',
-    highlights: [
-      'Recepten laden nu veel sneller — de lijst wacht niet meer op inloggen',
-      'De hoeveelheid data bij het ophalen van recepten is met 70% verminderd',
-      'Bij het scannen van producten kun je nu kiezen tussen camera en fotobibliotheek',
-      'Als je sessie verloopt word je automatisch naar het loginscherm gestuurd',
-      'Het label "Oven" of "BBQ / Grill" wordt nu automatisch bepaald',
-      'Duidelijkere foutmeldingen bij het aanmaken van ingrediënten',
     ],
   },
 ];
