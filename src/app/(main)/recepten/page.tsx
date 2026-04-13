@@ -262,17 +262,19 @@ function ReceptenPage() {
         const ids = processed.map((r) => r.id);
         if (ids.length > 0) {
           const currentUserId = userIdRef.current;
-          const [stats, favIds] = await Promise.all([
-            fetch('/api/recipes/stats', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ recipe_ids: ids }),
-            }).then((r) => r.ok ? r.json() : {}).catch(() => ({})),
+          const [statsResult, favIds] = await Promise.all([
+            supabase.rpc('get_recipe_stats', { p_recipe_ids: ids }),
             currentUserId
               ? supabase.from('favorites').select('recipe_id').eq('user_id', currentUserId)
                   .then(({ data }) => new Set((data ?? []).map((f: any) => f.recipe_id)))
               : Promise.resolve(new Set<string>()),
           ]);
+
+          // Convert stats array to lookup map
+          const stats: Record<string, any> = {};
+          for (const s of statsResult.data ?? []) {
+            stats[s.recipe_id] = s;
+          }
 
           setRecipes((prev) => {
             const updated = prev.map((r) => {

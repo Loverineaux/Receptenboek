@@ -40,7 +40,13 @@ export async function updateSession(request: NextRequest) {
 
   // Use getSession() instead of getUser() — reads from cookie, no network call
   // getUser() always calls Supabase which adds 500ms+ latency on every page load
-  const { data: { session } } = await supabase.auth.getSession()
+  let session = null
+  try {
+    const { data } = await supabase.auth.getSession()
+    session = data?.session
+  } catch {
+    // Cookie parsing can fail with corrupted/malformed session data — continue as unauthenticated
+  }
 
   const pathname = request.nextUrl.pathname
 

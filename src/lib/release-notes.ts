@@ -6,6 +6,15 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '1.8.7',
+    date: '13 april 2026',
+    highlights: [
+      'Beoordelingen, reacties en favorieten laden nu rechtstreeks — zonder omweg via de server',
+      'De wachttijd na inactiviteit is hierdoor fors korter geworden',
+      'Een fout bij het lezen van je sessiegegevens is verholpen',
+    ],
+  },
+  {
     version: '1.8.6',
     date: '13 april 2026',
     highlights: [
@@ -23,15 +32,6 @@ export const releaseNotes: ReleaseNote[] = [
       'Receptdetails openen nu direct, ook als je profiel nog aan het laden is',
       'Het favorieten-icoontje en de teller laden sneller bij het openen van een recept',
       'Je profiel wordt niet meer dubbel opgehaald bij het vernieuwen van je sessie',
-    ],
-  },
-  {
-    version: '1.8.4',
-    date: '13 april 2026',
-    highlights: [
-      'De inlogcontrole is versneld waardoor de app veel sneller opstart',
-      'Recepten, beoordelingen en favorieten laden nu merkbaar sneller',
-      'Zoeken op ingrediënten verwerkt alle zoekwoorden tegelijk',
     ],
   },
 ];
