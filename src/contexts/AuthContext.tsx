@@ -55,27 +55,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   useEffect(() => {
-    // Get initial session — try fast cookie read first, fall back to server verification
+    // Get initial session via server verification (reliable, works even with corrupted cookies)
     const getInitialSession = async () => {
-      let currentUser = null
-
-      // Fast path: read session from cookie (instant)
-      try {
-        const { data } = await supabase.auth.getSession()
-        currentUser = data?.session?.user ?? null
-      } catch {
-        // Cookie parsing can fail — will fall back below
-      }
-
-      // Fallback: if cookie failed, verify with server (slower but reliable)
-      if (!currentUser) {
-        try {
-          const { data: { user: verifiedUser } } = await supabase.auth.getUser()
-          currentUser = verifiedUser
-        } catch {
-          // Not authenticated
-        }
-      }
+      const {
+        data: { user: currentUser },
+      } = await supabase.auth.getUser()
 
       setUser(currentUser)
       setLoading(false)
