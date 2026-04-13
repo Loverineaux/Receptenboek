@@ -226,7 +226,7 @@ function ReceptenPage() {
           return;
         }
 
-        // Post-process: flatten tags (stats are fetched separately)
+        // Post-process: flatten tags — show cards immediately, stats load in background
         const processed: RecipeWithRelations[] = (data ?? []).map((r: any) => {
           const flatTags = (r.tags ?? [])
             .map((rt: any) => rt.tag)
@@ -247,49 +247,53 @@ function ReceptenPage() {
           };
         });
 
-        // Fetch stats + user favorites in parallel
-        const ids = processed.map((r) => r.id);
-        const statsPromise = ids.length > 0
-          ? fetch('/api/recipes/stats', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ recipe_ids: ids }),
-            }).then((r) => r.ok ? r.json() : {}).catch(() => ({}))
-          : Promise.resolve({});
-
-        const currentUserId = userIdRef.current;
-        const favsPromise = currentUserId
-          ? supabase.from('favorites').select('recipe_id').eq('user_id', currentUserId)
-              .then(({ data }) => new Set((data ?? []).map((f: any) => f.recipe_id)))
-          : Promise.resolve(new Set<string>());
-
-        const [stats, favIds] = await Promise.all([statsPromise, favsPromise]);
-
-        // Merge stats + favorites into recipes
-        const merged = processed.map((r) => {
-          const s = stats[r.id];
-          return {
-            ...r,
-            average_rating: s?.avg_rating ?? null,
-            rating_count: s?.rating_count ?? 0,
-            comment_count: s?.comment_count ?? 0,
-            favorite_count: s?.favorite_count ?? 0,
-            is_favorited: favIds.has(r.id),
-          };
-        });
-
-        // Client-side sorting for rating
-        if (sort === 'rating' && !loadMore) {
-          merged.sort((a, b) => (b.average_rating ?? 0) - (a.average_rating ?? 0));
-        }
-
+        // Show cards immediately (images + titles + tags visible)
         if (loadMore) {
-          setRecipes((prev) => [...prev, ...merged]);
+          setRecipes((prev) => [...prev, ...processed]);
         } else {
-          setRecipes(merged);
+          setRecipes(processed);
         }
         setTotalCount(count ?? 0);
         pageRef.current = page;
+        setLoading(false);
+        setLoadingMore(false);
+
+        // Fetch stats + user favorites in background, merge when ready
+        const ids = processed.map((r) => r.id);
+        if (ids.length > 0) {
+          const currentUserId = userIdRef.current;
+          const [stats, favIds] = await Promise.all([
+            fetch('/api/recipes/stats', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ recipe_ids: ids }),
+            }).then((r) => r.ok ? r.json() : {}).catch(() => ({})),
+            currentUserId
+              ? supabase.from('favorites').select('recipe_id').eq('user_id', currentUserId)
+                  .then(({ data }) => new Set((data ?? []).map((f: any) => f.recipe_id)))
+              : Promise.resolve(new Set<string>()),
+          ]);
+
+          setRecipes((prev) => {
+            const updated = prev.map((r) => {
+              const s = stats[r.id];
+              if (!s) return r;
+              return {
+                ...r,
+                average_rating: s.avg_rating ?? r.average_rating,
+                rating_count: s.rating_count ?? r.rating_count,
+                comment_count: s.comment_count ?? r.comment_count,
+                favorite_count: s.favorite_count ?? r.favorite_count,
+                is_favorited: favIds.has(r.id),
+              };
+            });
+            // Client-side sorting for rating (after stats are available)
+            if (sort === 'rating') {
+              updated.sort((a, b) => (b.average_rating ?? 0) - (a.average_rating ?? 0));
+            }
+            return updated;
+          });
+        }
       } finally {
         setLoading(false);
         setLoadingMore(false);
