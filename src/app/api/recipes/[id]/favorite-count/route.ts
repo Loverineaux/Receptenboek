@@ -6,24 +6,29 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const { count } = await supabaseAdmin
+  // Start count query immediately (no auth needed, uses admin client)
+  const countPromise = supabaseAdmin
     .from('favorites')
     .select('*', { count: 'exact', head: true })
     .eq('recipe_id', params.id);
 
-  // Check if the current user has favorited this recipe
-  let isFavorited = false;
+  // Check if user is logged in via session cookie (instant, no network call)
+  // Use getSession() instead of getUser() to avoid slow auth server round-trip
   const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (user) {
-    const { data: fav } = await supabaseAdmin
-      .from('favorites')
-      .select('recipe_id')
-      .eq('recipe_id', params.id)
-      .eq('user_id', user.id)
-      .maybeSingle();
-    isFavorited = !!fav;
-  }
+  const { data: { session } } = await supabase.auth.getSession();
+
+  const [{ count }, isFavorited] = await Promise.all([
+    countPromise,
+    session?.user
+      ? supabaseAdmin
+          .from('favorites')
+          .select('recipe_id')
+          .eq('recipe_id', params.id)
+          .eq('user_id', session.user.id)
+          .maybeSingle()
+          .then(({ data }) => !!data)
+      : Promise.resolve(false),
+  ]);
 
   return NextResponse.json({ count: count ?? 0, is_favorited: isFavorited });
 }

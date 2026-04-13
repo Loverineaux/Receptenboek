@@ -6,6 +6,16 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '1.8.5',
+    date: '13 april 2026',
+    highlights: [
+      'De app laadt na inactiviteit veel sneller — geen onnodige wachttijd meer',
+      'Receptdetails openen nu direct, ook als je profiel nog aan het laden is',
+      'Het favorieten-icoontje en de teller laden sneller bij het openen van een recept',
+      'Je profiel wordt niet meer dubbel opgehaald bij het vernieuwen van je sessie',
+    ],
+  },
+  {
     version: '1.8.4',
     date: '13 april 2026',
     highlights: [
@@ -24,17 +34,6 @@ export const releaseNotes: ReleaseNote[] = [
       'Als je sessie verloopt word je automatisch naar het loginscherm gestuurd',
       'Het label "Oven" of "BBQ / Grill" wordt nu automatisch bepaald',
       'Duidelijkere foutmeldingen bij het aanmaken van ingrediënten',
-    ],
-  },
-  {
-    version: '1.6.0',
-    date: '12 april 2026',
-    highlights: [
-      'Oventemperatuur en kerntemperatuur worden nu apart getoond bij het recept',
-      'Bij het bewerken van een recept kun je nu de oven- en kerntemperatuur invullen',
-      'De temperatuur gaat niet meer verloren als je een recept bewerkt',
-      'De AI herkent nu het verschil tussen oventemperatuur en kerntemperatuur',
-      'Bestaande recepten kun je als admin bijwerken via "Temperaturen invullen"',
     ],
   },
 ];
