@@ -74,14 +74,15 @@ function ReceptenPage() {
     router.replace(`/recepten${qs ? `?${qs}` : ''}`, { scroll: false });
   }, [search, category, source, includedSources, excludedSources, sort, searchIngredients, router]);
 
-  // Fetch unique sources from DB
+  // Fetch unique sources from DB (select only bron, limit to 500 to avoid huge payload)
   useEffect(() => {
     const fetchSources = async () => {
-      // Only fetch the bron column, deduplicate client-side
       const { data } = await supabase
         .from('recipes')
         .select('bron')
-        .not('bron', 'is', null);
+        .not('bron', 'is', null)
+        .not('bron', 'eq', '')
+        .limit(500);
       if (data) {
         const unique = Array.from(new Set(data.map((r: any) => r.bron).filter(Boolean))) as string[];
         unique.sort((a, b) => a.localeCompare(b));
@@ -123,28 +124,23 @@ function ReceptenPage() {
           }
         }
 
-        // Pre-query: if searching by ingredients, get matching recipe IDs
+        // Pre-query: if searching by ingredients, get matching recipe IDs (parallel)
         let ingredientRecipeIds: string[] | null = null;
         if (search && searchIngredients) {
           const words = search.trim().split(/\s+/).filter(Boolean);
-          // Find recipes where ingredients match ALL words
-          const matchSets: Set<string>[] = [];
-          for (const word of words) {
-            const { data: ingMatches } = await supabase
-              .from('ingredients')
-              .select('recipe_id')
-              .ilike('naam', `%${word}%`);
-            // Also check title/subtitle matches
-            const { data: titleMatches } = await supabase
-              .from('recipes')
-              .select('id')
-              .or(`title.ilike.%${word}%,subtitle.ilike.%${word}%`);
-            const ids = new Set([
-              ...(ingMatches ?? []).map((i: any) => i.recipe_id),
-              ...(titleMatches ?? []).map((t: any) => t.id),
-            ]);
-            matchSets.push(ids);
-          }
+          // Find recipes where ingredients match ALL words — queries per word run in parallel
+          const matchSets = await Promise.all(
+            words.map(async (word) => {
+              const [ingResult, titleResult] = await Promise.all([
+                supabase.from('ingredients').select('recipe_id').ilike('naam', `%${word}%`),
+                supabase.from('recipes').select('id').or(`title.ilike.%${word}%,subtitle.ilike.%${word}%`),
+              ]);
+              return new Set([
+                ...(ingResult.data ?? []).map((i: any) => i.recipe_id),
+                ...(titleResult.data ?? []).map((t: any) => t.id),
+              ]);
+            })
+          );
           // Intersect all sets — recipe must match ALL words
           if (matchSets.length > 0) {
             const intersection = matchSets.reduce((a, b) => new Set([...a].filter((x) => b.has(x))));
@@ -173,9 +169,7 @@ function ReceptenPage() {
           .select(
             `
             id, title, subtitle, image_url, bron, tijd, created_at,
-            tags:recipe_tags(tag:tags(id, name)),
-            ratings(sterren, user_id),
-            comments(id)
+            tags:recipe_tags(tag:tags(id, name))
           `,
             { count: 'exact' }
           );
@@ -232,15 +226,8 @@ function ReceptenPage() {
           return;
         }
 
-        // Post-process
+        // Post-process: flatten tags (stats are fetched separately)
         const processed: RecipeWithRelations[] = (data ?? []).map((r: any) => {
-          const ratings = r.ratings ?? [];
-          const avg =
-            ratings.length > 0
-              ? ratings.reduce((s: number, rt: any) => s + rt.sterren, 0) /
-                ratings.length
-              : null;
-
           const flatTags = (r.tags ?? [])
             .map((rt: any) => rt.tag)
             .filter(Boolean);
@@ -248,23 +235,58 @@ function ReceptenPage() {
           return {
             ...r,
             tags: flatTags,
-            average_rating: avg,
-            comments: r.comments ?? [],
+            average_rating: null,
+            rating_count: 0,
+            comment_count: 0,
+            favorite_count: 0,
+            ratings: [],
+            comments: [],
             ingredients: [],
             nutrition: null,
             steps: [],
           };
         });
 
-        // Client-side sorting for rating (needs all loaded data)
+        // Fetch stats + user favorites in parallel
+        const ids = processed.map((r) => r.id);
+        const statsPromise = ids.length > 0
+          ? fetch('/api/recipes/stats', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ recipe_ids: ids }),
+            }).then((r) => r.ok ? r.json() : {}).catch(() => ({}))
+          : Promise.resolve({});
+
+        const currentUserId = userIdRef.current;
+        const favsPromise = currentUserId
+          ? supabase.from('favorites').select('recipe_id').eq('user_id', currentUserId)
+              .then(({ data }) => new Set((data ?? []).map((f: any) => f.recipe_id)))
+          : Promise.resolve(new Set<string>());
+
+        const [stats, favIds] = await Promise.all([statsPromise, favsPromise]);
+
+        // Merge stats + favorites into recipes
+        const merged = processed.map((r) => {
+          const s = stats[r.id];
+          return {
+            ...r,
+            average_rating: s?.avg_rating ?? null,
+            rating_count: s?.rating_count ?? 0,
+            comment_count: s?.comment_count ?? 0,
+            favorite_count: s?.favorite_count ?? 0,
+            is_favorited: favIds.has(r.id),
+          };
+        });
+
+        // Client-side sorting for rating
         if (sort === 'rating' && !loadMore) {
-          processed.sort((a, b) => (b.average_rating ?? 0) - (a.average_rating ?? 0));
+          merged.sort((a, b) => (b.average_rating ?? 0) - (a.average_rating ?? 0));
         }
 
         if (loadMore) {
-          setRecipes((prev) => [...prev, ...processed]);
+          setRecipes((prev) => [...prev, ...merged]);
         } else {
-          setRecipes(processed);
+          setRecipes(merged);
         }
         setTotalCount(count ?? 0);
         pageRef.current = page;
@@ -283,31 +305,7 @@ function ReceptenPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, search, searchIngredients, category, source, includedSources, excludedSources, sort]);
 
-  // Merge favorites when user becomes available (separate from recipe loading)
-  useEffect(() => {
-    if (!user) return;
-    const mergeFavorites = async () => {
-      const ids = recipes.map((r) => r.id);
-      if (ids.length === 0) return;
-      const [favsResult, fcResult] = await Promise.all([
-        supabase.from('favorites').select('recipe_id').eq('user_id', user.id),
-        fetch('/api/recipes/favorite-counts', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ recipe_ids: ids }),
-        }).then((r) => r.ok ? r.json() : { counts: {} }).catch(() => ({ counts: {} })),
-      ]);
-      const favIds = new Set((favsResult.data ?? []).map((f: any) => f.recipe_id));
-      const favCounts: Record<string, number> = fcResult.counts ?? {};
-      setRecipes((prev) => prev.map((r) => ({
-        ...r,
-        is_favorited: favIds.has(r.id),
-        favorite_count: favCounts[r.id] || 0,
-      })));
-    };
-    mergeFavorites();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, recipes.length]);
+  // Favorites are now fetched in parallel inside fetchRecipes — no separate waterfall needed
 
   const [userRatings, setUserRatings] = useState<Record<string, number>>({});
   const [initialUserRatings, setInitialUserRatings] = useState<Record<string, number>>({});
@@ -328,14 +326,11 @@ function ReceptenPage() {
       if (!newId) return;
       const { data } = await sb.from('recipes').select(`
         id, title, image_url, bron, tijd, created_at,
-        tags:recipe_tags(tag:tags(id, name)),
-        ratings(sterren)
+        tags:recipe_tags(tag:tags(id, name))
       `).eq('id', newId).single();
       if (data) {
-        const ratings = (data as any).ratings ?? [];
-        const avg = ratings.length > 0 ? ratings.reduce((s: number, r: any) => s + r.sterren, 0) / ratings.length : null;
         const flatTags = ((data as any).tags ?? []).map((rt: any) => rt.tag).filter(Boolean);
-        const newRecipe = { ...data, tags: flatTags, average_rating: avg, comments: [], ingredients: [], nutrition: null, steps: [], is_favorited: false, favorite_count: 0 } as any;
+        const newRecipe = { ...data, tags: flatTags, average_rating: null, rating_count: 0, comment_count: 0, comments: [], ratings: [], ingredients: [], nutrition: null, steps: [], is_favorited: false, favorite_count: 0 } as any;
         setRecipes((prev) => [newRecipe, ...prev]);
       }
     });
@@ -371,7 +366,7 @@ function ReceptenPage() {
       if (data) {
         const avg = data.length > 0 ? data.reduce((s: number, r: any) => s + r.sterren, 0) / data.length : null;
         setRecipes((prev) => prev.map((r) =>
-          r.id === recipeId ? { ...r, ratings: data as any, average_rating: avg } : r
+          r.id === recipeId ? { ...r, ratings: data as any, average_rating: avg, rating_count: data.length } : r
         ));
         const uid = userIdRef.current;
         if (uid) {
