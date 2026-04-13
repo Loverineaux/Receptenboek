@@ -302,12 +302,12 @@ function ReceptenPage() {
     [supabase, search, searchIngredients, category, source, includedSources, excludedSources, sort]
   );
 
-  // Fetch recipes once auth session is ready (don't wait for profile, just session)
+  // Fetch recipes immediately — RLS allows anonymous reads (recipes_select_all)
+  // Auth is only needed for favorites/ratings which load in the background
   useEffect(() => {
-    if (authLoading) return;
     fetchRecipes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authLoading, search, searchIngredients, category, source, includedSources, excludedSources, sort]);
+  }, [search, searchIngredients, category, source, includedSources, excludedSources, sort]);
 
   // Favorites are now fetched in parallel inside fetchRecipes — no separate waterfall needed
 
