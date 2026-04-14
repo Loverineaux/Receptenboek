@@ -13,6 +13,18 @@ export const metadata: Metadata = {
     statusBarStyle: 'default',
     title: 'Receptenboek',
   },
+  openGraph: {
+    title: 'Receptenboek',
+    description: 'Jouw persoonlijk receptenplatform',
+    type: 'website',
+    locale: 'nl_NL',
+    siteName: 'Receptenboek',
+  },
+  twitter: {
+    card: 'summary',
+    title: 'Receptenboek',
+    description: 'Jouw persoonlijk receptenplatform',
+  },
   other: {
     'mobile-web-app-capable': 'yes',
   },
