@@ -48,14 +48,18 @@ export async function updateSession(request: NextRequest) {
   const isPublicPath = publicPaths.some((p) => pathname.startsWith(p))
   const isAssetPath = pathname.startsWith('/api/') || pathname.startsWith('/_next/') || pathname.includes('.') || pathname === '/sw.js' || pathname === '/manifest.json'
 
-  // Recipe detail pages are publicly accessible so shared links work everywhere
-  // (WhatsApp, iMessage, Telegram, Signal, etc. all need to fetch OG meta tags)
-  // Non-logged-in visitors see the recipe but can't interact (rate, comment, favorite)
-  const isRecipeDetailPath = /^\/recepten\/[^/]+$/.test(pathname) && pathname !== '/recepten/nieuw'
+  // Allow social media / messaging bots through for link preview OG tags
+  const ua = request.headers.get('user-agent') || ''
+  const isSocialBot = /bot|crawl|spider|WhatsApp|facebookexternalhit|Twitterbot|TelegramBot|LinkedInBot|Googlebot|Slackbot|Discordbot|iMessageBot|Applebot|Bingbot|Pinterestbot/i.test(ua)
 
-  // Redirect unauthenticated users to login (except public pages, assets, and shared recipe links)
-  if (!user && !isPublicPath && !isAssetPath && !isRecipeDetailPath) {
-    return NextResponse.redirect(new URL('/login', request.url))
+  // Redirect unauthenticated users to login (except public pages, assets, and bots)
+  // Include the original path as redirect param so login can send them back
+  if (!user && !isPublicPath && !isAssetPath && !isSocialBot) {
+    const loginUrl = new URL('/login', request.url)
+    if (pathname !== '/') {
+      loginUrl.searchParams.set('redirect', pathname)
+    }
+    return NextResponse.redirect(loginUrl)
   }
 
   // Redirect blocked users to /geblokkeerd

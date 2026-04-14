@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, FormEvent } from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense, useState, FormEvent } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Mail, Lock, Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
@@ -11,8 +11,14 @@ import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import GoogleLogo from '@/components/icons/GoogleLogo'
 
-export default function LoginPage() {
+export default function LoginPageWrapper() {
+  return <Suspense><LoginPage /></Suspense>
+}
+
+function LoginPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const redirectTo = searchParams.get('redirect')
   const { signIn, loading } = useAuth()
   const supabase = createClient()
 
@@ -33,7 +39,9 @@ export default function LoginPage() {
       if (error) {
         setError(translateAuthError(error.message))
       } else {
-        router.push('/recepten')
+        // Redirect to the original page (e.g. shared recipe link) or default to /recepten
+        const destination = redirectTo && redirectTo.startsWith('/') ? redirectTo : '/recepten'
+        router.push(destination)
         router.refresh()
       }
     } catch (err: any) {
@@ -121,10 +129,13 @@ export default function LoginPage() {
           {/* Google sign in */}
           <button
             onClick={async () => {
+              const callbackUrl = redirectTo && redirectTo.startsWith('/')
+                ? `${window.location.origin}/api/auth/callback?next=${encodeURIComponent(redirectTo)}`
+                : `${window.location.origin}/api/auth/callback`
               const { error } = await supabase.auth.signInWithOAuth({
                 provider: 'google',
                 options: {
-                  redirectTo: `${window.location.origin}/api/auth/callback`,
+                  redirectTo: callbackUrl,
                 },
               })
               if (error) setError(translateAuthError(error.message))
