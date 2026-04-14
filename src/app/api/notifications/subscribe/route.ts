@@ -5,7 +5,8 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 // POST /api/notifications/subscribe — register FCM token
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { session } } = await supabase.auth.getSession();
+  const user = session?.user ?? null;
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { token, device_name } = await request.json();
@@ -39,7 +40,8 @@ export async function POST(request: NextRequest) {
 // DELETE /api/notifications/subscribe — remove FCM token
 export async function DELETE(request: NextRequest) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { session } } = await supabase.auth.getSession();
+  const user = session?.user ?? null;
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { token } = await request.json();

@@ -9,7 +9,8 @@ export async function POST(
 ) {
   // Auth check
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { session } } = await supabase.auth.getSession();
+  const user = session?.user ?? null;
   if (!user) {
     return new Response(JSON.stringify({ error: 'Niet ingelogd' }), {
       status: 401,

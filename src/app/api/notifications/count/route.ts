@@ -5,7 +5,8 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 // GET /api/notifications/count — unread count
 export async function GET() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { session } } = await supabase.auth.getSession();
+  const user = session?.user ?? null;
   if (!user) return NextResponse.json({ count: 0 });
 
   const { count, error } = await supabaseAdmin

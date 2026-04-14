@@ -55,11 +55,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   useEffect(() => {
+    let cancelled = false
+
     // Get initial session via server verification (reliable, works even with corrupted cookies)
     const getInitialSession = async () => {
       const {
         data: { user: currentUser },
       } = await supabase.auth.getUser()
+
+      if (cancelled) return
 
       setUser(currentUser)
       setLoading(false)
@@ -97,6 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
 
     return () => {
+      cancelled = true
       subscription.unsubscribe()
     }
   }, [supabase, fetchProfile])

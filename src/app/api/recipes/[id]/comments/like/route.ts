@@ -10,7 +10,8 @@ export async function POST(
 ) {
   const { id } = await params;
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { session } } = await supabase.auth.getSession();
+  const user = session?.user ?? null;
   if (!user) return NextResponse.json({ error: 'Niet ingelogd' }, { status: 401 });
 
   const { comment_id } = await request.json();
@@ -62,7 +63,8 @@ export async function DELETE(
   request: NextRequest,
 ) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { session } } = await supabase.auth.getSession();
+  const user = session?.user ?? null;
   if (!user) return NextResponse.json({ error: 'Niet ingelogd' }, { status: 401 });
 
   const { comment_id } = await request.json();

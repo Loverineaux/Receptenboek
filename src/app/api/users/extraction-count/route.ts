@@ -4,9 +4,8 @@ import { createClient } from '@/lib/supabase/server';
 /** POST — increment extraction count, return new value */
 export async function POST(_request: NextRequest) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { session } } = await supabase.auth.getSession();
+  const user = session?.user ?? null;
 
   if (!user) {
     return NextResponse.json({ error: 'Niet ingelogd' }, { status: 401 });

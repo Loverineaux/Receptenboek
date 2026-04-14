@@ -6,6 +6,15 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '1.9.1',
+    date: '14 april 2026',
+    highlights: [
+      'Pagina\'s laden sneller na een periode van inactiviteit',
+      'Je inloggegevens worden nu slimmer gecontroleerd — minder wachttijd',
+      'Een fout bij het gelijktijdig openen van de app in meerdere tabbladen is opgelost',
+    ],
+  },
+  {
     version: '1.9.0',
     date: '14 april 2026',
     highlights: [
@@ -23,16 +32,6 @@ export const releaseNotes: ReleaseNote[] = [
       'Beoordelingen, reacties en favorieten laden nu rechtstreeks — zonder omweg via de server',
       'De wachttijd na inactiviteit is hierdoor fors korter geworden',
       'Een fout bij het lezen van je sessiegegevens is verholpen',
-    ],
-  },
-  {
-    version: '1.8.6',
-    date: '13 april 2026',
-    highlights: [
-      'De app start nu veel sneller op na een periode van inactiviteit',
-      'Je inloggegevens worden nog maar één keer gecontroleerd in plaats van meerdere keren tegelijk',
-      'Je profiel en profielfoto laden sneller bij het openen van de app',
-      'Minder belasting op de server bij het openen van de app',
     ],
   },
 ];

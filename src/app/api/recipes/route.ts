@@ -219,9 +219,8 @@ export async function POST(request: NextRequest) {
   console.log('[POST /api/recipes] Start');
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { session } } = await supabase.auth.getSession();
+  const user = session?.user ?? null;
   console.log('[POST /api/recipes] User:', user?.id ?? 'NONE');
 
   if (!user) {

@@ -25,9 +25,8 @@ export async function GET() {
   }
 
   // Check if user is logged in for follow/collaborator flags
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { session } } = await supabase.auth.getSession();
+  const user = session?.user ?? null;
 
   let followedIds = new Set<string>();
   let collaboratorIds = new Set<string>();
@@ -75,9 +74,8 @@ export async function GET() {
 // POST /api/collections — create new collection
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { session } } = await supabase.auth.getSession();
+  const user = session?.user ?? null;
 
   if (!user) {
     return NextResponse.json({ error: 'Niet ingelogd' }, { status: 401 });

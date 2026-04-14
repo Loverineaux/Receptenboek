@@ -4,9 +4,8 @@ import { createClient } from '@/lib/supabase/server';
 // GET /api/collections/my-recipe-ids — returns set of recipe IDs in user's own + collaborated collections
 export async function GET() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { session } } = await supabase.auth.getSession();
+  const user = session?.user ?? null;
 
   if (!user) {
     return NextResponse.json([]);

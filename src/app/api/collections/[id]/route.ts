@@ -69,9 +69,8 @@ export async function GET(
     .eq('collection_id', id);
 
   // Check if current user follows / is collaborator
-  const {
-    data: { user: currentUser },
-  } = await supabase.auth.getUser();
+  const { data: { session: currentSession } } = await supabase.auth.getSession();
+  const currentUser = currentSession?.user ?? null;
 
   let isFollowing = false;
   let isCollaborator = false;
@@ -122,9 +121,8 @@ export async function PUT(
 ) {
   const { id } = await params;
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { session } } = await supabase.auth.getSession();
+  const user = session?.user ?? null;
 
   if (!user) {
     return NextResponse.json({ error: 'Niet ingelogd' }, { status: 401 });
@@ -160,9 +158,8 @@ export async function DELETE(
 ) {
   const { id } = await params;
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { session } } = await supabase.auth.getSession();
+  const user = session?.user ?? null;
 
   if (!user) {
     return NextResponse.json({ error: 'Niet ingelogd' }, { status: 401 });
