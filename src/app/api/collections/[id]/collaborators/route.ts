@@ -6,14 +6,15 @@ import { createNotification } from '@/lib/notifications';
 // GET /api/collections/[id]/collaborators
 export async function GET(
   _request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = createClient();
+  const { id } = await params;
+  const supabase = await createClient();
 
   const { data, error } = await supabase
     .from('collection_collaborators')
     .select('user_id, created_at, profiles:profiles!collection_collaborators_user_id_fkey(id, display_name, avatar_url)')
-    .eq('collection_id', params.id);
+    .eq('collection_id', id);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -30,9 +31,10 @@ export async function GET(
 // POST /api/collections/[id]/collaborators — add collaborator (owner only)
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = createClient();
+  const { id } = await params;
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -45,7 +47,7 @@ export async function POST(
   const { data: collection } = await supabase
     .from('collections')
     .select('user_id')
-    .eq('id', params.id)
+    .eq('id', id)
     .single();
 
   if (!collection || collection.user_id !== user.id) {
@@ -67,7 +69,7 @@ export async function POST(
   const { count } = await supabase
     .from('collection_collaborators')
     .select('*', { count: 'exact', head: true })
-    .eq('collection_id', params.id);
+    .eq('collection_id', id);
 
   if ((count ?? 0) >= 10) {
     return NextResponse.json({ error: 'Maximum van 10 sous-chefs bereikt' }, { status: 400 });
@@ -76,7 +78,7 @@ export async function POST(
   const { error } = await supabase
     .from('collection_collaborators')
     .insert({
-      collection_id: params.id,
+      collection_id: id,
       user_id,
       invited_by: user.id,
     });
@@ -89,7 +91,7 @@ export async function POST(
   }
 
   // ── Send notification to invited user (fire-and-forget) ──
-  const collectionId = params.id;
+  const collectionId = id;
   (async () => {
     try {
       const { data: col } = await supabaseAdmin
@@ -116,9 +118,10 @@ export async function POST(
 // DELETE /api/collections/[id]/collaborators — remove collaborator (owner only)
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = createClient();
+  const { id } = await params;
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -131,7 +134,7 @@ export async function DELETE(
   const { data: collection } = await supabase
     .from('collections')
     .select('user_id')
-    .eq('id', params.id)
+    .eq('id', id)
     .single();
 
   if (!collection || collection.user_id !== user.id) {
@@ -148,7 +151,7 @@ export async function DELETE(
   const { error } = await supabase
     .from('collection_collaborators')
     .delete()
-    .eq('collection_id', params.id)
+    .eq('collection_id', id)
     .eq('user_id', user_id);
 
   if (error) {

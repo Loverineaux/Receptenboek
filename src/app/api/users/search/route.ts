@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 
 // GET /api/users/search?q=searchterm — search profiles by display_name
 export async function GET(request: NextRequest) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

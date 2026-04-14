@@ -5,15 +5,16 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = createClient();
+  const { id } = await params;
+  const supabase = await createClient();
   if (!(await isAdmin(supabase))) {
     return NextResponse.json({ error: 'Geen toegang' }, { status: 403 });
   }
 
   const { data: { user } } = await supabase.auth.getUser();
-  if (user?.id === params.id) {
+  if (user?.id === id) {
     return NextResponse.json({ error: 'Je kunt je eigen rol niet wijzigen' }, { status: 400 });
   }
 
@@ -25,7 +26,7 @@ export async function PUT(
   await supabaseAdmin
     .from('profiles')
     .update({ role })
-    .eq('id', params.id);
+    .eq('id', id);
 
   return NextResponse.json({ success: true });
 }

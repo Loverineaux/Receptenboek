@@ -6,7 +6,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 const FREE_EXTRACTIONS_PER_EURO = 10; // €1 = 10 extracties vrij, €2.50 = 25
 
 export async function GET() {
-  const supabase = createClient();
+  const supabase = await createClient();
   if (!(await isAdmin(supabase))) {
     return NextResponse.json({ error: 'Geen toegang' }, { status: 403 });
   }
@@ -54,7 +54,7 @@ export async function GET() {
 
 /** POST — register a donation for a user */
 export async function POST(request: NextRequest) {
-  const supabase = createClient();
+  const supabase = await createClient();
   if (!(await isAdmin(supabase))) {
     return NextResponse.json({ error: 'Geen toegang' }, { status: 403 });
   }

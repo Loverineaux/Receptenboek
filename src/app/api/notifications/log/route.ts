@@ -5,7 +5,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 
 // GET /api/notifications/log — admin: all notifications with filters
 export async function GET(request: NextRequest) {
-  const supabase = createClient();
+  const supabase = await createClient();
   if (!(await isAdmin(supabase))) {
     return NextResponse.json({ error: 'Geen toegang' }, { status: 403 });
   }
@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
 
 // DELETE /api/notifications/log — admin: cleanup old notifications
 export async function DELETE(request: NextRequest) {
-  const supabase = createClient();
+  const supabase = await createClient();
   if (!(await isAdmin(supabase))) {
     return NextResponse.json({ error: 'Geen toegang' }, { status: 403 });
   }

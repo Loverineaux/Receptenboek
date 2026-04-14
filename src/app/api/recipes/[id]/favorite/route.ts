@@ -8,9 +8,10 @@ import { createNotification } from '@/lib/notifications';
 // ────────────────────────────────────────────
 export async function POST(
   _request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = createClient();
+  const { id } = await params;
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -23,7 +24,7 @@ export async function POST(
   const { data: existing } = await supabase
     .from('favorites')
     .select('recipe_id')
-    .eq('recipe_id', params.id)
+    .eq('recipe_id', id)
     .eq('user_id', user.id)
     .maybeSingle();
 
@@ -32,7 +33,7 @@ export async function POST(
   }
 
   const { error } = await supabase.from('favorites').insert({
-    recipe_id: params.id,
+    recipe_id: id,
     user_id: user.id,
   });
 
@@ -41,7 +42,7 @@ export async function POST(
   }
 
   // ── Send notification (fire-and-forget, don't block response) ──
-  const recipeId = params.id;
+  const recipeId = id;
   const actorId = user.id;
   (async () => {
     try {
@@ -73,9 +74,10 @@ export async function POST(
 // ────────────────────────────────────────────
 export async function DELETE(
   _request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = createClient();
+  const { id } = await params;
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -87,7 +89,7 @@ export async function DELETE(
   const { error } = await supabase
     .from('favorites')
     .delete()
-    .eq('recipe_id', params.id)
+    .eq('recipe_id', id)
     .eq('user_id', user.id);
 
   if (error) {

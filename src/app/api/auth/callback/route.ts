@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
   const type = requestUrl.searchParams.get('type')
   const next = requestUrl.searchParams.get('next') || '/recepten'
 
-  const supabase = createClient()
+  const supabase = await createClient()
 
   if (code) {
     const { data } = await supabase.auth.exchangeCodeForSession(code)

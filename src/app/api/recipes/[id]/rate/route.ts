@@ -5,9 +5,10 @@ import { createNotification } from '@/lib/notifications';
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = createClient();
+  const { id } = await params;
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -22,7 +23,7 @@ export async function POST(
   if (sterren === 0) {
     // Delete rating
     await supabase.from('ratings').delete()
-      .eq('recipe_id', params.id)
+      .eq('recipe_id', id)
       .eq('user_id', user.id);
     return NextResponse.json({ success: true });
   }
@@ -38,7 +39,7 @@ export async function POST(
   const { data: existing } = await supabase
     .from('ratings')
     .select('id')
-    .eq('recipe_id', params.id)
+    .eq('recipe_id', id)
     .eq('user_id', user.id)
     .single();
 
@@ -53,7 +54,7 @@ export async function POST(
     }
   } else {
     const { error } = await supabase.from('ratings').insert({
-      recipe_id: params.id,
+      recipe_id: id,
       user_id: user.id,
       sterren,
     });
@@ -65,7 +66,7 @@ export async function POST(
 
   // ── Send notification on first rating (fire-and-forget) ──
   if (!existing) {
-    const recipeId = params.id;
+    const recipeId = id;
     (async () => {
       try {
         const { data: recipe } = await supabaseAdmin

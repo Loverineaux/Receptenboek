@@ -8,9 +8,9 @@ import type { NutritionCalculation } from '@/types';
 // ────────────────────────────────────────────
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = params;
+  const { id } = await params;
   const body = await request.json().catch(() => ({}));
   const save = body.save === true;
 

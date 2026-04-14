@@ -4,9 +4,10 @@ import { createClient } from '@/lib/supabase/server';
 // POST /api/collections/[id]/recipes — add recipe to collection
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = createClient();
+  const { id } = await params;
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -25,7 +26,7 @@ export async function POST(
   const { error } = await supabase
     .from('collection_recipes')
     .insert({
-      collection_id: params.id,
+      collection_id: id,
       recipe_id,
     });
 
@@ -39,9 +40,10 @@ export async function POST(
 // DELETE /api/collections/[id]/recipes — remove recipe from collection
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = createClient();
+  const { id } = await params;
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -60,7 +62,7 @@ export async function DELETE(
   const { error } = await supabase
     .from('collection_recipes')
     .delete()
-    .eq('collection_id', params.id)
+    .eq('collection_id', id)
     .eq('recipe_id', recipe_id);
 
   if (error) {

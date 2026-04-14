@@ -112,7 +112,7 @@ Antwoord ALLEEN als JSON array, bijv. ["Kip", "Pasta"]. Geen tekst.`
 // GET  /api/recipes
 // ────────────────────────────────────────────
 export async function GET(request: NextRequest) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { searchParams } = new URL(request.url);
 
   const search = searchParams.get('search') || '';
@@ -217,7 +217,7 @@ export async function GET(request: NextRequest) {
 // ────────────────────────────────────────────
 export async function POST(request: NextRequest) {
   console.log('[POST /api/recipes] Start');
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const {
     data: { user },

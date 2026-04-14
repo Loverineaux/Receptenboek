@@ -349,17 +349,17 @@ function ReceptenPage() {
       setRecipes((prev) => prev.filter((r) => r.id !== payload.old.id));
     });
 
-    // Favorites: optimistic count update (no API call needed)
+    // Favorites: only update count for OTHER users' favorites (own favorites are handled by optimistic update)
     channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'favorites' }, (payload) => {
       const recipeId = payload.new?.recipe_id;
-      if (!recipeId) return;
+      if (!recipeId || payload.new?.user_id === userIdRef.current) return;
       setRecipes((prev) => prev.map((r) =>
         r.id === recipeId ? { ...r, favorite_count: Math.max(0, ((r as any).favorite_count || 0) + 1) } : r
       ));
     });
     channel.on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'favorites' }, (payload) => {
       const recipeId = payload.old?.recipe_id;
-      if (!recipeId) return;
+      if (!recipeId || payload.old?.user_id === userIdRef.current) return;
       setRecipes((prev) => prev.map((r) =>
         r.id === recipeId ? { ...r, favorite_count: Math.max(0, ((r as any).favorite_count || 0) - 1) } : r
       ));

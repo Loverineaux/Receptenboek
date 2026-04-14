@@ -4,17 +4,18 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 
 export async function GET(
   _request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   // Start count query immediately (no auth needed, uses admin client)
   const countPromise = supabaseAdmin
     .from('favorites')
     .select('*', { count: 'exact', head: true })
-    .eq('recipe_id', params.id);
+    .eq('recipe_id', id);
 
   // Check if user is logged in via session cookie (instant, no network call)
   // Use getSession() instead of getUser() to avoid slow auth server round-trip
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: { session } } = await supabase.auth.getSession();
 
   const [{ count }, isFavorited] = await Promise.all([
@@ -23,7 +24,7 @@ export async function GET(
       ? supabaseAdmin
           .from('favorites')
           .select('recipe_id')
-          .eq('recipe_id', params.id)
+          .eq('recipe_id', id)
           .eq('user_id', session.user.id)
           .maybeSingle()
           .then(({ data }) => !!data)

@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 
 /** POST — increment extraction count, return new value */
 export async function POST(_request: NextRequest) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

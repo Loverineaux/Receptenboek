@@ -8,9 +8,10 @@ import { isAdmin } from '@/lib/admin';
 // ────────────────────────────────────────────
 export async function GET(
   _request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = createClient();
+  const { id } = await params;
+  const supabase = await createClient();
 
   const { data, error } = await supabase
     .from('recipes')
@@ -26,7 +27,7 @@ export async function GET(
       user:profiles!recipes_user_id_fkey(id, display_name, avatar_url)
     `
     )
-    .eq('id', params.id)
+    .eq('id', id)
     .single();
 
   if (error) {
@@ -46,7 +47,7 @@ export async function GET(
   const { count: favoriteCount } = await supabaseAdmin
     .from('favorites')
     .select('*', { count: 'exact', head: true })
-    .eq('recipe_id', params.id);
+    .eq('recipe_id', id);
 
   const recipe = {
     ...data,
@@ -72,9 +73,10 @@ export async function GET(
 // ────────────────────────────────────────────
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = createClient();
+  const { id } = await params;
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -89,7 +91,7 @@ export async function PUT(
     const { data: existing } = await supabase
       .from('recipes')
       .select('user_id')
-      .eq('id', params.id)
+      .eq('id', id)
       .single();
 
     if (!existing || existing.user_id !== user.id) {
@@ -124,7 +126,7 @@ export async function PUT(
         temperatuur: body.temperatuur || null,
         kerntemperatuur: body.kerntemperatuur || null,
       })
-      .eq('id', params.id);
+      .eq('id', id);
 
     if (updateError) {
       return NextResponse.json({ error: updateError.message }, { status: 500 });
@@ -133,10 +135,10 @@ export async function PUT(
 
   // 2. Replace ingredients (only if provided)
   if (body.ingredients !== undefined) {
-    await db.from('ingredients').delete().eq('recipe_id', params.id);
+    await db.from('ingredients').delete().eq('recipe_id', id);
     if (body.ingredients?.length) {
       const rows = body.ingredients.map((ing: any, idx: number) => ({
-        recipe_id: params.id,
+        recipe_id: id,
         hoeveelheid: ing.hoeveelheid || null,
         eenheid: ing.eenheid || null,
         naam: ing.naam,
@@ -148,10 +150,10 @@ export async function PUT(
 
   // 3. Replace steps (only if provided)
   if (body.steps !== undefined) {
-    await db.from('steps').delete().eq('recipe_id', params.id);
+    await db.from('steps').delete().eq('recipe_id', id);
     if (body.steps?.length) {
       const rows = body.steps.map((step: any, idx: number) => ({
-        recipe_id: params.id,
+        recipe_id: id,
         titel: step.titel || null,
         beschrijving: step.beschrijving,
         afbeelding_url: step.afbeelding_url || null,
@@ -163,11 +165,11 @@ export async function PUT(
 
   // 4. Replace nutrition (only if provided)
   if (body.nutrition !== undefined) {
-    await db.from('nutrition').delete().eq('recipe_id', params.id);
+    await db.from('nutrition').delete().eq('recipe_id', id);
     if (body.nutrition) {
       const n = body.nutrition;
       await db.from('nutrition').insert({
-        recipe_id: params.id,
+        recipe_id: id,
         energie_kcal: n.energie_kcal || null,
         energie_kj: n.energie_kj || null,
         vetten: n.vetten || null,
@@ -183,7 +185,7 @@ export async function PUT(
 
   // 5. Replace tags (always use admin client — tags/recipe_tags have restrictive RLS)
   if (body.tags !== undefined) {
-    await supabaseAdmin.from('recipe_tags').delete().eq('recipe_id', params.id);
+    await supabaseAdmin.from('recipe_tags').delete().eq('recipe_id', id);
 
     const tagNames: string[] = (body.tags ?? [])
       .map((t: any) => (typeof t === 'string' ? t : t?.name)?.trim())
@@ -211,17 +213,17 @@ export async function PUT(
       if (tag) {
         await supabaseAdmin
           .from('recipe_tags')
-          .insert({ recipe_id: params.id, tag_id: tag.id });
+          .insert({ recipe_id: id, tag_id: tag.id });
       }
     }
   }
 
   // 6. Replace benodigdheden (only if provided)
   if (body.benodigdheden !== undefined) {
-    await db.from('benodigdheden').delete().eq('recipe_id', params.id);
+    await db.from('benodigdheden').delete().eq('recipe_id', id);
     if (body.benodigdheden?.length) {
       const rows = body.benodigdheden.map((naam: string) => ({
-        recipe_id: params.id,
+        recipe_id: id,
         naam,
       }));
       await db.from('benodigdheden').insert(rows);
@@ -236,9 +238,10 @@ export async function PUT(
 // ────────────────────────────────────────────
 export async function DELETE(
   _request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = createClient();
+  const { id } = await params;
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -252,7 +255,7 @@ export async function DELETE(
     const { data: existing } = await supabase
       .from('recipes')
       .select('user_id')
-      .eq('id', params.id)
+      .eq('id', id)
       .single();
 
     if (!existing || existing.user_id !== user.id) {
@@ -264,16 +267,16 @@ export async function DELETE(
   const db = admin ? supabaseAdmin : supabase;
 
   // Cascade deletes should be handled by DB foreign keys, but clean up just in case
-  await db.from('ingredients').delete().eq('recipe_id', params.id);
-  await db.from('steps').delete().eq('recipe_id', params.id);
-  await db.from('nutrition').delete().eq('recipe_id', params.id);
-  await db.from('recipe_tags').delete().eq('recipe_id', params.id);
-  await db.from('ratings').delete().eq('recipe_id', params.id);
-  await db.from('comments').delete().eq('recipe_id', params.id);
-  await db.from('favorites').delete().eq('recipe_id', params.id);
-  await db.from('benodigdheden').delete().eq('recipe_id', params.id);
+  await db.from('ingredients').delete().eq('recipe_id', id);
+  await db.from('steps').delete().eq('recipe_id', id);
+  await db.from('nutrition').delete().eq('recipe_id', id);
+  await db.from('recipe_tags').delete().eq('recipe_id', id);
+  await db.from('ratings').delete().eq('recipe_id', id);
+  await db.from('comments').delete().eq('recipe_id', id);
+  await db.from('favorites').delete().eq('recipe_id', id);
+  await db.from('benodigdheden').delete().eq('recipe_id', id);
 
-  const { error } = await db.from('recipes').delete().eq('id', params.id);
+  const { error } = await db.from('recipes').delete().eq('id', id);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

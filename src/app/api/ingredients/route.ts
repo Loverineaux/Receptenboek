@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
 
 // POST /api/ingredients — create new generic ingredient
 export async function POST(request: NextRequest) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) {

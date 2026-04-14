@@ -6,9 +6,10 @@ import { createNotification } from '@/lib/notifications';
 // POST /api/recipes/[id]/comments/like — like a comment
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = createClient();
+  const { id } = await params;
+  const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Niet ingelogd' }, { status: 401 });
 
@@ -27,7 +28,7 @@ export async function POST(
   }
 
   // Send notification to comment author (fire-and-forget)
-  const recipeId = params.id;
+  const recipeId = id;
   (async () => {
     try {
       const { data: comment } = await supabaseAdmin
@@ -60,7 +61,7 @@ export async function POST(
 export async function DELETE(
   request: NextRequest,
 ) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Niet ingelogd' }, { status: 401 });
 

@@ -8,16 +8,17 @@ import { createNotificationForMany } from '@/lib/notifications';
 // ────────────────────────────────────────────
 export async function GET(
   _request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = createClient();
+  const { id } = await params;
+  const supabase = await createClient();
 
   const { data, error } = await supabase
     .from('comments')
     .select(
       '*, user:profiles!comments_user_id_fkey(id, display_name, avatar_url)'
     )
-    .eq('recipe_id', params.id)
+    .eq('recipe_id', id)
     .order('created_at', { ascending: true });
 
   if (error) {
@@ -32,9 +33,10 @@ export async function GET(
 // ────────────────────────────────────────────
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = createClient();
+  const { id } = await params;
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -55,7 +57,7 @@ export async function POST(
   const { data, error } = await supabase
     .from('comments')
     .insert({
-      recipe_id: params.id,
+      recipe_id: id,
       user_id: user.id,
       tekst: body.tekst.trim(),
       parent_id: body.parent_id || null,
@@ -70,7 +72,7 @@ export async function POST(
   }
 
   // ── Send notifications (fire-and-forget) ──
-  const recipeId = params.id;
+  const recipeId = id;
   (async () => {
     try {
       const { data: actorProfile } = await supabaseAdmin

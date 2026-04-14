@@ -3,9 +3,10 @@ import { createClient } from '@/lib/supabase/server';
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = createClient();
+  const { id } = await params;
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -19,7 +20,7 @@ export async function POST(
 
   if (sterren === 0) {
     await supabase.from('collection_ratings').delete()
-      .eq('collection_id', params.id)
+      .eq('collection_id', id)
       .eq('user_id', user.id);
     return NextResponse.json({ success: true });
   }
@@ -34,7 +35,7 @@ export async function POST(
   const { data: existing } = await supabase
     .from('collection_ratings')
     .select('id')
-    .eq('collection_id', params.id)
+    .eq('collection_id', id)
     .eq('user_id', user.id)
     .single();
 
@@ -49,7 +50,7 @@ export async function POST(
     }
   } else {
     const { error } = await supabase.from('collection_ratings').insert({
-      collection_id: params.id,
+      collection_id: id,
       user_id: user.id,
       sterren,
     });

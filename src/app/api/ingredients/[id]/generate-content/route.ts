@@ -5,10 +5,10 @@ import Anthropic from '@anthropic-ai/sdk';
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   // Auth check
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
     return new Response(JSON.stringify({ error: 'Niet ingelogd' }), {
@@ -17,7 +17,7 @@ export async function POST(
     });
   }
 
-  const { id } = params;
+  const { id } = await params;
 
   // Fetch ingredient
   const { data: ingredient, error } = await supabaseAdmin

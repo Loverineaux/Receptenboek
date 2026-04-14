@@ -4,9 +4,10 @@ import { createClient } from '@/lib/supabase/server';
 // POST /api/collections/[id]/duplicate — duplicate a collection with a new title
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = createClient();
+  const { id } = await params;
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -26,7 +27,7 @@ export async function POST(
   const { data: sourceRecipes, error: fetchError } = await supabase
     .from('collection_recipes')
     .select('recipe_id, sort_order')
-    .eq('collection_id', params.id);
+    .eq('collection_id', id);
 
   if (fetchError) {
     return NextResponse.json({ error: fetchError.message }, { status: 500 });

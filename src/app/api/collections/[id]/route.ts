@@ -5,9 +5,10 @@ import { isAdmin } from '@/lib/admin';
 // GET /api/collections/[id] — collection with all recipes
 export async function GET(
   _request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = createClient();
+  const { id } = await params;
+  const supabase = await createClient();
 
   const { data: collection, error } = await supabase
     .from('collections')
@@ -26,7 +27,7 @@ export async function GET(
         )
       )
     `)
-    .eq('id', params.id)
+    .eq('id', id)
     .single();
 
   if (error || !collection) {
@@ -57,7 +58,7 @@ export async function GET(
   const { data: collabRows } = await supabase
     .from('collection_collaborators')
     .select('user_id, profiles:profiles!collection_collaborators_user_id_fkey(id, display_name, avatar_url)')
-    .eq('collection_id', params.id);
+    .eq('collection_id', id);
 
   const collaborators = (collabRows ?? []).map((r: any) => r.profiles).filter(Boolean);
 
@@ -65,7 +66,7 @@ export async function GET(
   const { count: followerCount } = await supabase
     .from('collection_follows')
     .select('*', { count: 'exact', head: true })
-    .eq('collection_id', params.id);
+    .eq('collection_id', id);
 
   // Check if current user follows / is collaborator
   const {
@@ -79,7 +80,7 @@ export async function GET(
     const { data: followRow } = await supabase
       .from('collection_follows')
       .select('user_id')
-      .eq('collection_id', params.id)
+      .eq('collection_id', id)
       .eq('user_id', currentUser.id)
       .maybeSingle();
     isFollowing = !!followRow;
@@ -91,7 +92,7 @@ export async function GET(
   const { data: ratingsData } = await supabase
     .from('collection_ratings')
     .select('sterren, user_id')
-    .eq('collection_id', params.id);
+    .eq('collection_id', id);
 
   const ratings = ratingsData ?? [];
   const avgRating = ratings.length > 0
@@ -117,9 +118,10 @@ export async function GET(
 // PUT /api/collections/[id] — update title/description
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = createClient();
+  const { id } = await params;
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -138,7 +140,7 @@ export async function PUT(
       ...(title !== undefined && { title: title.trim() }),
       ...(description !== undefined && { description: description?.trim() || null }),
     })
-    .eq('id', params.id);
+    .eq('id', id);
 
   if (!admin) query = query.eq('user_id', user.id);
 
@@ -154,9 +156,10 @@ export async function PUT(
 // DELETE /api/collections/[id]
 export async function DELETE(
   _request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = createClient();
+  const { id } = await params;
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -169,7 +172,7 @@ export async function DELETE(
   let query = supabase
     .from('collections')
     .delete()
-    .eq('id', params.id);
+    .eq('id', id);
 
   if (!admin) query = query.eq('user_id', user.id);
 

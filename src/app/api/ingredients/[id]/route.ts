@@ -37,9 +37,9 @@ async function supabaseRestMutate(path: string, method: string, body: any) {
 // GET /api/ingredients/[id]
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = params;
+  const { id } = await params;
 
   const ingredients = await supabaseRest(
     `generic_ingredients?id=eq.${id}&select=*&limit=1`
@@ -73,16 +73,16 @@ export async function GET(
 // PUT /api/ingredients/[id]
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { id } = params;
+  const { id } = await params;
 
   // Ownership check: only creator or admin can edit
   const admin = await isAdmin(supabase);

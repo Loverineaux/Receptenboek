@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 
 // GET /api/collections — list all collections with recipe count and preview images
 export async function GET() {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { data: collections, error } = await supabase
     .from('collections')
@@ -74,7 +74,7 @@ export async function GET() {
 
 // POST /api/collections — create new collection
 export async function POST(request: NextRequest) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

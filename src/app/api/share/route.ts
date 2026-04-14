@@ -5,7 +5,7 @@ import { createNotification } from '@/lib/notifications';
 
 // POST /api/share — share a recipe or collection with a user (sends notification)
 export async function POST(request: NextRequest) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) {

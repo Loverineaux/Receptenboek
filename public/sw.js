@@ -58,12 +58,15 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Static assets & Next.js chunks: cache-first
+  // Next.js build chunks: skip caching — let Next.js handle its own cache-busting
+  if (url.pathname.startsWith('/_next/')) {
+    return;
+  }
+
+  // Static assets: cache-first
   if (
-    url.pathname.startsWith('/_next/static/') ||
     url.pathname.startsWith('/icons/') ||
     url.pathname.endsWith('.css') ||
-    url.pathname.endsWith('.js') ||
     url.pathname.endsWith('.png') ||
     url.pathname.endsWith('.jpg') ||
     url.pathname.endsWith('.svg') ||

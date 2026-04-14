@@ -3,13 +3,14 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 
 export async function GET(
   _request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   // Fetch profile (bypasses RLS)
   const { data: profile } = await supabaseAdmin
     .from('profiles')
     .select('id, display_name, avatar_url, bio, created_at, last_seen')
-    .eq('id', params.id)
+    .eq('id', id)
     .single();
 
   if (!profile) {
@@ -20,7 +21,7 @@ export async function GET(
   const { data: recipes } = await supabaseAdmin
     .from('recipes')
     .select('id, title, image_url, bron, tijd, created_at, user_id, ratings(sterren, user_id), tags:recipe_tags(tag:tags(id, name)), comments(id), ingredients(naam)')
-    .eq('user_id', params.id)
+    .eq('user_id', id)
     .order('created_at', { ascending: false });
 
   // Stats

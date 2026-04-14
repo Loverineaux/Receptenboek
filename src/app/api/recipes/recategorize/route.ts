@@ -74,7 +74,7 @@ Antwoord ALLEEN als JSON array, bijv. ["Kip", "Pasta"]. Geen tekst.`
 
 // GET /api/recipes/recategorize?mode=missing|all — SSE stream
 export async function GET(request: NextRequest) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) {

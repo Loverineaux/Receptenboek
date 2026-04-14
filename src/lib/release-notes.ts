@@ -6,6 +6,17 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '1.9.0',
+    date: '14 april 2026',
+    highlights: [
+      'De app draait nu op een nieuwere, snellere versie van het platform',
+      'Pagina\'s laden merkbaar sneller tijdens het ontwikkelen en gebruik',
+      'Een terugkerend probleem waarbij de app bleef hangen bij het laden is opgelost',
+      'De favorietenteller telde soms dubbel — dit is verholpen',
+      'Alle onderdelen zijn bijgewerkt naar de nieuwste versies',
+    ],
+  },
+  {
     version: '1.8.7',
     date: '13 april 2026',
     highlights: [
@@ -22,16 +33,6 @@ export const releaseNotes: ReleaseNote[] = [
       'Je inloggegevens worden nog maar één keer gecontroleerd in plaats van meerdere keren tegelijk',
       'Je profiel en profielfoto laden sneller bij het openen van de app',
       'Minder belasting op de server bij het openen van de app',
-    ],
-  },
-  {
-    version: '1.8.5',
-    date: '13 april 2026',
-    highlights: [
-      'De app laadt na inactiviteit veel sneller — geen onnodige wachttijd meer',
-      'Receptdetails openen nu direct, ook als je profiel nog aan het laden is',
-      'Het favorieten-icoontje en de teller laden sneller bij het openen van een recept',
-      'Je profiel wordt niet meer dubbel opgehaald bij het vernieuwen van je sessie',
     ],
   },
 ];

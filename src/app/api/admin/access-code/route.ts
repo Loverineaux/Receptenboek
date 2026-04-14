@@ -4,7 +4,7 @@ import { isAdmin } from '@/lib/admin';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 
 export async function GET() {
-  const supabase = createClient();
+  const supabase = await createClient();
   if (!(await isAdmin(supabase))) {
     return NextResponse.json({ error: 'Geen toegang' }, { status: 403 });
   }
@@ -19,7 +19,7 @@ export async function GET() {
 }
 
 export async function PUT(request: NextRequest) {
-  const supabase = createClient();
+  const supabase = await createClient();
   if (!(await isAdmin(supabase))) {
     return NextResponse.json({ error: 'Geen toegang' }, { status: 403 });
   }

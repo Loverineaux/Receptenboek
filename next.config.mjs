@@ -12,20 +12,27 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  serverExternalPackages: [
+    'puppeteer-extra',
+    'puppeteer-extra-plugin-stealth',
+    'puppeteer-core',
+    'firebase-admin',
+    '@anthropic-ai/sdk',
+  ],
   experimental: {
     serverActions: {
       bodySizeLimit: '100mb',
     },
-    serverComponentsExternalPackages: [
-      'puppeteer-extra',
-      'puppeteer-extra-plugin-stealth',
-      'puppeteer-core',
-    ],
   },
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: '**' },
     ],
+  },
+  turbopack: {
+    resolveAlias: {
+      canvas: './empty-module.js',
+    },
   },
   webpack: (config) => {
     config.resolve.alias.canvas = false;
