@@ -6,12 +6,12 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
-    version: '1.12.0',
+    version: '1.12.1',
     date: '14 april 2026',
     highlights: [
       'Gedeelde receptlinks tonen nu de foto en titel van het recept in WhatsApp, iMessage en andere apps',
       'Wanneer iemand op een gedeelde link klikt en niet is ingelogd, wordt diegene eerst naar het inlogscherm gestuurd en daarna automatisch doorverwezen naar het recept',
-      'Niet-ingelogde gebruikers hebben geen toegang tot de rest van de app',
+      'Je wordt niet meer onterecht uitgelogd bij een trage verbinding',
     ],
   },
   {
