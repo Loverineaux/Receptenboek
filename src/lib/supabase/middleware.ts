@@ -38,8 +38,11 @@ export async function updateSession(request: NextRequest) {
     }
   )
 
-  // Refreshing the auth token
+  // Refresh the auth token — but don't redirect on transient failures
   const { data: { user } } = await supabase.auth.getUser()
+
+  // Check if a session cookie exists (even if getUser failed due to network issues)
+  const hasSessionCookie = request.cookies.getAll().some((c) => c.name.startsWith('sb-') && c.name.includes('auth-token'))
 
   const pathname = request.nextUrl.pathname
 
@@ -53,8 +56,8 @@ export async function updateSession(request: NextRequest) {
   const isSocialBot = /bot|crawl|spider|WhatsApp|facebookexternalhit|Twitterbot|TelegramBot|LinkedInBot|Googlebot|Slackbot|Discordbot|iMessageBot|Applebot|Bingbot|Pinterestbot/i.test(ua)
 
   // Redirect unauthenticated users to login (except public pages, assets, and bots)
-  // Include the original path as redirect param so login can send them back
-  if (!user && !isPublicPath && !isAssetPath && !isSocialBot) {
+  // Only redirect if there's genuinely no session — not on transient getUser() failures
+  if (!user && !hasSessionCookie && !isPublicPath && !isAssetPath && !isSocialBot) {
     const loginUrl = new URL('/login', request.url)
     if (pathname !== '/') {
       loginUrl.searchParams.set('redirect', pathname)
