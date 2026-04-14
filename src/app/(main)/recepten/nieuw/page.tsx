@@ -1131,7 +1131,7 @@ export default function NieuwReceptPage() {
 
       {/* ── URL import ─────────────────────────────── */}
       {activeTab === 'url' && (
-        <div className="space-y-4 rounded-xl border bg-surface p-6">
+        <div data-tour="url-import-section" className="space-y-4 rounded-xl border bg-surface p-6">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-text-primary">
               Importeer van URL

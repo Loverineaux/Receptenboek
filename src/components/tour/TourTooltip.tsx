@@ -55,31 +55,54 @@ export default function TourTooltip({
       return
     }
 
+    // Check which positions have enough space WITHOUT overlapping the target
+    const spaceAbove = targetRect.top - gap
+    const spaceBelow = vh - targetRect.bottom - gap
+    const spaceLeft = targetRect.left - gap
+    const spaceRight = vw - targetRect.right - gap
+
+    // Pick the best position: prefer the requested one, fallback to where there's space
+    const candidates: Array<'top' | 'bottom' | 'left' | 'right'> = [position]
+    if (!candidates.includes('bottom')) candidates.push('bottom')
+    if (!candidates.includes('top')) candidates.push('top')
+    if (!candidates.includes('left')) candidates.push('left')
+    if (!candidates.includes('right')) candidates.push('right')
+
     let top = 0
     let left = 0
+    let placed = false
 
-    // Calculate position based on preference
-    if (position === 'bottom') {
-      top = targetRect.bottom + gap
-      left = targetRect.left + (targetRect.width - tw) / 2
-    } else if (position === 'top') {
-      top = targetRect.top - th - gap
-      left = targetRect.left + (targetRect.width - tw) / 2
-    } else if (position === 'left') {
-      top = targetRect.top + (targetRect.height - th) / 2
-      left = targetRect.left - tw - gap
-    } else if (position === 'right') {
-      top = targetRect.top + (targetRect.height - th) / 2
-      left = targetRect.right + gap
+    for (const dir of candidates) {
+      if (dir === 'bottom' && spaceBelow >= th) {
+        top = targetRect.bottom + gap
+        left = targetRect.left + (targetRect.width - tw) / 2
+        placed = true
+        break
+      } else if (dir === 'top' && spaceAbove >= th) {
+        top = targetRect.top - th - gap
+        left = targetRect.left + (targetRect.width - tw) / 2
+        placed = true
+        break
+      } else if (dir === 'left' && spaceLeft >= tw) {
+        top = targetRect.top + (targetRect.height - th) / 2
+        left = targetRect.left - tw - gap
+        placed = true
+        break
+      } else if (dir === 'right' && spaceRight >= tw) {
+        top = targetRect.top + (targetRect.height - th) / 2
+        left = targetRect.right + gap
+        placed = true
+        break
+      }
     }
 
-    // Fallback: if tooltip overflows viewport, try opposite side
-    if (top + th > vh - 16) top = targetRect.top - th - gap
-    if (top < 16) top = targetRect.bottom + gap
-    if (left + tw > vw - 16) left = vw - tw - 16
-    if (left < 16) left = 16
+    // Last resort: place below, even if it overlaps slightly
+    if (!placed) {
+      top = targetRect.bottom + gap
+      left = targetRect.left + (targetRect.width - tw) / 2
+    }
 
-    // Final clamp
+    // Clamp to viewport
     top = Math.max(16, Math.min(top, vh - th - 16))
     left = Math.max(16, Math.min(left, vw - tw - 16))
 

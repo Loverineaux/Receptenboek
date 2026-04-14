@@ -107,11 +107,12 @@ export const tourSteps: TourStep[] = [
   {
     id: 'new-recipe-url',
     page: '/recepten/nieuw',
-    targetSelector: '[data-tour="new-recipe-tabs"]',
+    targetSelector: '[data-tour="url-import-section"]',
     title: 'URL importeren',
     description: 'De makkelijkste manier! Plak een link van een receptenwebsite (bijv. Albert Heijn, HelloFresh) en het recept wordt automatisch overgenomen inclusief foto, ingrediënten en bereidingsstappen.',
     position: 'bottom',
-    padding: 12,
+    padding: 8,
+    clickBefore: '[data-tour="new-recipe-tabs"] button:nth-child(1)',
   },
 
   {
