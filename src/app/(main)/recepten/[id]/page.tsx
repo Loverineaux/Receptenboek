@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import {
@@ -201,17 +201,32 @@ type Tab = 'ingredienten' | 'bereiding' | 'voeding';
 
 const CATEGORY_LIST = ['Kip', 'Vlees', 'Vis', 'Vegetarisch', 'Veganistisch', 'Pasta', 'Salade', 'Soep', 'Dessert', 'Ontbijt', 'Lunch'];
 
-export default function RecipeDetailPage() {
+export default function RecipeDetailPageWrapper() {
+  return (
+    <Suspense>
+      <RecipeDetailPage />
+    </Suspense>
+  );
+}
+
+function RecipeDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useAuth();
   const { isAdmin: isAdminUser } = useAdmin();
   const supabase = createClient();
 
   const [recipe, setRecipe] = useState<RecipeWithRelations | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<Tab>('ingredienten');
-  const [portions, setPortions] = useState(2);
+  const [tab, setTab] = useState<Tab>(() => {
+    const t = searchParams.get('tab');
+    return t === 'bereiding' || t === 'voeding' ? t : 'ingredienten';
+  });
+  const [portions, setPortions] = useState(() => {
+    const p = Number(searchParams.get('porties'));
+    return p > 0 ? p : 2;
+  });
   const [isFavorited, setIsFavorited] = useState(false);
   const [favoriteCount, setFavoriteCount] = useState(0);
   const [userRating, setUserRating] = useState(0);
@@ -233,6 +248,15 @@ export default function RecipeDetailPage() {
   const [calculation, setCalculation] = useState<any>(null);
   const [nutritionOpen, setNutritionOpen] = useState(false);
   const nutritionFetched = useRef(false);
+
+  // Persist tab + portions in URL so state survives app suspend / screen off
+  useEffect(() => {
+    const p = new URLSearchParams();
+    if (tab !== 'ingredienten') p.set('tab', tab);
+    if (recipe && portions !== recipe.basis_porties) p.set('porties', String(portions));
+    const qs = p.toString();
+    router.replace(`/recepten/${params.id}${qs ? `?${qs}` : ''}`, { scroll: false });
+  }, [tab, portions, recipe, params.id, router]);
 
   // Auto-calculate nutrition when tab is 'voeding' and no source nutrition exists
   useEffect(() => {
@@ -318,7 +342,11 @@ export default function RecipeDetailPage() {
     };
 
     setRecipe(r);
-    setPortions(r.basis_porties);
+    // Only set default portions if not already set via URL params
+    setPortions((prev) => {
+      const urlPortions = Number(searchParams.get('porties'));
+      return urlPortions > 0 ? urlPortions : r.basis_porties;
+    });
     setComments(data.comments ?? []);
     setFavoriteCount(fetchedFavCount);
     setIsFavorited(fetchedIsFavorited);
