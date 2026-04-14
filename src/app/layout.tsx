@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import PWAInstall from '@/components/layout/PWAInstall';
+import NavigationProgress from '@/components/layout/NavigationProgress';
 import { AuthProvider } from '@/contexts/AuthContext';
 
 export const metadata: Metadata = {
@@ -33,6 +34,7 @@ export default function RootLayout({
     <html lang="nl">
       <body className="font-sans antialiased">
         <AuthProvider>
+          <NavigationProgress />
           {children}
           <PWAInstall />
         </AuthProvider>
