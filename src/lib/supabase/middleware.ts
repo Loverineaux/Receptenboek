@@ -38,20 +38,73 @@ export async function updateSession(request: NextRequest) {
     }
   )
 
-  // Use getSession() instead of getUser() — reads from cookie, no network call
-  // getUser() always calls Supabase which adds 500ms+ latency on every page load
-  let session = null
-  try {
-    const { data } = await supabase.auth.getSession()
-    session = data?.session
-  } catch {
-    // Cookie parsing can fail with corrupted/malformed session data — continue as unauthenticated
-  }
+  // Refreshing the auth token
+  const { data: { user } } = await supabase.auth.getUser()
 
   const pathname = request.nextUrl.pathname
 
+  // Public routes that don't require authentication
+  const publicPaths = ['/login', '/register', '/wachtwoord-vergeten', '/api/auth']
+  const isPublicPath = publicPaths.some((p) => pathname.startsWith(p))
+  const isAssetPath = pathname.startsWith('/api/') || pathname.startsWith('/_next/') || pathname.includes('.') || pathname === '/sw.js' || pathname === '/manifest.json'
+
+  // Redirect unauthenticated users to login (except public pages and assets)
+  if (!user && !isPublicPath && !isAssetPath) {
+    return NextResponse.redirect(new URL('/login', request.url))
+  }
+
+  // Redirect blocked users to /geblokkeerd
+  if (user && pathname !== '/geblokkeerd'
+    && !pathname.startsWith('/api/')
+    && !pathname.startsWith('/_next/')
+    && !pathname.includes('.')
+  ) {
+    const cachedCheck = request.cookies.get('blocked_check')?.value
+    let isBlocked = false
+
+    if (cachedCheck) {
+      const [cachedUid, cachedTs, cachedBlocked] = cachedCheck.split(':')
+      const cacheAge = Date.now() - Number(cachedTs)
+      if (cachedUid === user.id && cacheAge < 5 * 60 * 1000) {
+        isBlocked = cachedBlocked === '1'
+      } else {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('is_blocked')
+          .eq('id', user.id)
+          .single()
+        isBlocked = !!profile?.is_blocked
+        response.cookies.set('blocked_check', `${user.id}:${Date.now()}:${isBlocked ? '1' : '0'}`, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          maxAge: 300,
+          path: '/',
+        })
+      }
+    } else {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('is_blocked')
+        .eq('id', user.id)
+        .single()
+      isBlocked = !!profile?.is_blocked
+      response.cookies.set('blocked_check', `${user.id}:${Date.now()}:${isBlocked ? '1' : '0'}`, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 300,
+        path: '/',
+      })
+    }
+
+    if (isBlocked) {
+      return NextResponse.redirect(new URL('/geblokkeerd', request.url))
+    }
+  }
+
   // Protect admin routes — require login
-  if (pathname.startsWith('/admin') && !session?.user) {
+  if (pathname.startsWith('/admin') && !user) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
