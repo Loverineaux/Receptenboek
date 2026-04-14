@@ -6,11 +6,11 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
-    version: '1.11.0',
+    version: '1.11.1',
     date: '14 april 2026',
     highlights: [
-      'Wanneer je een recept deelt via WhatsApp of social media, ziet de ontvanger nu de foto, titel en beschrijving van het recept',
-      'Geen saaie standaard-link meer — gedeelde recepten zien er nu aantrekkelijk uit',
+      'Gedeelde receptlinks tonen nu altijd de foto en titel — ongeacht via welke app je deelt',
+      'Iemand die een gedeeld recept opent kan het recept bekijken, ook zonder account',
     ],
   },
   {
