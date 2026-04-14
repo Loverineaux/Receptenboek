@@ -6,11 +6,12 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
-    version: '1.11.1',
+    version: '1.12.0',
     date: '14 april 2026',
     highlights: [
-      'Gedeelde receptlinks tonen nu altijd de foto en titel — ongeacht via welke app je deelt',
-      'Iemand die een gedeeld recept opent kan het recept bekijken, ook zonder account',
+      'Gedeelde receptlinks tonen nu de foto en titel van het recept in WhatsApp, iMessage en andere apps',
+      'Wanneer iemand op een gedeelde link klikt en niet is ingelogd, wordt diegene eerst naar het inlogscherm gestuurd en daarna automatisch doorverwezen naar het recept',
+      'Niet-ingelogde gebruikers hebben geen toegang tot de rest van de app',
     ],
   },
   {
