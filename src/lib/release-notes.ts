@@ -6,6 +6,15 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '1.10.1',
+    date: '14 april 2026',
+    highlights: [
+      'De app is nu alleen toegankelijk voor ingelogde gebruikers — bezoekers zonder account worden doorgestuurd naar het inlogscherm',
+      'Bij een recept onthouden we nu op welk tabblad je zat en hoeveel porties je had ingesteld, ook als je even wegschakelt naar een andere app',
+      'Er is een subtiele laadbalk bovenaan zichtbaar bij het wisselen tussen pagina\'s',
+    ],
+  },
+  {
     version: '1.10.0',
     date: '14 april 2026',
     highlights: [
@@ -22,17 +31,6 @@ export const releaseNotes: ReleaseNote[] = [
       'Pagina\'s laden sneller na een periode van inactiviteit',
       'Je inloggegevens worden nu slimmer gecontroleerd — minder wachttijd',
       'Een fout bij het gelijktijdig openen van de app in meerdere tabbladen is opgelost',
-    ],
-  },
-  {
-    version: '1.9.0',
-    date: '14 april 2026',
-    highlights: [
-      'De app draait nu op een nieuwere, snellere versie van het platform',
-      'Pagina\'s laden merkbaar sneller tijdens het ontwikkelen en gebruik',
-      'Een terugkerend probleem waarbij de app bleef hangen bij het laden is opgelost',
-      'De favorietenteller telde soms dubbel — dit is verholpen',
-      'Alle onderdelen zijn bijgewerkt naar de nieuwste versies',
     ],
   },
 ];
