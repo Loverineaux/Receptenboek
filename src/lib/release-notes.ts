@@ -6,6 +6,14 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '1.11.0',
+    date: '14 april 2026',
+    highlights: [
+      'Wanneer je een recept deelt via WhatsApp of social media, ziet de ontvanger nu de foto, titel en beschrijving van het recept',
+      'Geen saaie standaard-link meer — gedeelde recepten zien er nu aantrekkelijk uit',
+    ],
+  },
+  {
     version: '1.10.1',
     date: '14 april 2026',
     highlights: [
@@ -22,15 +30,6 @@ export const releaseNotes: ReleaseNote[] = [
       'De rondleiding laat stap voor stap zien wat je kunt doen: recepten zoeken, beoordelen, favorieten opslaan, collecties maken en meer',
       'Je wordt meegenomen langs de receptdetailpagina, collecties, suggesties, ingrediënten en het aanmaken van nieuwe recepten',
       'De rondleiding is altijd te skippen en opnieuw te starten via Instellingen',
-    ],
-  },
-  {
-    version: '1.9.1',
-    date: '14 april 2026',
-    highlights: [
-      'Pagina\'s laden sneller na een periode van inactiviteit',
-      'Je inloggegevens worden nu slimmer gecontroleerd — minder wachttijd',
-      'Een fout bij het gelijktijdig openen van de app in meerdere tabbladen is opgelost',
     ],
   },
 ];
