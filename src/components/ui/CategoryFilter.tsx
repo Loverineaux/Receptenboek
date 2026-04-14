@@ -26,7 +26,7 @@ export default function CategoryFilter({ selected, onChange }: CategoryFilterPro
   };
 
   return (
-    <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
+    <div data-tour="category-filter" className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
       {categories.map((cat) => {
         const isActive = cat === 'Alles' ? selected === null : selected === cat;
 

@@ -6,6 +6,16 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '1.10.0',
+    date: '14 april 2026',
+    highlights: [
+      'Nieuwe gebruikers krijgen een interactieve rondleiding door de app',
+      'De rondleiding laat stap voor stap zien wat je kunt doen: recepten zoeken, beoordelen, favorieten opslaan, collecties maken en meer',
+      'Je wordt meegenomen langs de receptdetailpagina, collecties, suggesties, ingrediënten en het aanmaken van nieuwe recepten',
+      'De rondleiding is altijd te skippen en opnieuw te starten via Instellingen',
+    ],
+  },
+  {
     version: '1.9.1',
     date: '14 april 2026',
     highlights: [
@@ -23,15 +33,6 @@ export const releaseNotes: ReleaseNote[] = [
       'Een terugkerend probleem waarbij de app bleef hangen bij het laden is opgelost',
       'De favorietenteller telde soms dubbel — dit is verholpen',
       'Alle onderdelen zijn bijgewerkt naar de nieuwste versies',
-    ],
-  },
-  {
-    version: '1.8.7',
-    date: '13 april 2026',
-    highlights: [
-      'Beoordelingen, reacties en favorieten laden nu rechtstreeks — zonder omweg via de server',
-      'De wachttijd na inactiviteit is hierdoor fors korter geworden',
-      'Een fout bij het lezen van je sessiegegevens is verholpen',
     ],
   },
 ];

@@ -107,7 +107,7 @@ export default function SuggestiesPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div data-tour="suggesties-page" className="space-y-6">
       <div className="flex items-center gap-3">
         <Soup className="h-7 w-7 text-primary" />
         <h1 className="text-2xl font-bold text-text-primary">Wat kan ik koken?</h1>

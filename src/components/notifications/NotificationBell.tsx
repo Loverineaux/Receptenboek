@@ -92,6 +92,7 @@ export default function NotificationBell() {
     <div ref={panelRef} className="relative">
       {/* Bell button */}
       <button
+        data-tour="notification-bell"
         onClick={() => setOpen(!open)}
         className="relative flex h-9 w-9 items-center justify-center rounded-full text-text-muted transition-colors hover:bg-gray-100 hover:text-text-primary"
         title="Meldingen"

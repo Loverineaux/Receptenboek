@@ -136,7 +136,7 @@ export default function CollectiesPage() {
 
   return (
     <PullToRefresh onRefresh={fetchCollections}>
-    <div className="space-y-6">
+    <div data-tour="collections-page" className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <FolderOpen className="h-7 w-7 text-primary" />

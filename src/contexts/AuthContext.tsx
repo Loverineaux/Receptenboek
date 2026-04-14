@@ -12,6 +12,7 @@ interface Profile {
   bio: string | null
   role: string | null
   is_blocked: boolean | null
+  has_completed_tour: boolean | null
 }
 
 export interface AuthContextValue {
@@ -39,7 +40,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (userId: string) => {
       const { data } = await supabase
         .from('profiles')
-        .select('id, email, display_name, avatar_url, bio, role, is_blocked')
+        .select('id, email, display_name, avatar_url, bio, role, is_blocked, has_completed_tour')
         .eq('id', userId)
         .single()
 

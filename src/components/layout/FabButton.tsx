@@ -25,7 +25,7 @@ export default function FabButton() {
   // Recepten overview: new recipe
   if (pathname === '/recepten') {
     return (
-      <Link href="/recepten/nieuw" className={FAB_CLASSES}>
+      <Link href="/recepten/nieuw" data-tour="fab-button" className={FAB_CLASSES}>
         <Plus className="h-6 w-6" />
       </Link>
     );

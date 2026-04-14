@@ -67,6 +67,8 @@ export default function RecipeCard({ recipe, onFavoriteToggle, onRate, userRatin
 
   return (
     <div
+      data-tour="recipe-card"
+      data-recipe-id={recipe.id}
       onClick={handleClick}
       className="group relative w-full cursor-pointer overflow-hidden rounded-xl border border-gray-200 bg-surface shadow-sm transition-all duration-200 hover:scale-[1.02] hover:shadow-lg sm:w-72"
     >
@@ -92,7 +94,7 @@ export default function RecipeCard({ recipe, onFavoriteToggle, onRate, userRatin
         </div>
 
         {/* Action buttons — top right */}
-        <div className="absolute right-2 top-2 flex items-center gap-2">
+        <div data-tour="card-actions" className="absolute right-2 top-2 flex items-center gap-2">
           {onShare && (
             <button
               onClick={(e) => { e.stopPropagation(); onShare(recipe.id); }}
@@ -116,6 +118,7 @@ export default function RecipeCard({ recipe, onFavoriteToggle, onRate, userRatin
             </button>
           )}
           <button
+            data-tour="favorite-button"
             onClick={handleFavoriteClick}
             className="flex items-center gap-1 rounded-full bg-white/80 px-2 py-1.5 backdrop-blur-sm transition-colors hover:bg-white"
           >
@@ -163,7 +166,7 @@ export default function RecipeCard({ recipe, onFavoriteToggle, onRate, userRatin
         )}
         <div className="mt-1.5 flex items-center justify-between" onClick={(e) => e.stopPropagation()}>
           {onRate ? (
-            <div className="flex items-center gap-1.5">
+            <div data-tour="star-rating" className="flex items-center gap-1.5">
               <StarRating
                 value={liveAvg.avg}
                 onChange={(rating) => onRate(recipe.id, rating === userRating ? 0 : rating)}
@@ -186,7 +189,7 @@ export default function RecipeCard({ recipe, onFavoriteToggle, onRate, userRatin
               count={recipe.rating_count ?? recipe.ratings?.length ?? 0}
             />
           )}
-          <div className="flex items-center gap-1 text-xs text-text-muted">
+          <div data-tour="comment-count" className="flex items-center gap-1 text-xs text-text-muted">
             <MessageCircle className="h-3.5 w-3.5" />
             <span>{recipe.comment_count ?? recipe.comments?.length ?? 0}</span>
           </div>

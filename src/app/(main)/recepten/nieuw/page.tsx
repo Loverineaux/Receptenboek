@@ -927,7 +927,7 @@ export default function NieuwReceptPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div data-tour="new-recipe-page" className="mx-auto max-w-3xl space-y-6">
       <h1 className="text-2xl font-bold text-text-primary">Nieuw recept</h1>
 
       {/* Busy banner */}
@@ -940,7 +940,7 @@ export default function NieuwReceptPage() {
 
       {/* Tab selector — hidden during preview */}
       {activeTab !== 'preview' && (
-      <div className="flex flex-wrap gap-2 border-b pb-3">
+      <div data-tour="new-recipe-tabs" className="flex flex-wrap gap-2 border-b pb-3">
         {tabs.map((t) => (
           <button
             key={t.key}

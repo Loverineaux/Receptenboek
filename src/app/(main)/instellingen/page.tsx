@@ -4,10 +4,11 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft, Loader2, Bell, User, Shield, LogOut,
-  ChevronRight, Trash2, ChefHat, Users, Info,
+  ChevronRight, Trash2, ChefHat, Users, Info, HelpCircle,
 } from 'lucide-react';
 import Image from 'next/image';
 import { useAuth } from '@/hooks/useAuth';
+import { useTour } from '@/hooks/useTour';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 
 function SettingsItem({
@@ -65,6 +66,7 @@ function SectionLabel({ children }: { children: string }) {
 export default function InstellingenPage() {
   const router = useRouter();
   const { user, profile, loading: authLoading, signOut } = useAuth();
+  const { startTour } = useTour();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -192,6 +194,19 @@ export default function InstellingenPage() {
       {/* ── About ── */}
       <SectionLabel>Over</SectionLabel>
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-surface">
+        <SettingsItem
+          icon={HelpCircle}
+          label="Rondleiding"
+          description="Bekijk de introductierondleiding opnieuw"
+          onClick={async () => {
+            localStorage.removeItem('tour-completed');
+            const supabase = (await import('@/lib/supabase/client')).createClient();
+            await supabase.from('profiles').update({ has_completed_tour: false }).eq('id', user!.id);
+            router.push('/recepten');
+            setTimeout(() => startTour(), 1500);
+          }}
+        />
+        <Divider />
         <SettingsItem
           icon={Info}
           label="Over Receptenboek"

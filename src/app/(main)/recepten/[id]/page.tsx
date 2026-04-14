@@ -905,6 +905,7 @@ export default function RecipeDetailPage() {
           <PortieSelector value={portions} onChange={handlePortionChange} />
         </div>
         <Button
+          data-tour="recipe-cook-mode"
           variant="primary"
           size="sm"
           onClick={() => setCookMode(true)}
@@ -934,7 +935,7 @@ export default function RecipeDetailPage() {
       )}
 
       {/* ── Tabs ───────────────────────────────────── */}
-      <div className="flex border-b">
+      <div data-tour="recipe-tabs" className="flex border-b">
         {tabs.map((t) => (
           <button
             key={t.key}
@@ -952,7 +953,7 @@ export default function RecipeDetailPage() {
 
       {/* ── Tab content ────────────────────────────── */}
       {tab === 'ingredienten' && (
-        <div className="space-y-1">
+        <div data-tour="recipe-ingredients" className="space-y-1">
           {recipe.ingredients.map((ing) => {
             // Try to parse amount from hoeveelheid field first
             let parsed = parseAmount(ing.hoeveelheid);
@@ -1024,7 +1025,7 @@ export default function RecipeDetailPage() {
       )}
 
       {tab === 'bereiding' && (
-        <div className="space-y-6">
+        <div data-tour="recipe-steps" className="space-y-6">
           {scalingSteps && (
             <div className="flex items-center gap-2 rounded-lg bg-primary/5 px-4 py-2 text-sm text-primary">
               <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
@@ -1068,7 +1069,7 @@ export default function RecipeDetailPage() {
         const hasSourceNutrition = !!recipe.nutrition;
 
         return (
-          <div className="space-y-4">
+          <div data-tour="recipe-nutrition" className="space-y-4">
             {/* Source nutrition from recipe (AH, HelloFresh, etc.) */}
             {hasSourceNutrition && (
               <div className="overflow-hidden rounded-lg border">
@@ -1242,7 +1243,7 @@ export default function RecipeDetailPage() {
       )}
 
       {/* ── Comments with replies ────────────────── */}
-      <section className="space-y-4">
+      <section data-tour="recipe-comments" className="space-y-4">
         <h2 className="text-lg font-semibold text-text-primary">
           Reacties {comments.length > 0 && <span className="text-text-muted font-normal">({comments.length})</span>}
         </h2>

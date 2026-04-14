@@ -67,7 +67,7 @@ export default function IngrediëntenPage() {
   }, [search, category]);
 
   return (
-    <div className="space-y-6">
+    <div data-tour="ingredienten-page" className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between gap-3">
         <h1 className="flex items-center gap-2 text-2xl font-bold text-text-primary">

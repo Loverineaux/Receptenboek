@@ -55,7 +55,7 @@ export default function Header() {
           </Link>
 
           {/* Desktop nav */}
-          <nav className="hidden items-center gap-6 md:flex">
+          <nav data-tour="desktop-nav" className="hidden items-center gap-6 md:flex">
             {navLinks.map((link) => (
               <Link
                 key={link.href}
@@ -158,7 +158,7 @@ export default function Header() {
       </header>
 
       {/* ── Mobile bottom tab bar ───────────────────── */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 border-t bg-surface md:hidden">
+      <nav data-tour="mobile-nav" className="fixed bottom-0 left-0 right-0 z-40 border-t bg-surface md:hidden">
         <div className="flex items-stretch justify-around">
           {navLinks.map((link) => {
             const Icon = link.icon;
