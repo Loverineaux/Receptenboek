@@ -48,8 +48,12 @@ export async function updateSession(request: NextRequest) {
   const isPublicPath = publicPaths.some((p) => pathname.startsWith(p))
   const isAssetPath = pathname.startsWith('/api/') || pathname.startsWith('/_next/') || pathname.includes('.') || pathname === '/sw.js' || pathname === '/manifest.json'
 
-  // Redirect unauthenticated users to login (except public pages and assets)
-  if (!user && !isPublicPath && !isAssetPath) {
+  // Allow social media bots to access recipe pages for link previews (OG tags)
+  const userAgent = request.headers.get('user-agent') || ''
+  const isSocialBot = /WhatsApp|facebookexternalhit|Twitterbot|TelegramBot|LinkedInBot|Googlebot|Slackbot|Discordbot/i.test(userAgent)
+
+  // Redirect unauthenticated users to login (except public pages, assets, and social bots)
+  if (!user && !isPublicPath && !isAssetPath && !isSocialBot) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
