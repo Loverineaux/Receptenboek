@@ -6,12 +6,12 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
-    version: '1.12.9',
+    version: '1.12.10',
     date: '15 april 2026',
     highlights: [
+      'Alle gebruikers zijn nu zichtbaar in het admin donatie-overzicht',
       'Bij het importeren van meerdere recepten tegelijk telt elke URL nu apart mee voor de donatieteller',
       'Afbeeldingen van recepten die via foto of PDF zijn geïmporteerd worden nu altijd correct opgeslagen',
-      'Link previews bij het delen van recepten tonen nu altijd de juiste afbeelding',
     ],
   },
   {
