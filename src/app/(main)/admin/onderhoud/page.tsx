@@ -170,8 +170,13 @@ export default function OnderhoudPage() {
                             {r.title}
                           </a>
                           <p className="truncate text-xs text-text-muted">
-                            {r.bron || 'Eigen recept'} · {(r.user as any)?.display_name || 'Onbekend'} · {new Date(r.created_at).toLocaleDateString('nl-NL')}
+                            {(r.user as any)?.display_name || 'Onbekend'} · {new Date(r.created_at).toLocaleDateString('nl-NL')}
                           </p>
+                          {(r as any).match_reason && (
+                            <span className="mt-0.5 inline-block truncate rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                              {(r as any).match_reason}
+                            </span>
+                          )}
                         </div>
                         <button
                           onClick={() => handleDeleteRecipe(r.id)}

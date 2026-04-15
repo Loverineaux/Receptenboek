@@ -17,7 +17,8 @@ export async function GET() {
 
   if (!recipes) return NextResponse.json({ groups: [] });
 
-  const groups: { reason: string; recipes: typeof recipes }[] = [];
+  type RecipeMatch = typeof recipes[number] & { match_reason: string };
+  const groups: { reason: string; recipes: RecipeMatch[] }[] = [];
   const usedIds = new Set<string>();
 
   // 1. Group by exact bron (same source URL)
@@ -30,7 +31,10 @@ export async function GET() {
   }
   for (const [bron, group] of bronMap) {
     if (group.length > 1) {
-      groups.push({ reason: `Zelfde bron: ${bron}`, recipes: group });
+      groups.push({
+        reason: `Zelfde bron`,
+        recipes: group.map((r: any) => ({ ...r, match_reason: `Bron: ${r.bron}` })),
+      });
       group.forEach((r: any) => usedIds.add(r.id));
     }
   }
@@ -44,7 +48,10 @@ export async function GET() {
   }
   for (const [, group] of imgMap) {
     if (group.length > 1 && !group.every((r: any) => usedIds.has(r.id))) {
-      groups.push({ reason: 'Zelfde afbeelding', recipes: group });
+      groups.push({
+        reason: 'Zelfde afbeelding',
+        recipes: group.map((r: any) => ({ ...r, match_reason: 'Identieke afbeelding' })),
+      });
       group.forEach((r: any) => usedIds.add(r.id));
     }
   }
@@ -55,6 +62,7 @@ export async function GET() {
     _norm: r.title.toLowerCase().replace(/[^a-z0-9]/g, ''),
   }));
   for (let i = 0; i < normalized.length; i++) {
+    if (usedIds.has(normalized[i].id)) continue;
     const group = [normalized[i]];
     for (let j = i + 1; j < normalized.length; j++) {
       if (usedIds.has(normalized[j].id)) continue;
@@ -70,10 +78,11 @@ export async function GET() {
         group.push(normalized[j]);
       }
     }
-    if (group.length > 1 && !group.every((r: any) => usedIds.has(r.id))) {
+    if (group.length > 1) {
+      const titles = group.map((r: any) => `"${r.title}"`).join(' ↔ ');
       groups.push({
-        reason: `Vergelijkbare titel: "${normalized[i].title}"`,
-        recipes: group.map(({ _norm, ...r }: any) => r),
+        reason: `Vergelijkbare titel`,
+        recipes: group.map(({ _norm, ...r }: any) => ({ ...r, match_reason: `Titel: ${r.title}` })),
       });
       group.forEach((r: any) => usedIds.add(r.id));
     }
