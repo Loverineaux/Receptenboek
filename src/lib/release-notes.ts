@@ -6,13 +6,13 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
-    version: '1.13.0',
+    version: '1.14.0',
     date: '15 april 2026',
     highlights: [
-      'Bij het toevoegen van een recept wordt nu gecontroleerd of het al bestaat — op basis van titel, bron en afbeelding',
-      'Als er een mogelijk duplicaat wordt gevonden, zie je een preview met foto en titel van het bestaande recept',
-      'Je kunt het bestaande recept bekijken of toch opslaan als het geen echt duplicaat is',
-      'Admins kunnen nu via het dashboard alle duplicaten in de database opsporen en opruimen',
+      'Nieuw admin-tabblad "Onderhoud" met handige tools voor het beheer van recepten',
+      'Temperaturen invullen: vul automatisch ontbrekende oven- en kerntemperaturen aan',
+      'Duplicaten opsporen: vind en verwijder recepten met dezelfde bron, afbeelding of titel',
+      'Ingrediënten herstellen: herstel automatisch hoeveelheden die verkeerd zijn geëxtraheerd',
     ],
   },
   {
