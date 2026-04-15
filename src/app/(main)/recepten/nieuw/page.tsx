@@ -229,6 +229,10 @@ export default function NieuwReceptPage() {
   const [saving, setSaving] = useState(false);
   const [navBlockToast, setNavBlockToast] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{ title: string; message: string; resolve: (v: boolean) => void } | null>(null);
+  const [duplicateCheck, setDuplicateCheck] = useState<{
+    existing: { id: string; title: string; image_url: string | null; bron: string | null; match_reason: string }[];
+    resolve: (force: boolean) => void;
+  } | null>(null);
   const [donationCount, setDonationCount] = useState<number | null>(null);
 
   /** Increment extraction counter and check if donation nudge should show */
@@ -889,8 +893,10 @@ export default function NieuwReceptPage() {
     });
 
     if (res.status === 409) {
-      const { message } = await res.json();
-      const proceed = await showConfirm('Dubbel recept', `${message}\n\nWil je het toch opslaan?`);
+      const { existing } = await res.json();
+      const proceed = await new Promise<boolean>((resolve) => {
+        setDuplicateCheck({ existing: existing ?? [], resolve });
+      });
       if (proceed) return saveRecipe(data, true);
       return null;
     }
@@ -1635,6 +1641,58 @@ export default function NieuwReceptPage() {
         onConfirm={() => { confirmDialog?.resolve(true); setConfirmDialog(null); }}
         onCancel={() => { confirmDialog?.resolve(false); setConfirmDialog(null); }}
       />
+
+      {/* Duplicate recipe preview modal */}
+      {duplicateCheck && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-xl bg-surface p-5 shadow-lg">
+            <h3 className="text-lg font-semibold text-text-primary">Mogelijk duplicaat</h3>
+            <p className="mt-1 text-sm text-text-secondary">
+              {duplicateCheck.existing.length === 1
+                ? 'Er bestaat al een vergelijkbaar recept:'
+                : `Er bestaan al ${duplicateCheck.existing.length} vergelijkbare recepten:`}
+            </p>
+            <div className="mt-3 max-h-64 space-y-2 overflow-y-auto">
+              {duplicateCheck.existing.map((r) => (
+                <a
+                  key={r.id}
+                  href={`/recepten/${r.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 rounded-lg border border-gray-200 p-2 transition-colors hover:bg-gray-50"
+                >
+                  {r.image_url ? (
+                    <img src={r.image_url} alt="" className="h-14 w-14 shrink-0 rounded-lg object-cover" />
+                  ) : (
+                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-2xl">🍽️</div>
+                  )}
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-text-primary">{r.title}</p>
+                    {r.bron && <p className="truncate text-xs text-text-muted">{r.bron}</p>}
+                    <span className="mt-0.5 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                      {r.match_reason}
+                    </span>
+                  </div>
+                </a>
+              ))}
+            </div>
+            <div className="mt-4 flex gap-2">
+              <button
+                onClick={() => { duplicateCheck.resolve(false); setDuplicateCheck(null); }}
+                className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-text-primary hover:bg-gray-50"
+              >
+                Annuleren
+              </button>
+              <button
+                onClick={() => { duplicateCheck.resolve(true); setDuplicateCheck(null); }}
+                className="flex-1 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90"
+              >
+                Toch opslaan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Nav block toast */}
       {navBlockToast && (

@@ -232,30 +232,65 @@ export async function POST(request: NextRequest) {
 
   // Check for duplicates (skip if force=true)
   if (!body._force) {
-    const { data: duplicates } = await supabaseAdmin
-      .from('recipes')
-      .select('id, title')
-      .ilike('title', `%${body.title?.substring(0, 30) || ''}%`)
-      .limit(5);
+    const duplicates: { id: string; title: string; image_url: string | null; bron: string | null; match_reason: string }[] = [];
 
-    const similar = (duplicates || []).filter((d: any) => {
-      const a = d.title.toLowerCase().replace(/[^a-z0-9]/g, '');
-      const b = (body.title || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-      // Check if >70% overlap
-      const shorter = Math.min(a.length, b.length);
-      if (shorter === 0) return false;
-      let matches = 0;
-      for (let i = 0; i < shorter; i++) {
-        if (a[i] === b[i]) matches++;
+    // 1. Check for same source/bron (exact URL match)
+    if (body.bron && body.bron !== 'Eigen recept') {
+      const { data: bronMatches } = await supabaseAdmin
+        .from('recipes')
+        .select('id, title, image_url, bron')
+        .eq('bron', body.bron)
+        .limit(3);
+      for (const d of bronMatches ?? []) {
+        if (!duplicates.find((x) => x.id === d.id)) {
+          duplicates.push({ ...d, match_reason: 'Zelfde bron/website' });
+        }
       }
-      return matches / shorter > 0.7;
-    });
+    }
 
-    if (similar.length > 0) {
+    // 2. Check for same image URL (exact match, skip base64)
+    if (body.image_url && !body.image_url.startsWith('data:')) {
+      const { data: imgMatches } = await supabaseAdmin
+        .from('recipes')
+        .select('id, title, image_url, bron')
+        .eq('image_url', body.image_url)
+        .limit(3);
+      for (const d of imgMatches ?? []) {
+        if (!duplicates.find((x) => x.id === d.id)) {
+          duplicates.push({ ...d, match_reason: 'Zelfde afbeelding' });
+        }
+      }
+    }
+
+    // 3. Check for similar title (70% character overlap)
+    if (body.title) {
+      const { data: titleMatches } = await supabaseAdmin
+        .from('recipes')
+        .select('id, title, image_url, bron')
+        .ilike('title', `%${body.title.substring(0, 30)}%`)
+        .limit(5);
+
+      for (const d of titleMatches ?? []) {
+        if (duplicates.find((x) => x.id === d.id)) continue;
+        const a = d.title.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const b = body.title.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const shorter = Math.min(a.length, b.length);
+        if (shorter === 0) continue;
+        let matches = 0;
+        for (let i = 0; i < shorter; i++) {
+          if (a[i] === b[i]) matches++;
+        }
+        if (matches / shorter > 0.7) {
+          duplicates.push({ ...d, match_reason: 'Vergelijkbare titel' });
+        }
+      }
+    }
+
+    if (duplicates.length > 0) {
       return NextResponse.json({
         warning: 'duplicate',
-        message: `Er bestaat al een vergelijkbaar recept: "${similar[0].title}"`,
-        existing: similar,
+        message: `Er ${duplicates.length === 1 ? 'bestaat al een vergelijkbaar recept' : `bestaan al ${duplicates.length} vergelijkbare recepten`}`,
+        existing: duplicates,
       }, { status: 409 });
     }
   }
