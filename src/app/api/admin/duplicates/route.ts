@@ -33,26 +33,7 @@ export async function GET() {
     return matches / shorter;
   };
 
-  // 1. Same bron + similar title — bron alone is too broad (just a website name)
-  const bronMap = new Map<string, Recipe[]>();
-  for (const r of recipes) {
-    if (!r.bron || r.bron === 'Eigen recept') continue;
-    const key = r.bron.toLowerCase().trim();
-    if (!bronMap.has(key)) bronMap.set(key, []);
-    bronMap.get(key)!.push(r);
-  }
-  for (const [, group] of bronMap) {
-    if (group.length < 2) continue;
-    for (let i = 0; i < group.length; i++) {
-      for (let j = i + 1; j < group.length; j++) {
-        if (usedAsDuplicate.has(group[j].id)) continue;
-        if (titleSimilarity(group[i].title, group[j].title) > 0.7) {
-          pairs.push({ original: group[i], duplicate: group[j], reason: `Zelfde bron + vergelijkbare titel` });
-          usedAsDuplicate.add(group[j].id);
-        }
-      }
-    }
-  }
+  // (bron check removed — bron is a website name like "Broodje Dunner", not a specific recipe URL)
 
   // 2. Same image_url
   const imgMap = new Map<string, Recipe[]>();
@@ -71,7 +52,7 @@ export async function GET() {
     }
   }
 
-  // 3. Similar title (>85% match)
+  // 2. Similar title (>92% match — high threshold to avoid false positives like "Broodje zalm" vs "Broodje beef")
   const normalized = recipes.map((r) => ({
     ...r,
     _norm: r.title.toLowerCase().replace(/[^a-z0-9]/g, ''),
@@ -87,7 +68,7 @@ export async function GET() {
       for (let k = 0; k < shorter; k++) {
         if (a[k] === b[k]) matches++;
       }
-      if (matches / shorter > 0.85) {
+      if (matches / shorter > 0.92) {
         const { _norm: _, ...original } = normalized[i];
         const { _norm: __, ...duplicate } = normalized[j];
         pairs.push({ original, duplicate, reason: 'Vergelijkbare titel' });
