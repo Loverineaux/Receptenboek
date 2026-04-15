@@ -260,6 +260,28 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // Upload base64 image to Storage if needed
+  let imageUrl = body.image_url || null;
+  if (imageUrl && imageUrl.startsWith('data:')) {
+    try {
+      const base64Data = imageUrl.split(',')[1];
+      const mimeMatch = imageUrl.match(/data:(image\/\w+);/);
+      const mime = mimeMatch?.[1] || 'image/jpeg';
+      const ext = mime.split('/')[1] || 'jpg';
+      const buffer = Buffer.from(base64Data, 'base64');
+      const path = `recipes/${Date.now()}.${ext}`;
+      const { error: upErr } = await supabaseAdmin.storage
+        .from('recipe-images')
+        .upload(path, buffer, { contentType: mime, upsert: true });
+      if (!upErr) {
+        const { data: urlData } = supabaseAdmin.storage.from('recipe-images').getPublicUrl(path);
+        imageUrl = urlData.publicUrl;
+      }
+    } catch {
+      imageUrl = null;
+    }
+  }
+
   // 1. Create recipe
   const { data: recipe, error: recipeError } = await supabase
     .from('recipes')
@@ -267,7 +289,7 @@ export async function POST(request: NextRequest) {
       user_id: user.id,
       title: body.title,
       subtitle: body.subtitle || null,
-      image_url: body.image_url || null,
+      image_url: imageUrl,
       bron: (body.bron && body.bron.trim()) || 'Eigen recept',
       basis_porties: body.basis_porties ?? 2,
       tijd: body.tijd || null,
