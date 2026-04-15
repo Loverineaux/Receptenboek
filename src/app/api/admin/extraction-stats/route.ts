@@ -14,7 +14,6 @@ export async function GET() {
   const { data: profiles } = await supabaseAdmin
     .from('profiles')
     .select('id, display_name, avatar_url, extraction_count, total_donated, donation_free_until')
-    .gt('extraction_count', 0)
     .order('extraction_count', { ascending: false });
 
   const users = (profiles ?? []).map((p: any) => {
