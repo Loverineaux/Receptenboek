@@ -20,6 +20,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   const title = recipe.title;
   const description = recipe.subtitle || `Bekijk "${recipe.title}" op Receptenboek`;
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://receptenboek-rcr7.vercel.app';
+
+  // Proxy image through our own server to avoid hotlink protection from external sites
+  const ogImageUrl = recipe.image_url
+    ? `${siteUrl}/api/og?url=${encodeURIComponent(recipe.image_url)}`
+    : null;
 
   return {
     title: `${title} — Receptenboek`,
@@ -28,10 +34,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       title,
       description,
       type: 'article',
-      ...(recipe.image_url && {
+      url: `${siteUrl}/recepten/${params.id}`,
+      siteName: 'Receptenboek',
+      ...(ogImageUrl && {
         images: [
           {
-            url: recipe.image_url,
+            url: ogImageUrl,
             width: 1200,
             height: 630,
             alt: title,
@@ -40,10 +48,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       }),
     },
     twitter: {
-      card: recipe.image_url ? 'summary_large_image' : 'summary',
+      card: ogImageUrl ? 'summary_large_image' : 'summary',
       title,
       description,
-      ...(recipe.image_url && { images: [recipe.image_url] }),
+      ...(ogImageUrl && { images: [ogImageUrl] }),
     },
   };
 }
