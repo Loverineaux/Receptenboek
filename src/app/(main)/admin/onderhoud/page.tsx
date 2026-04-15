@@ -153,39 +153,45 @@ export default function OnderhoudPage() {
               </h2>
               {duplicateGroups.map((group, gi) => (
                 <div key={gi} className="rounded-xl border border-amber-200 bg-amber-50/50 p-4">
-                  <div className="mb-2 flex items-center gap-2">
+                  <div className="mb-3 flex items-center gap-2">
                     <AlertTriangle className="h-4 w-4 text-amber-600" />
                     <span className="text-sm font-medium text-amber-800">{group.reason}</span>
+                    <span className="rounded-full bg-amber-200 px-2 py-0.5 text-[10px] font-bold text-amber-800">{group.recipes.length} recepten</span>
                   </div>
-                  <div className="space-y-2">
+                  <div className="grid gap-3 sm:grid-cols-2">
                     {group.recipes.map((r) => (
-                      <div key={r.id} className="flex items-center gap-3 rounded-lg bg-white p-2">
+                      <div key={r.id} className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+                        {/* Recipe image */}
                         {r.image_url ? (
-                          <img src={r.image_url} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover" />
+                          <img src={r.image_url} alt="" className="h-40 w-full object-cover" />
                         ) : (
-                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-lg">🍽️</div>
+                          <div className="flex h-40 w-full items-center justify-center bg-gray-100 text-4xl">🍽️</div>
                         )}
-                        <div className="min-w-0 flex-1">
-                          <a href={`/recepten/${r.id}`} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-primary hover:underline">
+                        {/* Recipe info */}
+                        <div className="p-3">
+                          <a href={`/recepten/${r.id}`} target="_blank" rel="noopener noreferrer" className="text-sm font-semibold text-primary hover:underline">
                             {r.title}
                           </a>
-                          <p className="truncate text-xs text-text-muted">
+                          <p className="mt-1 text-xs text-text-muted">
+                            {r.bron || 'Eigen recept'}
+                          </p>
+                          <p className="text-xs text-text-muted">
                             {(r.user as any)?.display_name || 'Onbekend'} · {new Date(r.created_at).toLocaleDateString('nl-NL')}
                           </p>
                           {(r as any).match_reason && (
-                            <span className="mt-0.5 inline-block truncate rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                            <span className="mt-1 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
                               {(r as any).match_reason}
                             </span>
                           )}
+                          <button
+                            onClick={() => handleDeleteRecipe(r.id)}
+                            disabled={deletingId === r.id}
+                            className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-red-50 py-2 text-xs font-medium text-red-600 transition-colors hover:bg-red-100 disabled:opacity-50"
+                          >
+                            {deletingId === r.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                            Verwijderen
+                          </button>
                         </div>
-                        <button
-                          onClick={() => handleDeleteRecipe(r.id)}
-                          disabled={deletingId === r.id}
-                          className="shrink-0 rounded-lg p-2 text-red-500 transition-colors hover:bg-red-50 disabled:opacity-50"
-                          title="Verwijderen"
-                        >
-                          {deletingId === r.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                        </button>
                       </div>
                     ))}
                   </div>
