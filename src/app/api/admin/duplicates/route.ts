@@ -22,7 +22,18 @@ export async function GET() {
   const pairs: Pair[] = [];
   const usedAsDuplicate = new Set<string>();
 
-  // 1. Same bron (exact URL match) — oldest = original
+  // Helper: normalize title for comparison
+  const normTitle = (t: string) => t.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const titleSimilarity = (a: string, b: string) => {
+    const na = normTitle(a), nb = normTitle(b);
+    const shorter = Math.min(na.length, nb.length);
+    if (shorter < 3) return 0;
+    let matches = 0;
+    for (let k = 0; k < shorter; k++) { if (na[k] === nb[k]) matches++; }
+    return matches / shorter;
+  };
+
+  // 1. Same bron + similar title — bron alone is too broad (just a website name)
   const bronMap = new Map<string, Recipe[]>();
   for (const r of recipes) {
     if (!r.bron || r.bron === 'Eigen recept') continue;
@@ -32,11 +43,14 @@ export async function GET() {
   }
   for (const [, group] of bronMap) {
     if (group.length < 2) continue;
-    const [original, ...dupes] = group; // sorted by created_at asc
-    for (const dupe of dupes) {
-      if (usedAsDuplicate.has(dupe.id)) continue;
-      pairs.push({ original, duplicate: dupe, reason: `Zelfde bron: ${original.bron}` });
-      usedAsDuplicate.add(dupe.id);
+    for (let i = 0; i < group.length; i++) {
+      for (let j = i + 1; j < group.length; j++) {
+        if (usedAsDuplicate.has(group[j].id)) continue;
+        if (titleSimilarity(group[i].title, group[j].title) > 0.7) {
+          pairs.push({ original: group[i], duplicate: group[j], reason: `Zelfde bron + vergelijkbare titel` });
+          usedAsDuplicate.add(group[j].id);
+        }
+      }
     }
   }
 
