@@ -6,12 +6,12 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
-    version: '1.14.0',
+    version: '1.14.2',
     date: '15 april 2026',
     highlights: [
       'Nieuw admin-tabblad "Onderhoud" met handige tools voor het beheer van recepten',
       'Temperaturen invullen: vul automatisch ontbrekende oven- en kerntemperaturen aan',
-      'Duplicaten opsporen: vind en verwijder recepten met dezelfde bron, afbeelding of titel',
+      'Duplicaten opsporen: vind en verwijder recepten naast elkaar met foto, titel en bron',
       'Ingrediënten herstellen: herstel automatisch hoeveelheden die verkeerd zijn geëxtraheerd',
     ],
   },
