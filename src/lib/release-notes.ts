@@ -6,7 +6,7 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
-    version: '1.14.4',
+    version: '1.14.5',
     date: '15 april 2026',
     highlights: [
       'Nieuw admin-tabblad "Onderhoud" met handige tools voor het beheer van recepten',
