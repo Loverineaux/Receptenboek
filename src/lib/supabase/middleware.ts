@@ -38,22 +38,34 @@ export async function updateSession(request: NextRequest) {
     }
   )
 
-  // Read session from cookie — no network call
-  await supabase.auth.getSession()
-
   const pathname = request.nextUrl.pathname
 
-  // Protect admin routes
-  if (pathname.startsWith('/admin')) {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session?.user) {
-      return NextResponse.redirect(new URL('/login', request.url))
-    }
+  // Public pages — no auth needed
+  const isPublicPath = ['/login', '/register', '/wachtwoord-vergeten'].some((p) => pathname.startsWith(p))
+  if (isPublicPath) {
+    // Still refresh session cookie if one exists
+    await supabase.auth.getSession()
+    return response
   }
 
-  // NOTE: Auth redirect for unauthenticated users is handled client-side in AuthContext.
-  // The middleware only refreshes the session cookie and protects admin routes.
-  // Doing auth redirects here caused false redirects when tokens were being refreshed.
+  // Social media bots — let through for OG link previews (WhatsApp, iMessage, etc.)
+  const ua = request.headers.get('user-agent') || ''
+  const isSocialBot = /bot|crawl|spider|WhatsApp|facebookexternalhit|Twitterbot|TelegramBot|LinkedInBot|Googlebot|Slackbot|Discordbot|iMessageBot|Applebot|Bingbot|Pinterestbot/i.test(ua)
+  if (isSocialBot) {
+    return response
+  }
+
+  // Auth check — use getUser() for reliable server verification
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) {
+    // Not logged in → redirect to login, remember where they wanted to go
+    const loginUrl = new URL('/login', request.url)
+    if (pathname !== '/') {
+      loginUrl.searchParams.set('redirect', pathname)
+    }
+    return NextResponse.redirect(loginUrl)
+  }
 
   return response
 }
