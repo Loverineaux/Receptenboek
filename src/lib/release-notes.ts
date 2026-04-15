@@ -6,11 +6,12 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
-    version: '1.12.4',
+    version: '1.12.5',
     date: '15 april 2026',
     highlights: [
-      'Pagina\'s laden nu aanzienlijk sneller — onnodige controles bij elke pagina zijn verwijderd',
-      'Een probleem waarbij je onterecht naar het inlogscherm werd gestuurd is opgelost',
+      'De beveiliging van de app is aangescherpt — alle pagina\'s zijn alleen toegankelijk voor ingelogde gebruikers',
+      'Gedeelde links werken correct: na inloggen word je automatisch doorgestuurd naar het gedeelde recept',
+      'Link previews in WhatsApp en andere apps blijven gewoon werken',
     ],
   },
   {
