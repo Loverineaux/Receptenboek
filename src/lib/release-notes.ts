@@ -6,12 +6,12 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
-    version: '1.12.5',
+    version: '1.12.6',
     date: '15 april 2026',
     highlights: [
+      'Link previews bij het delen van recepten tonen nu altijd de juiste afbeelding — ook voor recepten van externe websites',
       'De beveiliging van de app is aangescherpt — alle pagina\'s zijn alleen toegankelijk voor ingelogde gebruikers',
       'Gedeelde links werken correct: na inloggen word je automatisch doorgestuurd naar het gedeelde recept',
-      'Link previews in WhatsApp en andere apps blijven gewoon werken',
     ],
   },
   {
