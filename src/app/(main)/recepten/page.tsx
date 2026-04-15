@@ -584,15 +584,11 @@ function ReceptenPage() {
       )}
       </div>
 
-      {/* Loading skeleton */}
+      {/* Loading spinner */}
       {loading && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <div
-              key={i}
-              className="h-64 animate-pulse rounded-xl bg-gray-200"
-            />
-          ))}
+        <div className="flex flex-col items-center justify-center py-20 gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <p className="text-sm text-text-muted">Recepten laden...</p>
         </div>
       )}
 
