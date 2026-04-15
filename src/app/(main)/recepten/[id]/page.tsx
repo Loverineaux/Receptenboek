@@ -22,9 +22,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const description = recipe.subtitle || `Bekijk "${recipe.title}" op Receptenboek`;
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://receptenboek-rcr7.vercel.app';
 
-  // Proxy image through our own server to avoid hotlink protection from external sites
+  // Use Next.js image optimizer for OG images — resizes and compresses automatically
+  // This also proxies external images, bypassing hotlink protection
   const ogImageUrl = recipe.image_url
-    ? `${siteUrl}/api/og?url=${encodeURIComponent(recipe.image_url)}`
+    ? `${siteUrl}/_next/image?url=${encodeURIComponent(recipe.image_url)}&w=1200&q=75`
     : null;
 
   return {
