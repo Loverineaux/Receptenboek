@@ -58,11 +58,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false
 
-    // Get initial session via server verification (reliable, works even with corrupted cookies)
+    // Get initial session — first try getSession (reads cookie + auto-refreshes token),
+    // then verify with getUser if we have a session
     const getInitialSession = async () => {
-      const {
-        data: { user: currentUser },
-      } = await supabase.auth.getUser()
+      const { data: { session } } = await supabase.auth.getSession()
+      let currentUser = session?.user ?? null
+
+      if (currentUser) {
+        const { data: { user: verified } } = await supabase.auth.getUser()
+        if (verified) currentUser = verified
+      }
 
       if (cancelled) return
 
