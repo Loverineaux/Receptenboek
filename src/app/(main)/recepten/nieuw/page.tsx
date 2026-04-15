@@ -232,9 +232,13 @@ export default function NieuwReceptPage() {
   const [donationCount, setDonationCount] = useState<number | null>(null);
 
   /** Increment extraction counter and check if donation nudge should show */
-  const trackExtraction = async () => {
+  const trackExtraction = async (amount = 1) => {
     try {
-      const res = await fetch('/api/users/extraction-count', { method: 'POST' });
+      const res = await fetch('/api/users/extraction-count', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount }),
+      });
       if (res.ok) {
         const { count, showDonation } = await res.json();
         if (showDonation) {
@@ -532,6 +536,7 @@ export default function NieuwReceptPage() {
   const handleBulkImport = async () => {
     setBulkImporting(true);
     setBulkDone(false);
+    let successCount = 0;
 
     for (let i = 0; i < bulkItems.length; i++) {
       if (bulkItems[i].status === 'done' || bulkItems[i].status === 'duplicate') continue;
@@ -583,6 +588,7 @@ export default function NieuwReceptPage() {
 
         const { recipe } = await saveRes.json();
         setBulkItems(prev => prev.map((it, idx) => idx === i ? { ...it, title, status: 'done', recipeId: recipe.id } : it));
+        successCount++;
       } catch (err: any) {
         setBulkItems(prev => prev.map((it, idx) => idx === i ? { ...it, status: 'error', error: err.message } : it));
       }
@@ -592,13 +598,15 @@ export default function NieuwReceptPage() {
 
     setBulkImporting(false);
     setBulkDone(true);
-    trackExtraction();
+    // Count each successfully imported URL as a separate extraction
+    if (successCount > 0) trackExtraction(successCount);
   };
 
   const retryFailedBulk = async () => {
     const failed = bulkItems.map((it, idx) => it.status === 'error' ? idx : -1).filter(i => i >= 0);
     if (!failed.length) return;
     setBulkImporting(true);
+    let retriedSuccess = 0;
 
     for (const i of failed) {
       setBulkItems(prev => prev.map((it, idx) => idx === i ? { ...it, status: 'extracting', error: undefined } : it));
@@ -633,12 +641,14 @@ export default function NieuwReceptPage() {
         if (!saveRes.ok) throw new Error('Opslaan mislukt');
         const { recipe } = await saveRes.json();
         setBulkItems(prev => prev.map((it, idx) => idx === i ? { ...it, title, status: 'done', recipeId: recipe.id } : it));
+        retriedSuccess++;
       } catch (err: any) {
         setBulkItems(prev => prev.map((it, idx) => idx === i ? { ...it, status: 'error', error: err.message } : it));
       }
       await new Promise(r => setTimeout(r, 500));
     }
     setBulkImporting(false);
+    if (retriedSuccess > 0) trackExtraction(retriedSuccess);
   };
 
   const bulkCounts = {
