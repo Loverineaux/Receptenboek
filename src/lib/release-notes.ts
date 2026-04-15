@@ -6,11 +6,11 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
-    version: '1.12.3',
+    version: '1.12.4',
     date: '15 april 2026',
     highlights: [
       'Pagina\'s laden nu aanzienlijk sneller — onnodige controles bij elke pagina zijn verwijderd',
-      'Je wordt niet meer onterecht naar het inlogscherm gestuurd als je sessie net is verlopen',
+      'Een probleem waarbij je onterecht naar het inlogscherm werd gestuurd is opgelost',
     ],
   },
   {
