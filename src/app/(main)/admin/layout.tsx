@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { LayoutDashboard, Users, ChefHat, MessageCircle, FolderOpen, Bell, Settings, Loader2, ShieldAlert, Apple } from 'lucide-react';
+import { LayoutDashboard, Users, ChefHat, MessageCircle, FolderOpen, Bell, Settings, Loader2, ShieldAlert, Apple, Wrench } from 'lucide-react';
 import { useAdmin } from '@/hooks/useAdmin';
 
 const adminLinks = [
@@ -14,6 +14,7 @@ const adminLinks = [
   { href: '/admin/collecties', label: 'Collecties', icon: FolderOpen },
   { href: '/admin/ingredienten', label: 'Ingrediënten', icon: Apple },
   { href: '/admin/meldingen', label: 'Meldingen', icon: Bell },
+  { href: '/admin/onderhoud', label: 'Onderhoud', icon: Wrench },
   { href: '/admin/instellingen', label: 'Instellingen', icon: Settings },
 ];
 
