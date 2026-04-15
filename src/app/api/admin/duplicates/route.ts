@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { isAdmin } from '@/lib/admin';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 
-/** GET — find duplicate recipes (same bron, same image, or very similar title) */
+/** GET — find duplicate recipe pairs (same bron, same image, or very similar title) */
 export async function GET() {
   const supabase = await createClient();
   if (!(await isAdmin(supabase))) {
@@ -13,59 +13,58 @@ export async function GET() {
   const { data: recipes } = await supabaseAdmin
     .from('recipes')
     .select('id, title, image_url, bron, created_at, user:profiles!recipes_user_id_fkey(display_name)')
-    .order('title', { ascending: true });
+    .order('created_at', { ascending: true });
 
-  if (!recipes) return NextResponse.json({ groups: [] });
+  if (!recipes) return NextResponse.json({ pairs: [] });
 
-  type RecipeMatch = typeof recipes[number] & { match_reason: string };
-  const groups: { reason: string; recipes: RecipeMatch[] }[] = [];
-  const usedIds = new Set<string>();
+  type Recipe = typeof recipes[number];
+  type Pair = { original: Recipe; duplicate: Recipe; reason: string };
+  const pairs: Pair[] = [];
+  const usedAsDuplicate = new Set<string>();
 
-  // 1. Group by exact bron (same source URL)
-  const bronMap = new Map<string, typeof recipes>();
+  // 1. Same bron (exact URL match) — oldest = original
+  const bronMap = new Map<string, Recipe[]>();
   for (const r of recipes) {
     if (!r.bron || r.bron === 'Eigen recept') continue;
     const key = r.bron.toLowerCase().trim();
     if (!bronMap.has(key)) bronMap.set(key, []);
     bronMap.get(key)!.push(r);
   }
-  for (const [bron, group] of bronMap) {
-    if (group.length > 1) {
-      groups.push({
-        reason: `Zelfde bron`,
-        recipes: group.map((r: any) => ({ ...r, match_reason: `Bron: ${r.bron}` })),
-      });
-      group.forEach((r: any) => usedIds.add(r.id));
+  for (const [, group] of bronMap) {
+    if (group.length < 2) continue;
+    const [original, ...dupes] = group; // sorted by created_at asc
+    for (const dupe of dupes) {
+      if (usedAsDuplicate.has(dupe.id)) continue;
+      pairs.push({ original, duplicate: dupe, reason: `Zelfde bron: ${original.bron}` });
+      usedAsDuplicate.add(dupe.id);
     }
   }
 
-  // 2. Group by exact image_url
-  const imgMap = new Map<string, typeof recipes>();
+  // 2. Same image_url
+  const imgMap = new Map<string, Recipe[]>();
   for (const r of recipes) {
     if (!r.image_url) continue;
     if (!imgMap.has(r.image_url)) imgMap.set(r.image_url, []);
     imgMap.get(r.image_url)!.push(r);
   }
   for (const [, group] of imgMap) {
-    if (group.length > 1 && !group.every((r: any) => usedIds.has(r.id))) {
-      groups.push({
-        reason: 'Zelfde afbeelding',
-        recipes: group.map((r: any) => ({ ...r, match_reason: 'Identieke afbeelding' })),
-      });
-      group.forEach((r: any) => usedIds.add(r.id));
+    if (group.length < 2) continue;
+    const [original, ...dupes] = group;
+    for (const dupe of dupes) {
+      if (usedAsDuplicate.has(dupe.id)) continue;
+      pairs.push({ original, duplicate: dupe, reason: 'Zelfde afbeelding' });
+      usedAsDuplicate.add(dupe.id);
     }
   }
 
-  // 3. Group by similar title (normalized, >85% match)
-  const normalized = recipes.map((r: any) => ({
+  // 3. Similar title (>85% match)
+  const normalized = recipes.map((r) => ({
     ...r,
     _norm: r.title.toLowerCase().replace(/[^a-z0-9]/g, ''),
   }));
   for (let i = 0; i < normalized.length; i++) {
-    if (usedIds.has(normalized[i].id)) continue;
-    const group = [normalized[i]];
     for (let j = i + 1; j < normalized.length; j++) {
-      if (usedIds.has(normalized[j].id)) continue;
+      if (usedAsDuplicate.has(normalized[j].id)) continue;
       const a = normalized[i]._norm;
       const b = normalized[j]._norm;
       const shorter = Math.min(a.length, b.length);
@@ -75,20 +74,15 @@ export async function GET() {
         if (a[k] === b[k]) matches++;
       }
       if (matches / shorter > 0.85) {
-        group.push(normalized[j]);
+        const { _norm: _, ...original } = normalized[i];
+        const { _norm: __, ...duplicate } = normalized[j];
+        pairs.push({ original, duplicate, reason: 'Vergelijkbare titel' });
+        usedAsDuplicate.add(normalized[j].id);
       }
-    }
-    if (group.length > 1) {
-      const titles = group.map((r: any) => `"${r.title}"`).join(' ↔ ');
-      groups.push({
-        reason: `Vergelijkbare titel`,
-        recipes: group.map(({ _norm, ...r }: any) => ({ ...r, match_reason: `Titel: ${r.title}` })),
-      });
-      group.forEach((r: any) => usedIds.add(r.id));
     }
   }
 
-  return NextResponse.json({ groups, totalDuplicateGroups: groups.length });
+  return NextResponse.json({ pairs, totalPairs: pairs.length });
 }
 
 /** DELETE — delete a specific recipe by ID */

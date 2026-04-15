@@ -3,9 +3,14 @@
 import { useState } from 'react';
 import { Flame, Copy, UtensilsCrossed, Loader2, CheckCircle, AlertTriangle, Trash2 } from 'lucide-react';
 
-interface DuplicateGroup {
+interface DuplicateRecipe {
+  id: string; title: string; image_url: string | null; bron: string | null; created_at: string; user: { display_name: string } | null;
+}
+
+interface DuplicatePair {
+  original: DuplicateRecipe;
+  duplicate: DuplicateRecipe;
   reason: string;
-  recipes: { id: string; title: string; image_url: string | null; bron: string | null; created_at: string; user: { display_name: string } | null }[];
 }
 
 export default function OnderhoudPage() {
@@ -15,7 +20,7 @@ export default function OnderhoudPage() {
 
   // Duplicate finder
   const [findingDuplicates, setFindingDuplicates] = useState(false);
-  const [duplicateGroups, setDuplicateGroups] = useState<DuplicateGroup[] | null>(null);
+  const [duplicatePairs, setDuplicatePairs] = useState<DuplicatePair[] | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Ingredient fixer
@@ -38,13 +43,13 @@ export default function OnderhoudPage() {
 
   const handleFindDuplicates = async () => {
     setFindingDuplicates(true);
-    setDuplicateGroups(null);
+    setDuplicatePairs(null);
     try {
       const res = await fetch('/api/admin/duplicates');
       const data = await res.json();
-      setDuplicateGroups(data.groups ?? []);
+      setDuplicatePairs(data.pairs ?? []);
     } catch {
-      setDuplicateGroups([]);
+      setDuplicatePairs([]);
     } finally {
       setFindingDuplicates(false);
     }
@@ -58,12 +63,8 @@ export default function OnderhoudPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ recipeId }),
       });
-      // Remove from local state
-      setDuplicateGroups((prev) =>
-        (prev ?? [])
-          .map((g) => ({ ...g, recipes: g.recipes.filter((r) => r.id !== recipeId) }))
-          .filter((g) => g.recipes.length > 1)
-      );
+      // Remove pair from local state
+      setDuplicatePairs((prev) => (prev ?? []).filter((p) => p.original.id !== recipeId && p.duplicate.id !== recipeId));
     } finally {
       setDeletingId(null);
     }
@@ -138,10 +139,10 @@ export default function OnderhoudPage() {
         </div>
       )}
 
-      {/* Duplicate groups */}
-      {duplicateGroups !== null && (
+      {/* Duplicate pairs */}
+      {duplicatePairs !== null && (
         <div>
-          {duplicateGroups.length === 0 ? (
+          {duplicatePairs.length === 0 ? (
             <div className="flex items-center gap-2 rounded-lg bg-green-50 px-4 py-3 text-sm text-green-800">
               <CheckCircle className="h-4 w-4 shrink-0" />
               Geen duplicaten gevonden!
@@ -149,54 +150,55 @@ export default function OnderhoudPage() {
           ) : (
             <div className="space-y-4">
               <h2 className="text-lg font-semibold text-text-primary">
-                {duplicateGroups.length} duplicaat-{duplicateGroups.length === 1 ? 'groep' : 'groepen'} gevonden
+                {duplicatePairs.length} {duplicatePairs.length === 1 ? 'duplicaat' : 'duplicaten'} gevonden
               </h2>
-              {duplicateGroups.map((group, gi) => (
-                <div key={gi} className="rounded-xl border border-amber-200 bg-amber-50/50 p-4">
-                  <div className="mb-3 flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4 text-amber-600" />
-                    <span className="text-sm font-medium text-amber-800">{group.reason}</span>
-                    <span className="rounded-full bg-amber-200 px-2 py-0.5 text-[10px] font-bold text-amber-800">{group.recipes.length} recepten</span>
+              {duplicatePairs.map((pair, pi) => {
+                const renderCard = (r: DuplicateRecipe, label: string, labelColor: string) => (
+                  <div className="flex-1 overflow-hidden rounded-xl border border-gray-200 bg-white">
+                    <div className="relative">
+                      {r.image_url ? (
+                        <img src={r.image_url} alt="" className="h-32 w-full object-cover" />
+                      ) : (
+                        <div className="flex h-32 w-full items-center justify-center bg-gray-100 text-3xl">🍽️</div>
+                      )}
+                      <span className={`absolute left-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-bold text-white ${labelColor}`}>
+                        {label}
+                      </span>
+                    </div>
+                    <div className="p-2">
+                      <a href={`/recepten/${r.id}`} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-primary hover:underline line-clamp-2">
+                        {r.title}
+                      </a>
+                      <p className="mt-0.5 truncate text-[10px] text-text-muted">{r.bron || 'Eigen recept'}</p>
+                      <p className="truncate text-[10px] text-text-muted">
+                        {(r.user as any)?.display_name || 'Onbekend'} · {new Date(r.created_at).toLocaleDateString('nl-NL')}
+                      </p>
+                      <button
+                        onClick={() => handleDeleteRecipe(r.id)}
+                        disabled={deletingId === r.id}
+                        className="mt-1.5 flex w-full items-center justify-center gap-1 rounded-lg bg-red-50 py-1.5 text-[11px] font-medium text-red-600 transition-colors hover:bg-red-100 disabled:opacity-50"
+                      >
+                        {deletingId === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                        Verwijder
+                      </button>
+                    </div>
                   </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {group.recipes.map((r) => (
-                      <div key={r.id} className="overflow-hidden rounded-xl border border-gray-200 bg-white">
-                        {/* Recipe image */}
-                        {r.image_url ? (
-                          <img src={r.image_url} alt="" className="h-40 w-full object-cover" />
-                        ) : (
-                          <div className="flex h-40 w-full items-center justify-center bg-gray-100 text-4xl">🍽️</div>
-                        )}
-                        {/* Recipe info */}
-                        <div className="p-3">
-                          <a href={`/recepten/${r.id}`} target="_blank" rel="noopener noreferrer" className="text-sm font-semibold text-primary hover:underline">
-                            {r.title}
-                          </a>
-                          <p className="mt-1 text-xs text-text-muted">
-                            {r.bron || 'Eigen recept'}
-                          </p>
-                          <p className="text-xs text-text-muted">
-                            {(r.user as any)?.display_name || 'Onbekend'} · {new Date(r.created_at).toLocaleDateString('nl-NL')}
-                          </p>
-                          {(r as any).match_reason && (
-                            <span className="mt-1 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-                              {(r as any).match_reason}
-                            </span>
-                          )}
-                          <button
-                            onClick={() => handleDeleteRecipe(r.id)}
-                            disabled={deletingId === r.id}
-                            className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-red-50 py-2 text-xs font-medium text-red-600 transition-colors hover:bg-red-100 disabled:opacity-50"
-                          >
-                            {deletingId === r.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                            Verwijderen
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                );
+
+                return (
+                  <div key={pi} className="rounded-xl border border-amber-200 bg-amber-50/50 p-3">
+                    <div className="mb-2 flex items-center gap-2">
+                      <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+                      <span className="text-xs font-medium text-amber-800">{pair.reason}</span>
+                    </div>
+                    <div className="flex gap-2">
+                      {renderCard(pair.original, 'Origineel', 'bg-green-600')}
+                      <div className="flex shrink-0 items-center text-base text-text-muted">↔</div>
+                      {renderCard(pair.duplicate, 'Duplicaat', 'bg-red-500')}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
