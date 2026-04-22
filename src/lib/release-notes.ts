@@ -6,6 +6,14 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '1.15.5',
+    date: '22 april 2026',
+    highlights: [
+      'Ingrediënten met hoeveelheden worden weer betrouwbaar gevonden — de zoekactie heeft voldoende ruimte om alle maten te vinden',
+      'Snelheidswinst uit de parallelle zoekacties blijft behouden, dus de extractie blijft binnen 30-40 seconden',
+    ],
+  },
+  {
     version: '1.15.4',
     date: '22 april 2026',
     highlights: [
@@ -20,15 +28,6 @@ export const releaseNotes: ReleaseNote[] = [
       'Recept-extractie is flink sneller: je ziet het voorbeeld nu binnen 30-40 seconden in plaats van bijna een minuut',
       'De extra AI-zoekactie voor foto\'s is weggehaald — als er geen foto gevonden wordt, voeg je hem zelf toe via de "Foto toevoegen"-knop in het voorbeeld',
       'De originele zoekactie naar hoeveelheden bij ingrediënten blijft gewoon actief voor volledige recepten',
-    ],
-  },
-  {
-    version: '1.15.0',
-    date: '22 april 2026',
-    highlights: [
-      'Kon de automatische extractie geen foto vinden? In de voorbeeldweergave staat nu een "Foto toevoegen"-knop waarmee je zelf een foto kiest',
-      'De geüploade foto verschijnt meteen in het voorbeeld en wordt na bevestiging mee opgeslagen in je receptenboek',
-      'Ook bij een gelukte foto-extractie kun je de foto nog vervangen via de "Vervang foto"-knop rechtsonder in het voorbeeld',
     ],
   },
 ];
