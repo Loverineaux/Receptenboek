@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 import {
   EXTRACTION_SYSTEM_PROMPT,
   parseRecipeResponse,
@@ -45,7 +45,9 @@ async function finalize(recipe: any, url: string, requestStart: number) {
   // fallbackWebSearch already ate 40s we skip the pricey Claude
   // image-search rather than timing out mid-response.
   const elapsed = () => Date.now() - requestStart;
-  const SAFE_BUDGET_MS = 52000;
+  // Leave ~20s headroom under the route's maxDuration (120s) for uploads
+  // and the response itself.
+  const SAFE_BUDGET_MS = 100000;
 
   // Step 1: try whatever image_url the main extraction produced.
   if (recipe.image_url) {
@@ -417,7 +419,7 @@ async function fallbackWebSearch(url: string, quick = false): Promise<any> {
       {
         type: "web_search_20250305",
         name: "web_search",
-        max_uses: quick ? 3 : 5,
+        max_uses: quick ? 3 : 4,
       },
     ],
     messages: [
@@ -464,33 +466,12 @@ Als het recept in het Engels is, vertaal dan alles naar het Nederlands.`,
     .map((block) => (block.type === "text" ? block.text : ""))
     .join("\n");
 
-  // If no quantities found in first search, do a targeted ingredient search (skip in quick mode)
-  const hasQuantities = /\d+\s*(gram|g|ml|el|tl|eetlepel|theelepel|stuk|stuks|ui|eieren?|teen)/i.test(searchText);
-  let extraIngredientText = "";
-  if (!hasQuantities && !quick) {
-    console.log("[URL Extract] No quantities found, doing targeted ingredient search");
-    try {
-      const ingSearch = await client.messages.create({
-        model: "claude-sonnet-4-6",
-        max_tokens: 2048,
-        system: `Zoek specifiek de ingrediëntenlijst met hoeveelheden van dit recept op ${hostname}. Geef ALLE ingrediënten met exacte hoeveelheden. Gebruik ALLEEN informatie van ${hostname}.`,
-        tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }],
-        messages: [{
-          role: "user",
-          content: `Zoek de VOLLEDIGE ingrediëntenlijst met exacte hoeveelheden voor het recept "${slug}". Ik heb ALLE ingrediënten nodig met hoeveelheden zoals "300 gram spitskool", "1 ui", "2 eieren", "30 ml ketjap manis" etc.`,
-        }],
-      });
-      extraIngredientText = ingSearch.content
-        .filter((b) => b.type === "text")
-        .map((b) => (b.type === "text" ? b.text : ""))
-        .join("\n");
-      console.log("[URL Extract] Extra ingredient search done, length:", extraIngredientText.length);
-    } catch {}
-  }
-
-  const fullText = extraIngredientText
-    ? `${searchText}\n\nEXTRA INGREDIËNTEN INFO:\n${extraIngredientText}`
-    : searchText;
+  // Skipped: the optional "extra ingredient search" used to fire when the
+  // first search didn't produce any quantity patterns. On slow sources it
+  // added 10-15s and routinely pushed the total over Vercel's maxDuration.
+  // The main search prompt already asks for quantities explicitly, so we
+  // accept an occasional incomplete ingredient list instead of timing out.
+  const fullText = searchText;
 
   // Structuring has no tools and just reshapes text into JSON — Haiku is
   // plenty fast/accurate here and saves 10-15s over Sonnet.
