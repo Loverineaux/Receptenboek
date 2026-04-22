@@ -216,27 +216,34 @@ async function findImageViaWebSearch(pageUrl: string, title: string): Promise<st
     const hostname = parsedPage.hostname.replace(/^www\./, '');
 
     const res = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1024,
+      model: 'claude-sonnet-4-6',
+      max_tokens: 2048,
       system:
-        `Je zoekt de og:image-URL van een specifieke receptpagina op ${hostname}. Het MOET de foto zijn die bij DIT recept hoort — NIET een andere foto van een andere website of een ander recept. Retourneer UITSLUITEND geldig JSON: {"image_url": "https://..."} of {"image_url": null} als je niks vindt. Geen uitleg.`,
-      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }],
+        `Je enige taak: de og:image-URL van deze specifieke receptpagina op ${hostname} terugvinden. Gebruik je web_search tool om de pagina zelf op te halen en de <meta property="og:image"> tag uit de HTML te lezen. Retourneer UITSLUITEND geldig JSON: {"image_url": "https://..."} of {"image_url": null} als je niks betrouwbaars vindt. Geen uitleg, geen markdown, alleen JSON.`,
+      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
       messages: [
         {
           role: 'user',
-          content: `Vind de og:image-URL voor deze specifieke receptpagina:
-- Bronpagina: ${pageUrl}
-- Receptnaam: "${title}"
+          content: `Vind de og:image van deze exacte pagina:
+${pageUrl}
 
-De gezochte URL moet voldoen aan ALLE volgende regels:
-1. Het is de afbeelding van DIT recept op ${hostname} (niet een ander recept, niet een andere site).
-2. De URL wijst naar een beeldbestand op ${hostname} zelf, OF op een WordPress Jetpack-CDN subdomein (bijv. i0.wp.com/${hostname}/..., i1.wp.com/${hostname}/...).
-3. GEEN Pinterest, GEEN Instagram, GEEN random andere websites.
-4. Geen stockfoto's, geen generieke receptbeeld, alleen de specifieke foto van deze receptpagina.
+Receptnaam: "${title}"
 
-Zoekstrategie: zoek naar de pagina URL in Google en haal de og:image uit de meta tags zoals gecacht in search snippets. Of zoek "site:${hostname} ${title}" en pak de bijbehorende afbeelding.
+STAP 1: Gebruik web_search met de volledige URL "${pageUrl}" als query. De tool kan de pagina ophalen (draait op andere infrastructuur dan ons).
+STAP 2: Zoek in de HTML naar een van deze meta tags:
+  <meta property="og:image" content="https://..." />
+  <meta property="og:image:secure_url" content="https://..." />
+  <meta name="twitter:image" content="https://..." />
+  <link rel="image_src" href="https://..." />
+STAP 3: Retourneer de URL uit content of href.
 
-Als je geen betrouwbare match vindt, retourneer {"image_url": null}. Retourneer ALLEEN JSON — geen uitleg.`,
+HARDE REGELS voor de geretourneerde URL:
+- MOET de foto zijn die bij DIT recept hoort op ${hostname} (niet een ander recept, niet een andere site).
+- MOET gehost zijn op ${hostname} zelf (bijv. ${hostname}/wp-content/uploads/...) OF op een WordPress Jetpack-CDN (i0.wp.com/${hostname}/..., i1.wp.com/${hostname}/...).
+- NOOIT Pinterest, Instagram, Facebook, Twitter, stock-sites, of random andere websites.
+- NOOIT een generieke/stockfoto, alleen de specifieke foto van DEZE receptpagina.
+
+Als je de pagina niet kunt bereiken of geen og:image vindt: retourneer {"image_url": null}. Retourneer ALLEEN JSON — niks anders.`,
         },
       ],
     });
