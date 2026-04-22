@@ -6,11 +6,12 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
-    version: '1.15.2',
+    version: '1.15.3',
     date: '22 april 2026',
     highlights: [
-      'Recept-extractie werkt nu binnen een ruimere tijdslimiet van 2 minuten — geen "duurde te lang"-meldingen meer voor normale imports',
-      'Een overbodige extra zoekactie is geschrapt, zodat de import 10-15 seconden sneller is',
+      'Recept-extractie is flink sneller: je ziet het voorbeeld nu binnen 30-40 seconden in plaats van bijna een minuut',
+      'De extra AI-zoekactie voor foto\'s is weggehaald — als er geen foto gevonden wordt, voeg je hem zelf toe via de "Foto toevoegen"-knop in het voorbeeld',
+      'De originele zoekactie naar hoeveelheden bij ingrediënten blijft gewoon actief voor volledige recepten',
     ],
   },
   {
