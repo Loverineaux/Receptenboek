@@ -6,6 +6,13 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '1.14.12',
+    date: '22 april 2026',
+    highlights: [
+      'Geen timeout-foutmeldingen meer bij het importeren van recepten — de foto-zoekactie haakt op tijd af als het te lang duurt',
+    ],
+  },
+  {
     version: '1.14.11',
     date: '22 april 2026',
     highlights: [
