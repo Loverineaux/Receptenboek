@@ -23,14 +23,6 @@ export const releaseNotes: ReleaseNote[] = [
     ],
   },
   {
-    version: '1.15.1',
-    date: '22 april 2026',
-    highlights: [
-      'Snellere recept-extractie: het structureren van de data gebeurt nu met een snellere AI, zodat imports ruim binnen de tijdslimiet blijven',
-      'Begrijpelijke Nederlandse foutmelding bij een te lang durende import in plaats van een cryptische JSON-fout',
-    ],
-  },
-  {
     version: '1.15.0',
     date: '22 april 2026',
     highlights: [
