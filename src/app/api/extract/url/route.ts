@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 import {
   EXTRACTION_SYSTEM_PROMPT,
   parseRecipeResponse,
@@ -45,9 +45,8 @@ async function finalize(recipe: any, url: string, requestStart: number) {
   // fallbackWebSearch already ate 40s we skip the pricey Claude
   // image-search rather than timing out mid-response.
   const elapsed = () => Date.now() - requestStart;
-  // Target UX: 30-40s. Hard cap at maxDuration=60s. Leave ~15s headroom
-  // so uploads + response always fit.
-  const SAFE_BUDGET_MS = 45000;
+  // maxDuration is 120s; leave ~20s headroom for uploads and response.
+  const SAFE_BUDGET_MS = 100000;
 
   // Step 1: try whatever image_url the main extraction produced.
   if (recipe.image_url) {
