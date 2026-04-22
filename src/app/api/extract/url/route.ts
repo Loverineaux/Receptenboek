@@ -395,10 +395,12 @@ Als het recept in het Engels is, vertaal dan alles naar het Nederlands.`,
     ? `${searchText}\n\nEXTRA INGREDIËNTEN INFO:\n${extraIngredientText}`
     : searchText;
 
-  // Structuring has no tools and just reshapes text into JSON — Haiku is
-  // plenty fast/accurate here and saves 10-15s over Sonnet.
+  // Structuring stays on Sonnet: empirically Haiku drops quantities on
+  // ingredients it's less certain about, regressing extraction quality.
+  // The parallel main+extra search in the step above already absorbs most
+  // of the time savings.
   const structureResponse = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: "claude-sonnet-4-6",
     max_tokens: 4096,
     system: EXTRACTION_SYSTEM_PROMPT,
     messages: [
