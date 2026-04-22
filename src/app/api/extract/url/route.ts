@@ -310,7 +310,7 @@ async function fallbackWebSearch(url: string, quick = false): Promise<any> {
       {
         type: "web_search_20250305",
         name: "web_search",
-        max_uses: quick ? 2 : 2,
+        max_uses: quick ? 2 : 4,
       },
     ],
     messages: [
@@ -362,7 +362,7 @@ Als het recept in het Engels is, vertaal dan alles naar het Nederlands.`,
           model: "claude-sonnet-4-6",
           max_tokens: 2048,
           system: `Zoek specifiek de ingrediëntenlijst met hoeveelheden van dit recept op ${hostname}. Geef ALLE ingrediënten met exacte hoeveelheden. Gebruik ALLEEN informatie van ${hostname}.`,
-          tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 2 }],
+          tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }],
           messages: [
             {
               role: "user",
