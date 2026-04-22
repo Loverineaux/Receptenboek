@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { scrapePage, jsonLdToRecipe, detectBronFromUrl } from '@/lib/extraction/scrape';
+import { uploadExternalImage } from '@/lib/extraction/image-upload';
 import { cleanStepTitle, EXTRACTION_SYSTEM_PROMPT, parseRecipeResponse } from '@/lib/extraction/prompt';
 import Anthropic from '@anthropic-ai/sdk';
 
@@ -137,6 +138,16 @@ export async function POST(request: NextRequest) {
         ...s,
         titel: cleanStepTitle(s.titel),
       }));
+
+      // Persist external image to Supabase Storage — bypasses hotlink blocks
+      if (
+        recipe.image_url &&
+        !recipe.image_url.startsWith('data:') &&
+        !recipe.image_url.includes('/storage/v1/object/public/')
+      ) {
+        const stored = await uploadExternalImage(recipe.image_url, resolvedUrl);
+        if (stored) recipe.image_url = stored;
+      }
 
       // Insert recipe
       const { data: rec, error: recErr } = await supabaseAdmin
