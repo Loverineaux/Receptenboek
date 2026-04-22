@@ -210,17 +210,33 @@ export async function POST(request: NextRequest) {
  * Never accept images from Pinterest, Instagram, or random third-party sites.
  */
 async function findImageViaWebSearch(pageUrl: string, title: string): Promise<string | null> {
+  // Hard time budget — fallbackWebSearch can already take 30-40s, and we must
+  // stay under Vercel's 60s maxDuration. If Claude doesn't return in 15s,
+  // abort and let the recipe save without an image.
+  const TIMEOUT_MS = 15000;
+  return await Promise.race([
+    findImageViaWebSearchInner(pageUrl, title),
+    new Promise<null>((resolve) =>
+      setTimeout(() => {
+        console.log('[URL Extract] Claude image search timed out');
+        resolve(null);
+      }, TIMEOUT_MS),
+    ),
+  ]);
+}
+
+async function findImageViaWebSearchInner(pageUrl: string, title: string): Promise<string | null> {
   try {
     const client = new Anthropic();
     const parsedPage = new URL(pageUrl);
     const hostname = parsedPage.hostname.replace(/^www\./, '');
 
     const res = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 2048,
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1024,
       system:
         `Je enige taak: de og:image-URL van deze specifieke receptpagina op ${hostname} terugvinden. Gebruik je web_search tool om de pagina zelf op te halen en de <meta property="og:image"> tag uit de HTML te lezen. Retourneer UITSLUITEND geldig JSON: {"image_url": "https://..."} of {"image_url": null} als je niks betrouwbaars vindt. Geen uitleg, geen markdown, alleen JSON.`,
-      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
+      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }],
       messages: [
         {
           role: 'user',
