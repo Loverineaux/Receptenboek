@@ -417,7 +417,7 @@ async function fallbackWebSearch(url: string, quick = false): Promise<any> {
       {
         type: "web_search_20250305",
         name: "web_search",
-        max_uses: quick ? 3 : 8,
+        max_uses: quick ? 3 : 5,
       },
     ],
     messages: [
@@ -492,8 +492,10 @@ Als het recept in het Engels is, vertaal dan alles naar het Nederlands.`,
     ? `${searchText}\n\nEXTRA INGREDIËNTEN INFO:\n${extraIngredientText}`
     : searchText;
 
+  // Structuring has no tools and just reshapes text into JSON — Haiku is
+  // plenty fast/accurate here and saves 10-15s over Sonnet.
   const structureResponse = await client.messages.create({
-    model: "claude-sonnet-4-6",
+    model: "claude-haiku-4-5-20251001",
     max_tokens: 4096,
     system: EXTRACTION_SYSTEM_PROMPT,
     messages: [

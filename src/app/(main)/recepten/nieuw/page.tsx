@@ -513,12 +513,26 @@ export default function NieuwReceptPage() {
       clearInterval(interval);
       console.log('[URL Import] 2. Extract response status:', res.status);
 
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Extractie mislukt');
+      // Read as text first so we can surface meaningful errors even when
+      // Vercel returns a non-JSON timeout page ("An error occurred…").
+      const rawBody = await res.text();
+      let parsed: any;
+      try {
+        parsed = JSON.parse(rawBody);
+      } catch {
+        const isTimeout = rawBody.startsWith('An error') || res.status === 504 || res.status === 408;
+        throw new Error(
+          isTimeout
+            ? 'De extractie duurde te lang. Probeer het opnieuw, of voeg de foto zelf toe.'
+            : 'Extractie gaf een ongeldig antwoord terug. Probeer het opnieuw.'
+        );
       }
 
-      const extracted = await res.json();
+      if (!res.ok) {
+        throw new Error(parsed?.error || 'Extractie mislukt');
+      }
+
+      const extracted = parsed;
 
       // Parse ingredients and show preview with validation
       extracted.ingredients = parseExtractedIngredients(extracted.ingredients);
@@ -589,11 +603,20 @@ export default function NieuwReceptPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url: bulkItems[i].url }),
         });
-        if (!extractRes.ok) {
-          const err = await extractRes.json().catch(() => ({ error: 'Extractie mislukt' }));
-          throw new Error(err.error || 'Extractie mislukt');
+        const extractRaw = await extractRes.text();
+        let extracted: any;
+        try {
+          extracted = JSON.parse(extractRaw);
+        } catch {
+          throw new Error(
+            extractRaw.startsWith('An error') || extractRes.status === 504
+              ? 'Extractie duurde te lang'
+              : 'Ongeldig antwoord van extract-service'
+          );
         }
-        const extracted = await extractRes.json();
+        if (!extractRes.ok) {
+          throw new Error(extracted?.error || 'Extractie mislukt');
+        }
         extracted.ingredients = parseExtractedIngredients(extracted.ingredients);
         const title = extracted.title || bulkItems[i].title;
 
@@ -655,8 +678,18 @@ export default function NieuwReceptPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url: bulkItems[i].url }),
         });
-        if (!extractRes.ok) throw new Error('Extractie mislukt');
-        const extracted = await extractRes.json();
+        const retryRaw = await extractRes.text();
+        let extracted: any;
+        try {
+          extracted = JSON.parse(retryRaw);
+        } catch {
+          throw new Error(
+            retryRaw.startsWith('An error') || extractRes.status === 504
+              ? 'Extractie duurde te lang'
+              : 'Ongeldig antwoord van extract-service'
+          );
+        }
+        if (!extractRes.ok) throw new Error(extracted?.error || 'Extractie mislukt');
         extracted.ingredients = parseExtractedIngredients(extracted.ingredients);
         const title = extracted.title || bulkItems[i].title;
 
