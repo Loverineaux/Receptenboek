@@ -33,6 +33,18 @@ async function finalize(recipe: any, url: string) {
     }
   }
 
+  // Absolute last resort: some sources (e.g. eefkooktzo.nl) block Vercel's IP
+  // range at the Cloudflare edge, so every direct fetch returns 403. Anthropic's
+  // web_search tool runs on their own infra and reaches these sites fine — ask
+  // Claude to find just the image URL.
+  if (!recipe.image_url && recipe.title) {
+    const claudeImage = await findImageViaWebSearch(url, recipe.title);
+    if (claudeImage) {
+      console.log('[URL Extract] Claude web-search image found:', claudeImage);
+      recipe.image_url = claudeImage;
+    }
+  }
+
   // Persist external images in Supabase Storage so hotlink-protected sources
   // (Cloudflare, Jetpack, etc. — e.g. eefkooktzo.nl) still render in the app.
   if (
@@ -184,6 +196,85 @@ export async function POST(request: NextRequest) {
       { error: `Failed to extract recipe: ${message}` },
       { status: 422 }
     );
+  }
+}
+
+/**
+ * Last-resort image lookup via Claude's web_search tool. Runs on Anthropic's
+ * infrastructure, so it reaches sites that IP-block Vercel (eefkooktzo.nl).
+ * Returns a direct image URL or null.
+ *
+ * Hard constraint: the image MUST belong to the recipe on the source page.
+ * Accept only URLs on the source hostname itself or on a WordPress Jetpack
+ * CDN that serves this source's own media (i[0-9]+.wp.com/<source-host>/...).
+ * Never accept images from Pinterest, Instagram, or random third-party sites.
+ */
+async function findImageViaWebSearch(pageUrl: string, title: string): Promise<string | null> {
+  try {
+    const client = new Anthropic();
+    const parsedPage = new URL(pageUrl);
+    const hostname = parsedPage.hostname.replace(/^www\./, '');
+
+    const res = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1024,
+      system:
+        `Je zoekt de og:image-URL van een specifieke receptpagina op ${hostname}. Het MOET de foto zijn die bij DIT recept hoort — NIET een andere foto van een andere website of een ander recept. Retourneer UITSLUITEND geldig JSON: {"image_url": "https://..."} of {"image_url": null} als je niks vindt. Geen uitleg.`,
+      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }],
+      messages: [
+        {
+          role: 'user',
+          content: `Vind de og:image-URL voor deze specifieke receptpagina:
+- Bronpagina: ${pageUrl}
+- Receptnaam: "${title}"
+
+De gezochte URL moet voldoen aan ALLE volgende regels:
+1. Het is de afbeelding van DIT recept op ${hostname} (niet een ander recept, niet een andere site).
+2. De URL wijst naar een beeldbestand op ${hostname} zelf, OF op een WordPress Jetpack-CDN subdomein (bijv. i0.wp.com/${hostname}/..., i1.wp.com/${hostname}/...).
+3. GEEN Pinterest, GEEN Instagram, GEEN random andere websites.
+4. Geen stockfoto's, geen generieke receptbeeld, alleen de specifieke foto van deze receptpagina.
+
+Zoekstrategie: zoek naar de pagina URL in Google en haal de og:image uit de meta tags zoals gecacht in search snippets. Of zoek "site:${hostname} ${title}" en pak de bijbehorende afbeelding.
+
+Als je geen betrouwbare match vindt, retourneer {"image_url": null}. Retourneer ALLEEN JSON — geen uitleg.`,
+        },
+      ],
+    });
+
+    const text = res.content
+      .filter((b) => b.type === 'text')
+      .map((b) => (b.type === 'text' ? b.text : ''))
+      .join('\n');
+
+    const match = text.match(/\{[^{}]*"image_url"[^{}]*\}/);
+    if (!match) return null;
+    const parsed = JSON.parse(match[0]);
+    const img = parsed?.image_url;
+    if (typeof img !== 'string' || !/^https?:\/\//i.test(img)) return null;
+
+    // Validate origin: must come from the source hostname or a WordPress
+    // Jetpack CDN that serves this source's own media. Everything else is
+    // rejected to avoid pulling unrelated images from other sites.
+    try {
+      const imgUrl = new URL(img);
+      const imgHost = imgUrl.hostname.replace(/^www\./, '');
+      const sourceHost = hostname;
+      const isSameHost = imgHost === sourceHost || imgHost.endsWith('.' + sourceHost);
+      const isJetpackCdn =
+        /^i\d+\.wp\.com$/i.test(imgHost) &&
+        (imgUrl.pathname.includes(`/${sourceHost}/`) || imgUrl.pathname.includes(`/www.${sourceHost}/`));
+      if (!isSameHost && !isJetpackCdn) {
+        console.log(`[URL Extract] Rejected image from unrelated host: ${imgHost}`);
+        return null;
+      }
+    } catch {
+      return null;
+    }
+
+    return img;
+  } catch (err: any) {
+    console.log('[URL Extract] Claude image search failed:', err.message);
+    return null;
   }
 }
 
