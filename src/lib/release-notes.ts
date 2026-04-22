@@ -6,6 +6,14 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '1.15.1',
+    date: '22 april 2026',
+    highlights: [
+      'Snellere recept-extractie: het structureren van de data gebeurt nu met een snellere AI, zodat imports ruim binnen de tijdslimiet blijven',
+      'Begrijpelijke Nederlandse foutmelding bij een te lang durende import in plaats van een cryptische JSON-fout',
+    ],
+  },
+  {
     version: '1.15.0',
     date: '22 april 2026',
     highlights: [
@@ -21,14 +29,6 @@ export const releaseNotes: ReleaseNote[] = [
       'Recept-foto wordt eerst gecontroleerd: als de URL niet werkt wordt er automatisch doorgezocht naar een andere foto van hetzelfde recept',
       'De AI mag geen fotourl meer gokken op basis van de receptnaam — alleen echte, geverifieerde og:image links worden geaccepteerd',
       'Geen broken-image icoontjes meer: mislukt alles dan staat er niets in plaats van een kapot plaatje',
-    ],
-  },
-  {
-    version: '1.14.13',
-    date: '22 april 2026',
-    highlights: [
-      'Recept-foto\'s van websites die onze server blokkeren worden nu alsnog opgehaald via een publieke image-proxy en opgeslagen in je receptenboek',
-      'Geen kapotte fotoicoontjes meer bij import — er is altijd een werkende weergave-URL, ook als de originele bron onze server blokkeert',
     ],
   },
 ];
