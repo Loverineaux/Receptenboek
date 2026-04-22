@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 
-export const maxDuration = 120;
+export const maxDuration = 60;
 import {
   EXTRACTION_SYSTEM_PROMPT,
   parseRecipeResponse,
@@ -9,7 +9,6 @@ import {
 import { scrapePage, jsonLdToRecipe, detectBronFromUrl } from "@/lib/extraction/scrape";
 import { getCachedRecipe, setCachedRecipe } from "@/lib/extraction/cache";
 import { validateRecipe } from "@/lib/extraction/validate";
-import { uploadExternalImage, findOgImageDirectly, buildWeservProxyUrl } from "@/lib/extraction/image-upload";
 
 function detectSocialPlatform(url: string): string | null {
   const hostname = new URL(url).hostname.replace('www.', '');
@@ -21,74 +20,13 @@ function detectSocialPlatform(url: string): string | null {
   return null;
 }
 
-/**
- * Try to persist `candidate` to Supabase Storage. Returns the stored URL on
- * success, or null if the candidate is unreachable (bad URL, upstream 403,
- * weserv proxy also failing). Candidates that are already a data:/Supabase/
- * weserv URL are accepted as-is.
- */
-async function tryPersistImage(candidate: string, sourcePage: string): Promise<string | null> {
-  if (!candidate) return null;
-  if (candidate.startsWith('data:')) return candidate;
-  if (candidate.includes('/storage/v1/object/public/')) return candidate;
-  if (candidate.includes('images.weserv.nl')) return candidate;
-  return await uploadExternalImage(candidate, sourcePage);
-}
-
-async function finalize(recipe: any, url: string, requestStart: number) {
-  // Image-lookup chain: validate the current URL by trying to persist it;
-  // drop and fall through to the next strategy if the fetch fails. Never
-  // keep an URL we couldn't actually download — it would just render as a
-  // broken-image icon in the app.
-  //
-  // Budget check between steps: Vercel's maxDuration is 60s. If
-  // fallbackWebSearch already ate 40s we skip the pricey Claude
-  // image-search rather than timing out mid-response.
-  const elapsed = () => Date.now() - requestStart;
-  // maxDuration is 120s; leave ~20s headroom for uploads and response.
-  const SAFE_BUDGET_MS = 100000;
-
-  // Step 1: try whatever image_url the main extraction produced.
-  if (recipe.image_url) {
-    const stored = await tryPersistImage(recipe.image_url, url);
-    if (stored) {
-      recipe.image_url = stored;
-    } else {
-      console.log('[URL Extract] Initial image_url unreachable, dropping:', recipe.image_url);
-      recipe.image_url = null;
-    }
-  }
-
-  // Step 2: direct og:image meta scrape (cheap when it works, fast-fails on
-  // IP-blocked hosts).
-  if (!recipe.image_url && elapsed() < SAFE_BUDGET_MS) {
-    const og = await findOgImageDirectly(url);
-    if (og) {
-      const stored = await tryPersistImage(og, url);
-      if (stored) {
-        console.log('[URL Extract] og:image fallback succeeded:', og);
-        recipe.image_url = stored;
-      } else {
-        console.log('[URL Extract] og:image candidate unreachable:', og);
-      }
-    }
-  }
-
-  // No further AI-driven image search. Earlier versions called a dedicated
-  // Claude web_search here, but it added a Haiku roundtrip + image
-  // download attempts that routinely pushed the request near the timeout
-  // and often returned null anyway when the source IP-blocked us. If every
-  // strategy above fails, image_url stays null — the preview shows a
-  // "Foto toevoegen"-uploader (v1.15.0) so the user adds one manually.
-
-  setCachedRecipe(url, recipe);
+function respondWithValidation(recipe: any) {
   const validation = validateRecipe(recipe);
-  console.log(`[URL Extract] elapsed=${elapsed()}ms validation=${validation.score}/100 issues=${validation.issues.length}`);
+  console.log(`[URL Extract] Validation score: ${validation.score}/100, issues: ${validation.issues.length}`);
   return NextResponse.json({ ...recipe, _validation: validation });
 }
 
 export async function POST(request: NextRequest) {
-  const requestStart = Date.now();
   let url = '';
   try {
     const body = await request.json();
@@ -123,7 +61,8 @@ export async function POST(request: NextRequest) {
       console.log(`[URL Extract] Social media detected (${socialPlatform}), skipping scrape, using web search`);
       const recipe = await fallbackWebSearch(url);
       if (!recipe.bron) recipe.bron = detectBronFromUrl(url);
-      return finalize(recipe, url, requestStart);
+      setCachedRecipe(url, recipe);
+      return respondWithValidation(recipe);
     }
 
     // Hash-based SPA detection (e.g. app.projectgezond.nl/#/recepten/...)
@@ -133,7 +72,8 @@ export async function POST(request: NextRequest) {
       const recipe = await fallbackWebSearch(url, true);
       if (!recipe.bron) recipe.bron = detectBronFromUrl(url);
       recipe._hashSPA = true;
-      return finalize(recipe, url, requestStart);
+      setCachedRecipe(url, recipe);
+      return respondWithValidation(recipe);
     }
 
     console.log("[URL Extract] Scraping:", url);
@@ -156,7 +96,8 @@ export async function POST(request: NextRequest) {
         recipe._incomplete = true;
       }
 
-      return finalize(recipe, url, requestStart);
+      setCachedRecipe(url, recipe);
+      return respondWithValidation(recipe);
     }
 
     // Step 2: If JSON-LD found, use it directly (fast path)
@@ -172,20 +113,23 @@ export async function POST(request: NextRequest) {
       // If JSON-LD is missing steps or ingredients, enhance with Claude
       if (recipe.steps.length === 0 || recipe.ingredients.length === 0) {
         console.log("[URL Extract] JSON-LD incomplete, enhancing with Claude");
-        return await extractWithClaude(scraped.pageText, url, scraped.ogImage, requestStart);
+        return await extractWithClaude(scraped.pageText, url, scraped.ogImage);
       }
 
-      return finalize(recipe, url, requestStart);
+      setCachedRecipe(url, recipe);
+      return respondWithValidation(recipe);
     }
 
     // Step 3: No JSON-LD — use Claude to extract from page text
     console.log("[URL Extract] No JSON-LD, using Claude on page text");
     try {
-      return await extractWithClaude(scraped.pageText, url, scraped.ogImage, requestStart);
+      return await extractWithClaude(scraped.pageText, url, scraped.ogImage);
     } catch (claudeError: any) {
       console.log("[URL Extract] Claude page-text extraction failed:", claudeError.message, "— trying web search");
       const recipe = await fallbackWebSearch(url);
-      return finalize(recipe, url, requestStart);
+
+      setCachedRecipe(url, recipe);
+      return respondWithValidation(recipe);
     }
   } catch (error) {
     const message =
@@ -226,12 +170,10 @@ export async function POST(request: NextRequest) {
   }
 }
 
-
 async function extractWithClaude(
   pageText: string,
   url: string,
-  ogImage: string | null,
-  requestStart: number,
+  ogImage: string | null
 ): Promise<NextResponse> {
   const client = new Anthropic();
 
@@ -279,7 +221,8 @@ Retourneer dit als een enkel JSON-object volgens het opgegeven schema. ALLEEN JS
     recipe.bron = detectBronFromUrl(url);
   }
 
-  return finalize(recipe, url, requestStart);
+  setCachedRecipe(url, recipe);
+  return respondWithValidation(recipe);
 }
 
 async function fallbackWebSearch(url: string, quick = false): Promise<any> {
@@ -295,12 +238,7 @@ async function fallbackWebSearch(url: string, quick = false): Promise<any> {
     || "";
   const hostname = urlObj.hostname.replace("www.", "");
 
-  // Main search + extra ingredient search run in parallel. Sequentially they
-  // summed to 40-50s and timed out; max(main, extra) brings the combined
-  // wait down to 20-25s. The extra search costs an extra Claude call even
-  // when quantities were already in the main result — acceptable trade for
-  // staying inside the user-visible time budget.
-  const searchPromise = client.messages.create({
+  const searchResponse = await client.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 4096,
     system:
@@ -322,13 +260,7 @@ De website is mogelijk niet direct bereikbaar. Gebruik daarom MEERDERE zoekstrat
 STAP 1: Zoek op "${slug} recept ingredienten ${hostname}".
 STAP 2: Als stap 1 niet genoeg oplevert, zoek op "${slug} recept ingredienten hoeveelheden".
 STAP 3: Zoek op "${slug} recept bereidingswijze" voor de stappen.
-STAP 4: Zoek naar de og:image van de receptpagina. Probeer de pagina te openen via web_search (werkt vaak ook al is de site niet direct bereikbaar) en haal de <meta property="og:image"> tag uit de HTML.
-
-KRITIEK — image_url:
-- GEEN GOKKEN: als je de exacte og:image-URL niet kunt verifiëren, zet image_url op null.
-- Raad NOOIT een URL uit de slug (bijv. "${slug}.jpg" onder /wp-content/uploads/ zonder dat je dat hebt geverifieerd).
-- De URL moet LETTERLIJK in de pagina-HTML of rich-result snippet staan.
-- Accepteer ALLEEN URLs op ${hostname} zelf of op een WordPress Jetpack-CDN (i0.wp.com/${hostname}/..., i1.wp.com/${hostname}/...). Nooit Pinterest, Instagram of andere sites.
+STAP 4: Zoek naar een afbeelding via "${slug} ${hostname}" en zoek naar directe afbeelding-URLs.
 
 BELANGRIJK: Gebruik ALLEEN informatie van ${hostname}. Gebruik GEEN recepten van andere websites.
 
@@ -351,53 +283,39 @@ Als het recept in het Engels is, vertaal dan alles naar het Nederlands.`,
     ],
   });
 
-  // Targeted ingredient search — fires in parallel for non-quick mode so we
-  // never wait for it sequentially after the main search. If the main
-  // search already returned quantities, we discard this output.
-  const extraIngredientPromise = quick
-    ? Promise.resolve(null)
-    : client.messages
-        .create({
-          model: "claude-sonnet-4-6",
-          max_tokens: 2048,
-          system: `Zoek specifiek de ingrediëntenlijst met hoeveelheden van dit recept op ${hostname}. Geef ALLE ingrediënten met exacte hoeveelheden. Gebruik ALLEEN informatie van ${hostname}.`,
-          tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }],
-          messages: [
-            {
-              role: "user",
-              content: `Zoek de VOLLEDIGE ingrediëntenlijst met exacte hoeveelheden voor het recept "${slug}". Ik heb ALLE ingrediënten nodig met hoeveelheden zoals "300 gram spitskool", "1 ui", "2 eieren", "30 ml ketjap manis" etc.`,
-            },
-          ],
-        })
-        .catch((err) => {
-          console.log("[URL Extract] Parallel ingredient search failed:", err?.message);
-          return null;
-        });
-
-  const [searchResponse, ingSearch] = await Promise.all([searchPromise, extraIngredientPromise]);
-
   const searchText = searchResponse.content
     .filter((block) => block.type === "text")
     .map((block) => (block.type === "text" ? block.text : ""))
     .join("\n");
 
+  // If no quantities found in first search, do a targeted ingredient search (skip in quick mode)
   const hasQuantities = /\d+\s*(gram|g|ml|el|tl|eetlepel|theelepel|stuk|stuks|ui|eieren?|teen)/i.test(searchText);
-  const extraIngredientText =
-    !hasQuantities && ingSearch
-      ? ingSearch.content
-          .filter((b) => b.type === "text")
-          .map((b) => (b.type === "text" ? b.text : ""))
-          .join("\n")
-      : "";
+  let extraIngredientText = "";
+  if (!hasQuantities && !quick) {
+    console.log("[URL Extract] No quantities found, doing targeted ingredient search");
+    try {
+      const ingSearch = await client.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 2048,
+        system: `Zoek specifiek de ingrediëntenlijst met hoeveelheden van dit recept op ${hostname}. Geef ALLE ingrediënten met exacte hoeveelheden. Gebruik ALLEEN informatie van ${hostname}.`,
+        tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }],
+        messages: [{
+          role: "user",
+          content: `Zoek de VOLLEDIGE ingrediëntenlijst met exacte hoeveelheden voor het recept "${slug}". Ik heb ALLE ingrediënten nodig met hoeveelheden zoals "300 gram spitskool", "1 ui", "2 eieren", "30 ml ketjap manis" etc.`,
+        }],
+      });
+      extraIngredientText = ingSearch.content
+        .filter((b) => b.type === "text")
+        .map((b) => (b.type === "text" ? b.text : ""))
+        .join("\n");
+      console.log("[URL Extract] Extra ingredient search done, length:", extraIngredientText.length);
+    } catch {}
+  }
 
   const fullText = extraIngredientText
     ? `${searchText}\n\nEXTRA INGREDIËNTEN INFO:\n${extraIngredientText}`
     : searchText;
 
-  // Structuring stays on Sonnet: empirically Haiku drops quantities on
-  // ingredients it's less certain about, regressing extraction quality.
-  // The parallel main+extra search in the step above already absorbs most
-  // of the time savings.
   const structureResponse = await client.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 4096,
@@ -405,7 +323,7 @@ Als het recept in het Engels is, vertaal dan alles naar het Nederlands.`,
     messages: [
       {
         role: "user",
-        content: `Hier is de receptinformatie gevonden op ${url}:\n\n${fullText}\n\nRetourneer dit als een enkel JSON-object volgens het opgegeven schema. Zorg dat ELKE ingrediënt een hoeveelheid en eenheid heeft als die beschikbaar is. Voor image_url: vul ALLEEN in als je in de zoekresultaten een letterlijke og:image / twitter:image URL hebt gezien — NOOIT gokken vanuit de slug. Bij twijfel: image_url = null. Let op: als er een aantal porties/personen vermeld wordt (bijv. "Twee personen", "4 porties", "Voor 2 personen"), vul dan basis_porties in als getal. ALLEEN JSON, geen andere tekst.`,
+        content: `Hier is de receptinformatie gevonden op ${url}:\n\n${fullText}\n\nRetourneer dit als een enkel JSON-object volgens het opgegeven schema. Zorg dat ELKE ingrediënt een hoeveelheid en eenheid heeft als die beschikbaar is. Zorg dat image_url wordt ingevuld als je een afbeelding hebt gevonden. Let op: als er een aantal porties/personen vermeld wordt (bijv. "Twee personen", "4 porties", "Voor 2 personen"), vul dan basis_porties in als getal. ALLEEN JSON, geen andere tekst.`,
       },
     ],
   });
