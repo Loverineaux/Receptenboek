@@ -45,7 +45,9 @@ async function finalize(recipe: any, url: string, requestStart: number) {
   // fallbackWebSearch already ate 40s we skip the pricey Claude
   // image-search rather than timing out mid-response.
   const elapsed = () => Date.now() - requestStart;
-  const SAFE_BUDGET_MS = 52000;
+  // Target UX: 30-40s. Hard cap at maxDuration=60s. Leave ~15s headroom
+  // so uploads + response always fit.
+  const SAFE_BUDGET_MS = 45000;
 
   // Step 1: try whatever image_url the main extraction produced.
   if (recipe.image_url) {
@@ -73,25 +75,12 @@ async function finalize(recipe: any, url: string, requestStart: number) {
     }
   }
 
-  // Step 3: Claude web_search on Anthropic's infra — reaches sites that
-  // IP-block Vercel. Strict origin validation in findImageViaWebSearch keeps
-  // us within the source domain.
-  if (!recipe.image_url && recipe.title && elapsed() < SAFE_BUDGET_MS - 10000) {
-    const claudeImage = await findImageViaWebSearch(url, recipe.title);
-    if (claudeImage) {
-      const stored = await tryPersistImage(claudeImage, url);
-      if (stored) {
-        console.log('[URL Extract] Claude web-search image succeeded:', claudeImage);
-        recipe.image_url = stored;
-      } else {
-        console.log('[URL Extract] Claude web-search candidate unreachable:', claudeImage);
-      }
-    }
-  }
-
-  // If every strategy failed, image_url stays null. UI will show the
-  // "Geen afbeelding gevonden" warning and the user can add a photo
-  // manually — better than a broken-image icon.
+  // No further AI-driven image search. Earlier versions called a dedicated
+  // Claude web_search here, but it added a Haiku roundtrip + image
+  // download attempts that routinely pushed the request near the timeout
+  // and often returned null anyway when the source IP-blocked us. If every
+  // strategy above fails, image_url stays null — the preview shows a
+  // "Foto toevoegen"-uploader (v1.15.0) so the user adds one manually.
 
   setCachedRecipe(url, recipe);
   const validation = validateRecipe(recipe);
@@ -193,7 +182,7 @@ export async function POST(request: NextRequest) {
     // Step 3: No JSON-LD — use Claude to extract from page text
     console.log("[URL Extract] No JSON-LD, using Claude on page text");
     try {
-      return await extractWithClaude(scraped.pageText, url, scraped.ogImage);
+      return await extractWithClaude(scraped.pageText, url, scraped.ogImage, requestStart);
     } catch (claudeError: any) {
       console.log("[URL Extract] Claude page-text extraction failed:", claudeError.message, "— trying web search");
       const recipe = await fallbackWebSearch(url);
@@ -238,107 +227,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-/**
- * Last-resort image lookup via Claude's web_search tool. Runs on Anthropic's
- * infrastructure, so it reaches sites that IP-block Vercel (eefkooktzo.nl).
- * Returns a direct image URL or null.
- *
- * Hard constraint: the image MUST belong to the recipe on the source page.
- * Accept only URLs on the source hostname itself or on a WordPress Jetpack
- * CDN that serves this source's own media (i[0-9]+.wp.com/<source-host>/...).
- * Never accept images from Pinterest, Instagram, or random third-party sites.
- */
-async function findImageViaWebSearch(pageUrl: string, title: string): Promise<string | null> {
-  // Hard time budget — fallbackWebSearch can already take 30-40s, and we must
-  // stay under Vercel's 60s maxDuration. If Claude doesn't return in 8s,
-  // abort and let the recipe save without an image.
-  const TIMEOUT_MS = 8000;
-  return await Promise.race([
-    findImageViaWebSearchInner(pageUrl, title),
-    new Promise<null>((resolve) =>
-      setTimeout(() => {
-        console.log('[URL Extract] Claude image search timed out');
-        resolve(null);
-      }, TIMEOUT_MS),
-    ),
-  ]);
-}
-
-async function findImageViaWebSearchInner(pageUrl: string, title: string): Promise<string | null> {
-  try {
-    const client = new Anthropic();
-    const parsedPage = new URL(pageUrl);
-    const hostname = parsedPage.hostname.replace(/^www\./, '');
-
-    const res = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1024,
-      system:
-        `Je enige taak: de og:image-URL van deze specifieke receptpagina op ${hostname} terugvinden. Gebruik je web_search tool om de pagina zelf op te halen en de <meta property="og:image"> tag uit de HTML te lezen. Retourneer UITSLUITEND geldig JSON: {"image_url": "https://..."} of {"image_url": null} als je niks betrouwbaars vindt. Geen uitleg, geen markdown, alleen JSON.`,
-      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }],
-      messages: [
-        {
-          role: 'user',
-          content: `Vind de og:image van deze exacte pagina:
-${pageUrl}
-
-Receptnaam: "${title}"
-
-STAP 1: Gebruik web_search met de volledige URL "${pageUrl}" als query. De tool kan de pagina ophalen (draait op andere infrastructuur dan ons).
-STAP 2: Zoek in de HTML naar een van deze meta tags:
-  <meta property="og:image" content="https://..." />
-  <meta property="og:image:secure_url" content="https://..." />
-  <meta name="twitter:image" content="https://..." />
-  <link rel="image_src" href="https://..." />
-STAP 3: Retourneer de URL uit content of href.
-
-HARDE REGELS voor de geretourneerde URL:
-- MOET de foto zijn die bij DIT recept hoort op ${hostname} (niet een ander recept, niet een andere site).
-- MOET gehost zijn op ${hostname} zelf (bijv. ${hostname}/wp-content/uploads/...) OF op een WordPress Jetpack-CDN (i0.wp.com/${hostname}/..., i1.wp.com/${hostname}/...).
-- NOOIT Pinterest, Instagram, Facebook, Twitter, stock-sites, of random andere websites.
-- NOOIT een generieke/stockfoto, alleen de specifieke foto van DEZE receptpagina.
-
-Als je de pagina niet kunt bereiken of geen og:image vindt: retourneer {"image_url": null}. Retourneer ALLEEN JSON — niks anders.`,
-        },
-      ],
-    });
-
-    const text = res.content
-      .filter((b) => b.type === 'text')
-      .map((b) => (b.type === 'text' ? b.text : ''))
-      .join('\n');
-
-    const match = text.match(/\{[^{}]*"image_url"[^{}]*\}/);
-    if (!match) return null;
-    const parsed = JSON.parse(match[0]);
-    const img = parsed?.image_url;
-    if (typeof img !== 'string' || !/^https?:\/\//i.test(img)) return null;
-
-    // Validate origin: must come from the source hostname or a WordPress
-    // Jetpack CDN that serves this source's own media. Everything else is
-    // rejected to avoid pulling unrelated images from other sites.
-    try {
-      const imgUrl = new URL(img);
-      const imgHost = imgUrl.hostname.replace(/^www\./, '');
-      const sourceHost = hostname;
-      const isSameHost = imgHost === sourceHost || imgHost.endsWith('.' + sourceHost);
-      const isJetpackCdn =
-        /^i\d+\.wp\.com$/i.test(imgHost) &&
-        (imgUrl.pathname.includes(`/${sourceHost}/`) || imgUrl.pathname.includes(`/www.${sourceHost}/`));
-      if (!isSameHost && !isJetpackCdn) {
-        console.log(`[URL Extract] Rejected image from unrelated host: ${imgHost}`);
-        return null;
-      }
-    } catch {
-      return null;
-    }
-
-    return img;
-  } catch (err: any) {
-    console.log('[URL Extract] Claude image search failed:', err.message);
-    return null;
-  }
-}
 
 async function extractWithClaude(
   pageText: string,
@@ -417,7 +305,7 @@ async function fallbackWebSearch(url: string, quick = false): Promise<any> {
       {
         type: "web_search_20250305",
         name: "web_search",
-        max_uses: quick ? 3 : 5,
+        max_uses: quick ? 2 : 3,
       },
     ],
     messages: [
