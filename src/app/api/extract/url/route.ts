@@ -9,6 +9,7 @@ import {
 import { scrapePage, jsonLdToRecipe, detectBronFromUrl } from "@/lib/extraction/scrape";
 import { getCachedRecipe, setCachedRecipe } from "@/lib/extraction/cache";
 import { validateRecipe } from "@/lib/extraction/validate";
+import { uploadExternalImage } from "@/lib/extraction/image-upload";
 
 function detectSocialPlatform(url: string): string | null {
   const hostname = new URL(url).hostname.replace('www.', '');
@@ -20,7 +21,18 @@ function detectSocialPlatform(url: string): string | null {
   return null;
 }
 
-function respondWithValidation(recipe: any) {
+async function finalize(recipe: any, url: string) {
+  // Persist external images in Supabase Storage so hotlink-protected sources
+  // (Cloudflare, Jetpack, etc. — e.g. eefkooktzo.nl) still render in the app.
+  if (
+    recipe.image_url &&
+    !recipe.image_url.startsWith("data:") &&
+    !recipe.image_url.includes("/storage/v1/object/public/")
+  ) {
+    const stored = await uploadExternalImage(recipe.image_url, url);
+    if (stored) recipe.image_url = stored;
+  }
+  setCachedRecipe(url, recipe);
   const validation = validateRecipe(recipe);
   console.log(`[URL Extract] Validation score: ${validation.score}/100, issues: ${validation.issues.length}`);
   return NextResponse.json({ ...recipe, _validation: validation });
@@ -61,8 +73,7 @@ export async function POST(request: NextRequest) {
       console.log(`[URL Extract] Social media detected (${socialPlatform}), skipping scrape, using web search`);
       const recipe = await fallbackWebSearch(url);
       if (!recipe.bron) recipe.bron = detectBronFromUrl(url);
-      setCachedRecipe(url, recipe);
-      return respondWithValidation(recipe);
+      return finalize(recipe, url);
     }
 
     // Hash-based SPA detection (e.g. app.projectgezond.nl/#/recepten/...)
@@ -72,8 +83,7 @@ export async function POST(request: NextRequest) {
       const recipe = await fallbackWebSearch(url, true);
       if (!recipe.bron) recipe.bron = detectBronFromUrl(url);
       recipe._hashSPA = true;
-      setCachedRecipe(url, recipe);
-      return respondWithValidation(recipe);
+      return finalize(recipe, url);
     }
 
     console.log("[URL Extract] Scraping:", url);
@@ -96,8 +106,7 @@ export async function POST(request: NextRequest) {
         recipe._incomplete = true;
       }
 
-      setCachedRecipe(url, recipe);
-      return respondWithValidation(recipe);
+      return finalize(recipe, url);
     }
 
     // Step 2: If JSON-LD found, use it directly (fast path)
@@ -116,8 +125,7 @@ export async function POST(request: NextRequest) {
         return await extractWithClaude(scraped.pageText, url, scraped.ogImage);
       }
 
-      setCachedRecipe(url, recipe);
-      return respondWithValidation(recipe);
+      return finalize(recipe, url);
     }
 
     // Step 3: No JSON-LD — use Claude to extract from page text
@@ -127,9 +135,7 @@ export async function POST(request: NextRequest) {
     } catch (claudeError: any) {
       console.log("[URL Extract] Claude page-text extraction failed:", claudeError.message, "— trying web search");
       const recipe = await fallbackWebSearch(url);
-
-      setCachedRecipe(url, recipe);
-      return respondWithValidation(recipe);
+      return finalize(recipe, url);
     }
   } catch (error) {
     const message =
@@ -221,8 +227,7 @@ Retourneer dit als een enkel JSON-object volgens het opgegeven schema. ALLEEN JS
     recipe.bron = detectBronFromUrl(url);
   }
 
-  setCachedRecipe(url, recipe);
-  return respondWithValidation(recipe);
+  return finalize(recipe, url);
 }
 
 async function fallbackWebSearch(url: string, quick = false): Promise<any> {
