@@ -81,3 +81,50 @@ export async function uploadExternalImage(
     clearTimeout(timer);
   }
 }
+
+/**
+ * Last-resort og:image extraction — used when the main scrape pipeline
+ * returned no image (site blocked, fallbackWebSearch didn't find one).
+ * Fetches the page once with browser headers and pulls out the og:image /
+ * twitter:image meta tag. Many sites still serve OG meta even on gated
+ * responses, so this picks up cases scrapePage's strict size/structured-data
+ * checks reject.
+ */
+export async function findOgImageDirectly(pageUrl: string): Promise<string | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10000);
+  try {
+    const res = await fetch(pageUrl, {
+      headers: {
+        'User-Agent': CHROME_UA,
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'nl-NL,nl;q=0.9,en;q=0.8',
+      },
+      signal: controller.signal,
+      redirect: 'follow',
+    });
+    const html = await res.text();
+    if (html.length < 200) return null;
+
+    const match =
+      html.match(/<meta[^>]*property=["']og:image(?::secure_url)?["'][^>]*content=["']([^"']+)["']/i) ||
+      html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image(?::secure_url)?["']/i) ||
+      html.match(/<meta[^>]*name=["']twitter:image["'][^>]*content=["']([^"']+)["']/i) ||
+      html.match(/<link[^>]*rel=["']image_src["'][^>]*href=["']([^"']+)["']/i);
+
+    if (!match) return null;
+    const raw = match[1].trim();
+    if (!raw) return null;
+
+    try {
+      return new URL(raw, pageUrl).href;
+    } catch {
+      return raw;
+    }
+  } catch (err: any) {
+    console.log('[OgImageDirect] Error:', err.message);
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}

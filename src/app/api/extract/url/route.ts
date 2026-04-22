@@ -9,7 +9,7 @@ import {
 import { scrapePage, jsonLdToRecipe, detectBronFromUrl } from "@/lib/extraction/scrape";
 import { getCachedRecipe, setCachedRecipe } from "@/lib/extraction/cache";
 import { validateRecipe } from "@/lib/extraction/validate";
-import { uploadExternalImage } from "@/lib/extraction/image-upload";
+import { uploadExternalImage, findOgImageDirectly } from "@/lib/extraction/image-upload";
 
 function detectSocialPlatform(url: string): string | null {
   const hostname = new URL(url).hostname.replace('www.', '');
@@ -22,6 +22,17 @@ function detectSocialPlatform(url: string): string | null {
 }
 
 async function finalize(recipe: any, url: string) {
+  // Last-resort image lookup: when the main pipeline couldn't find one
+  // (scrapePage failed AND Claude web search didn't return a URL), try to
+  // pull the og:image meta tag directly from the page.
+  if (!recipe.image_url) {
+    const og = await findOgImageDirectly(url);
+    if (og) {
+      console.log('[URL Extract] og:image fallback found:', og);
+      recipe.image_url = og;
+    }
+  }
+
   // Persist external images in Supabase Storage so hotlink-protected sources
   // (Cloudflare, Jetpack, etc. — e.g. eefkooktzo.nl) still render in the app.
   if (
