@@ -6,6 +6,14 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '1.14.13',
+    date: '22 april 2026',
+    highlights: [
+      'Recept-foto\'s van websites die onze server blokkeren worden nu alsnog opgehaald via een publieke image-proxy en opgeslagen in je receptenboek',
+      'Geen kapotte fotoicoontjes meer bij import — er is altijd een werkende weergave-URL, ook als de originele bron onze server blokkeert',
+    ],
+  },
+  {
     version: '1.14.12',
     date: '22 april 2026',
     highlights: [
@@ -17,14 +25,6 @@ export const releaseNotes: ReleaseNote[] = [
     date: '22 april 2026',
     highlights: [
       'Recept-foto wordt betrouwbaarder gevonden voor websites die onze server blokkeren — de zoekactie haalt nu expliciet de og:image van de bronpagina op',
-    ],
-  },
-  {
-    version: '1.14.10',
-    date: '22 april 2026',
-    highlights: [
-      'Recept-foto wordt nu altijd gezocht van de bron zelf — nooit een willekeurige afbeelding van een andere website',
-      'Alleen de echte foto van het recept op de bronpagina wordt overgenomen (ook via WordPress-CDN van de bron)',
     ],
   },
 ];
