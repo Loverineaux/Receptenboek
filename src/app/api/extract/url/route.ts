@@ -310,7 +310,7 @@ async function fallbackWebSearch(url: string, quick = false): Promise<any> {
       {
         type: "web_search_20250305",
         name: "web_search",
-        max_uses: quick ? 2 : 4,
+        max_uses: quick ? 3 : 8,
       },
     ],
     messages: [
