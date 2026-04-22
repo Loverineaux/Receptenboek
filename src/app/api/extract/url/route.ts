@@ -33,6 +33,18 @@ async function finalize(recipe: any, url: string) {
     }
   }
 
+  // Absolute last resort: some sources (e.g. eefkooktzo.nl) block Vercel's IP
+  // range at the Cloudflare edge, so every direct fetch returns 403. Anthropic's
+  // web_search tool runs on their own infra and reaches these sites fine — ask
+  // Claude to find just the image URL.
+  if (!recipe.image_url && recipe.title) {
+    const claudeImage = await findImageViaWebSearch(url, recipe.title);
+    if (claudeImage) {
+      console.log('[URL Extract] Claude web-search image found:', claudeImage);
+      recipe.image_url = claudeImage;
+    }
+  }
+
   // Persist external images in Supabase Storage so hotlink-protected sources
   // (Cloudflare, Jetpack, etc. — e.g. eefkooktzo.nl) still render in the app.
   if (
@@ -184,6 +196,57 @@ export async function POST(request: NextRequest) {
       { error: `Failed to extract recipe: ${message}` },
       { status: 422 }
     );
+  }
+}
+
+/**
+ * Last-resort image lookup via Claude's web_search tool. Runs on Anthropic's
+ * infrastructure, so it reaches sites that IP-block Vercel (eefkooktzo.nl).
+ * Returns a direct image URL or null. Kept small and focused to minimize cost.
+ */
+async function findImageViaWebSearch(pageUrl: string, title: string): Promise<string | null> {
+  try {
+    const client = new Anthropic();
+    const hostname = new URL(pageUrl).hostname.replace(/^www\./, '');
+
+    const res = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1024,
+      system:
+        'Je vindt de directe afbeelding-URL (JPG/PNG/WEBP) van een recept. Retourneer UITSLUITEND geldig JSON: {"image_url": "https://..."} of {"image_url": null} als je niks vindt. Geen uitleg.',
+      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }],
+      messages: [
+        {
+          role: 'user',
+          content: `Vind de directe URL van de hoofdfoto voor dit recept:
+- Titel: "${title}"
+- Bronpagina: ${pageUrl}
+
+Zoekstrategie:
+1. Zoek "${title} ${hostname}" en probeer een og:image-URL te vinden in de zoekresultaten.
+2. Als dat niet werkt, zoek op Google Images: "site:${hostname} ${title}" en gebruik een van die image-URLs.
+3. Als ook dat niks geeft: zoek Pinterest of een vergelijkbare site met deze receptnaam en pak een image-URL.
+
+De URL moet direct naar een beeldbestand wijzen (.jpg, .jpeg, .png, .webp).
+Retourneer ALLEEN JSON zoals {"image_url": "https://..."} — niks anders.`,
+        },
+      ],
+    });
+
+    const text = res.content
+      .filter((b) => b.type === 'text')
+      .map((b) => (b.type === 'text' ? b.text : ''))
+      .join('\n');
+
+    const match = text.match(/\{[^{}]*"image_url"[^{}]*\}/);
+    if (!match) return null;
+    const parsed = JSON.parse(match[0]);
+    const img = parsed?.image_url;
+    if (typeof img !== 'string' || !/^https?:\/\//i.test(img)) return null;
+    return img;
+  } catch (err: any) {
+    console.log('[URL Extract] Claude image search failed:', err.message);
+    return null;
   }
 }
 
