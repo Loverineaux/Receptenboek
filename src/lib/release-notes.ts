@@ -6,6 +6,14 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '1.15.4',
+    date: '22 april 2026',
+    highlights: [
+      'De twee zoekacties voor receptgegevens en ingrediënten draaien nu tegelijk in plaats van na elkaar — bespaart 10-15 seconden per import',
+      'Main zoekactie doet nu maximaal 2 vervolgsearches (was 3), extra versnelling',
+    ],
+  },
+  {
     version: '1.15.3',
     date: '22 april 2026',
     highlights: [
