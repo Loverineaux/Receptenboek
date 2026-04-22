@@ -7,6 +7,16 @@ const IMAGE_TIMEOUT_MS = 15000;
 const MIN_IMAGE_BYTES = 1024;
 
 /**
+ * Build a runtime proxy URL via images.weserv.nl. Used as a last-ditch
+ * fallback when server-side download (direct + weserv) both fail — the
+ * browser at least gets a renderable URL that routes through Cloudflare
+ * Workers and often succeeds where a direct fetch didn't.
+ */
+export function buildWeservProxyUrl(imageUrl: string): string {
+  return `https://images.weserv.nl/?url=${encodeURIComponent(imageUrl.replace(/^https?:\/\//i, ''))}&default=1`;
+}
+
+/**
  * Download an external recipe image and persist it in Supabase Storage.
  * Needed for sources with hotlink protection (Cloudflare, Jetpack, etc.)
  * that block Next.js' image optimizer or the browser from loading the URL
@@ -22,6 +32,26 @@ export async function uploadExternalImage(
   if (!imageUrl || !/^https?:\/\//i.test(imageUrl)) return null;
   if (imageUrl.includes('/storage/v1/object/public/')) return null;
 
+  // Strategy 1: direct fetch with browser headers.
+  let result = await downloadAndStore(imageUrl, sourcePage, false);
+  if (result) return result;
+
+  // Strategy 2: route via images.weserv.nl (a public Cloudflare-backed image
+  // proxy). Vercel's IP range is blocked by some sites (e.g. eefkooktzo.nl),
+  // but weserv fetches through its own Cloudflare Workers pool with different
+  // IPs — usually that request does get through. The transcoded image is
+  // then downloaded into our own Supabase bucket so it never depends on the
+  // proxy staying up.
+  console.log('[ImageUpload] Direct fetch failed, retrying via images.weserv.nl');
+  result = await downloadAndStore(imageUrl, sourcePage, true);
+  return result;
+}
+
+async function downloadAndStore(
+  imageUrl: string,
+  sourcePage: string | undefined,
+  useWeservProxy: boolean,
+): Promise<string | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), IMAGE_TIMEOUT_MS);
 
@@ -31,32 +61,34 @@ export async function uploadExternalImage(
       Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
       'Accept-Language': 'nl-NL,nl;q=0.9,en;q=0.8',
     };
-    if (sourcePage) {
+    if (sourcePage && !useWeservProxy) {
       try {
         headers.Referer = new URL(sourcePage).origin + '/';
       } catch {}
     }
 
-    const res = await fetch(imageUrl, {
+    const fetchUrl = useWeservProxy ? buildWeservProxyUrl(imageUrl) : imageUrl;
+
+    const res = await fetch(fetchUrl, {
       headers,
       signal: controller.signal,
       redirect: 'follow',
     });
 
     if (!res.ok) {
-      console.log(`[ImageUpload] Fetch ${res.status} for ${imageUrl}`);
+      console.log(`[ImageUpload] Fetch ${res.status} for ${fetchUrl}${useWeservProxy ? ' (weserv)' : ''}`);
       return null;
     }
 
     const contentType = (res.headers.get('content-type') || 'image/jpeg').split(';')[0].trim();
     if (!contentType.startsWith('image/')) {
-      console.log(`[ImageUpload] Not an image (${contentType}) at ${imageUrl}`);
+      console.log(`[ImageUpload] Not an image (${contentType}) at ${fetchUrl}`);
       return null;
     }
 
     const buffer = Buffer.from(await res.arrayBuffer());
     if (buffer.byteLength < MIN_IMAGE_BYTES) {
-      console.log(`[ImageUpload] Image too small (${buffer.byteLength} bytes) at ${imageUrl}`);
+      console.log(`[ImageUpload] Image too small (${buffer.byteLength} bytes) at ${fetchUrl}`);
       return null;
     }
 
@@ -72,10 +104,12 @@ export async function uploadExternalImage(
     }
 
     const { data } = supabaseAdmin.storage.from('recipe-images').getPublicUrl(path);
-    console.log(`[ImageUpload] Stored ${Math.round(buffer.byteLength / 1024)}KB → ${data.publicUrl}`);
+    console.log(
+      `[ImageUpload] Stored ${Math.round(buffer.byteLength / 1024)}KB${useWeservProxy ? ' via weserv' : ''} → ${data.publicUrl}`,
+    );
     return data.publicUrl;
   } catch (err: any) {
-    console.log('[ImageUpload] Error:', err.message);
+    console.log(`[ImageUpload] Error${useWeservProxy ? ' (weserv)' : ''}:`, err.message);
     return null;
   } finally {
     clearTimeout(timer);

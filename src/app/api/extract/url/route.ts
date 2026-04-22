@@ -9,7 +9,7 @@ import {
 import { scrapePage, jsonLdToRecipe, detectBronFromUrl } from "@/lib/extraction/scrape";
 import { getCachedRecipe, setCachedRecipe } from "@/lib/extraction/cache";
 import { validateRecipe } from "@/lib/extraction/validate";
-import { uploadExternalImage, findOgImageDirectly } from "@/lib/extraction/image-upload";
+import { uploadExternalImage, findOgImageDirectly, buildWeservProxyUrl } from "@/lib/extraction/image-upload";
 
 function detectSocialPlatform(url: string): string | null {
   const hostname = new URL(url).hostname.replace('www.', '');
@@ -47,13 +47,22 @@ async function finalize(recipe: any, url: string) {
 
   // Persist external images in Supabase Storage so hotlink-protected sources
   // (Cloudflare, Jetpack, etc. — e.g. eefkooktzo.nl) still render in the app.
+  // uploadExternalImage tries direct fetch first, then weserv.nl proxy. If
+  // both fail server-side, fall back to a runtime weserv URL so the browser
+  // at least has a renderable URL instead of a broken-image icon.
   if (
     recipe.image_url &&
     !recipe.image_url.startsWith("data:") &&
-    !recipe.image_url.includes("/storage/v1/object/public/")
+    !recipe.image_url.includes("/storage/v1/object/public/") &&
+    !recipe.image_url.includes("images.weserv.nl")
   ) {
     const stored = await uploadExternalImage(recipe.image_url, url);
-    if (stored) recipe.image_url = stored;
+    if (stored) {
+      recipe.image_url = stored;
+    } else {
+      console.log('[URL Extract] Upload failed for', recipe.image_url, '— using weserv runtime proxy');
+      recipe.image_url = buildWeservProxyUrl(recipe.image_url);
+    }
   }
   setCachedRecipe(url, recipe);
   const validation = validateRecipe(recipe);
