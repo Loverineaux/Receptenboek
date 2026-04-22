@@ -296,7 +296,12 @@ async function fallbackWebSearch(url: string, quick = false): Promise<any> {
     || "";
   const hostname = urlObj.hostname.replace("www.", "");
 
-  const searchResponse = await client.messages.create({
+  // Main search + extra ingredient search run in parallel. Sequentially they
+  // summed to 40-50s and timed out; max(main, extra) brings the combined
+  // wait down to 20-25s. The extra search costs an extra Claude call even
+  // when quantities were already in the main result — acceptable trade for
+  // staying inside the user-visible time budget.
+  const searchPromise = client.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 4096,
     system:
@@ -305,7 +310,7 @@ async function fallbackWebSearch(url: string, quick = false): Promise<any> {
       {
         type: "web_search_20250305",
         name: "web_search",
-        max_uses: quick ? 2 : 3,
+        max_uses: quick ? 2 : 2,
       },
     ],
     messages: [
@@ -347,34 +352,44 @@ Als het recept in het Engels is, vertaal dan alles naar het Nederlands.`,
     ],
   });
 
+  // Targeted ingredient search — fires in parallel for non-quick mode so we
+  // never wait for it sequentially after the main search. If the main
+  // search already returned quantities, we discard this output.
+  const extraIngredientPromise = quick
+    ? Promise.resolve(null)
+    : client.messages
+        .create({
+          model: "claude-sonnet-4-6",
+          max_tokens: 2048,
+          system: `Zoek specifiek de ingrediëntenlijst met hoeveelheden van dit recept op ${hostname}. Geef ALLE ingrediënten met exacte hoeveelheden. Gebruik ALLEEN informatie van ${hostname}.`,
+          tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 2 }],
+          messages: [
+            {
+              role: "user",
+              content: `Zoek de VOLLEDIGE ingrediëntenlijst met exacte hoeveelheden voor het recept "${slug}". Ik heb ALLE ingrediënten nodig met hoeveelheden zoals "300 gram spitskool", "1 ui", "2 eieren", "30 ml ketjap manis" etc.`,
+            },
+          ],
+        })
+        .catch((err) => {
+          console.log("[URL Extract] Parallel ingredient search failed:", err?.message);
+          return null;
+        });
+
+  const [searchResponse, ingSearch] = await Promise.all([searchPromise, extraIngredientPromise]);
+
   const searchText = searchResponse.content
     .filter((block) => block.type === "text")
     .map((block) => (block.type === "text" ? block.text : ""))
     .join("\n");
 
-  // If no quantities found in first search, do a targeted ingredient search (skip in quick mode)
   const hasQuantities = /\d+\s*(gram|g|ml|el|tl|eetlepel|theelepel|stuk|stuks|ui|eieren?|teen)/i.test(searchText);
-  let extraIngredientText = "";
-  if (!hasQuantities && !quick) {
-    console.log("[URL Extract] No quantities found, doing targeted ingredient search");
-    try {
-      const ingSearch = await client.messages.create({
-        model: "claude-sonnet-4-6",
-        max_tokens: 2048,
-        system: `Zoek specifiek de ingrediëntenlijst met hoeveelheden van dit recept op ${hostname}. Geef ALLE ingrediënten met exacte hoeveelheden. Gebruik ALLEEN informatie van ${hostname}.`,
-        tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }],
-        messages: [{
-          role: "user",
-          content: `Zoek de VOLLEDIGE ingrediëntenlijst met exacte hoeveelheden voor het recept "${slug}". Ik heb ALLE ingrediënten nodig met hoeveelheden zoals "300 gram spitskool", "1 ui", "2 eieren", "30 ml ketjap manis" etc.`,
-        }],
-      });
-      extraIngredientText = ingSearch.content
-        .filter((b) => b.type === "text")
-        .map((b) => (b.type === "text" ? b.text : ""))
-        .join("\n");
-      console.log("[URL Extract] Extra ingredient search done, length:", extraIngredientText.length);
-    } catch {}
-  }
+  const extraIngredientText =
+    !hasQuantities && ingSearch
+      ? ingSearch.content
+          .filter((b) => b.type === "text")
+          .map((b) => (b.type === "text" ? b.text : ""))
+          .join("\n")
+      : "";
 
   const fullText = extraIngredientText
     ? `${searchText}\n\nEXTRA INGREDIËNTEN INFO:\n${extraIngredientText}`
