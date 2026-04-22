@@ -21,56 +21,86 @@ function detectSocialPlatform(url: string): string | null {
   return null;
 }
 
-async function finalize(recipe: any, url: string) {
-  // Last-resort image lookup: when the main pipeline couldn't find one
-  // (scrapePage failed AND Claude web search didn't return a URL), try to
-  // pull the og:image meta tag directly from the page.
-  if (!recipe.image_url) {
-    const og = await findOgImageDirectly(url);
-    if (og) {
-      console.log('[URL Extract] og:image fallback found:', og);
-      recipe.image_url = og;
-    }
-  }
+/**
+ * Try to persist `candidate` to Supabase Storage. Returns the stored URL on
+ * success, or null if the candidate is unreachable (bad URL, upstream 403,
+ * weserv proxy also failing). Candidates that are already a data:/Supabase/
+ * weserv URL are accepted as-is.
+ */
+async function tryPersistImage(candidate: string, sourcePage: string): Promise<string | null> {
+  if (!candidate) return null;
+  if (candidate.startsWith('data:')) return candidate;
+  if (candidate.includes('/storage/v1/object/public/')) return candidate;
+  if (candidate.includes('images.weserv.nl')) return candidate;
+  return await uploadExternalImage(candidate, sourcePage);
+}
 
-  // Absolute last resort: some sources (e.g. eefkooktzo.nl) block Vercel's IP
-  // range at the Cloudflare edge, so every direct fetch returns 403. Anthropic's
-  // web_search tool runs on their own infra and reaches these sites fine — ask
-  // Claude to find just the image URL.
-  if (!recipe.image_url && recipe.title) {
-    const claudeImage = await findImageViaWebSearch(url, recipe.title);
-    if (claudeImage) {
-      console.log('[URL Extract] Claude web-search image found:', claudeImage);
-      recipe.image_url = claudeImage;
-    }
-  }
+async function finalize(recipe: any, url: string, requestStart: number) {
+  // Image-lookup chain: validate the current URL by trying to persist it;
+  // drop and fall through to the next strategy if the fetch fails. Never
+  // keep an URL we couldn't actually download — it would just render as a
+  // broken-image icon in the app.
+  //
+  // Budget check between steps: Vercel's maxDuration is 60s. If
+  // fallbackWebSearch already ate 40s we skip the pricey Claude
+  // image-search rather than timing out mid-response.
+  const elapsed = () => Date.now() - requestStart;
+  const SAFE_BUDGET_MS = 52000;
 
-  // Persist external images in Supabase Storage so hotlink-protected sources
-  // (Cloudflare, Jetpack, etc. — e.g. eefkooktzo.nl) still render in the app.
-  // uploadExternalImage tries direct fetch first, then weserv.nl proxy. If
-  // both fail server-side, fall back to a runtime weserv URL so the browser
-  // at least has a renderable URL instead of a broken-image icon.
-  if (
-    recipe.image_url &&
-    !recipe.image_url.startsWith("data:") &&
-    !recipe.image_url.includes("/storage/v1/object/public/") &&
-    !recipe.image_url.includes("images.weserv.nl")
-  ) {
-    const stored = await uploadExternalImage(recipe.image_url, url);
+  // Step 1: try whatever image_url the main extraction produced.
+  if (recipe.image_url) {
+    const stored = await tryPersistImage(recipe.image_url, url);
     if (stored) {
       recipe.image_url = stored;
     } else {
-      console.log('[URL Extract] Upload failed for', recipe.image_url, '— using weserv runtime proxy');
-      recipe.image_url = buildWeservProxyUrl(recipe.image_url);
+      console.log('[URL Extract] Initial image_url unreachable, dropping:', recipe.image_url);
+      recipe.image_url = null;
     }
   }
+
+  // Step 2: direct og:image meta scrape (cheap when it works, fast-fails on
+  // IP-blocked hosts).
+  if (!recipe.image_url && elapsed() < SAFE_BUDGET_MS) {
+    const og = await findOgImageDirectly(url);
+    if (og) {
+      const stored = await tryPersistImage(og, url);
+      if (stored) {
+        console.log('[URL Extract] og:image fallback succeeded:', og);
+        recipe.image_url = stored;
+      } else {
+        console.log('[URL Extract] og:image candidate unreachable:', og);
+      }
+    }
+  }
+
+  // Step 3: Claude web_search on Anthropic's infra — reaches sites that
+  // IP-block Vercel. Strict origin validation in findImageViaWebSearch keeps
+  // us within the source domain.
+  if (!recipe.image_url && recipe.title && elapsed() < SAFE_BUDGET_MS - 10000) {
+    const claudeImage = await findImageViaWebSearch(url, recipe.title);
+    if (claudeImage) {
+      const stored = await tryPersistImage(claudeImage, url);
+      if (stored) {
+        console.log('[URL Extract] Claude web-search image succeeded:', claudeImage);
+        recipe.image_url = stored;
+      } else {
+        console.log('[URL Extract] Claude web-search candidate unreachable:', claudeImage);
+      }
+    }
+  }
+
+  // If every strategy failed, image_url stays null. UI will show the
+  // "Geen afbeelding gevonden" warning and the user can add a photo
+  // manually — better than a broken-image icon.
+
   setCachedRecipe(url, recipe);
   const validation = validateRecipe(recipe);
-  console.log(`[URL Extract] Validation score: ${validation.score}/100, issues: ${validation.issues.length}`);
+  console.log(`[URL Extract] elapsed=${elapsed()}ms validation=${validation.score}/100 issues=${validation.issues.length}`);
   return NextResponse.json({ ...recipe, _validation: validation });
 }
 
 export async function POST(request: NextRequest) {
+  const requestStart = Date.now();
   let url = '';
   try {
     const body = await request.json();
@@ -105,7 +135,7 @@ export async function POST(request: NextRequest) {
       console.log(`[URL Extract] Social media detected (${socialPlatform}), skipping scrape, using web search`);
       const recipe = await fallbackWebSearch(url);
       if (!recipe.bron) recipe.bron = detectBronFromUrl(url);
-      return finalize(recipe, url);
+      return finalize(recipe, url, requestStart);
     }
 
     // Hash-based SPA detection (e.g. app.projectgezond.nl/#/recepten/...)
@@ -115,7 +145,7 @@ export async function POST(request: NextRequest) {
       const recipe = await fallbackWebSearch(url, true);
       if (!recipe.bron) recipe.bron = detectBronFromUrl(url);
       recipe._hashSPA = true;
-      return finalize(recipe, url);
+      return finalize(recipe, url, requestStart);
     }
 
     console.log("[URL Extract] Scraping:", url);
@@ -138,7 +168,7 @@ export async function POST(request: NextRequest) {
         recipe._incomplete = true;
       }
 
-      return finalize(recipe, url);
+      return finalize(recipe, url, requestStart);
     }
 
     // Step 2: If JSON-LD found, use it directly (fast path)
@@ -154,10 +184,10 @@ export async function POST(request: NextRequest) {
       // If JSON-LD is missing steps or ingredients, enhance with Claude
       if (recipe.steps.length === 0 || recipe.ingredients.length === 0) {
         console.log("[URL Extract] JSON-LD incomplete, enhancing with Claude");
-        return await extractWithClaude(scraped.pageText, url, scraped.ogImage);
+        return await extractWithClaude(scraped.pageText, url, scraped.ogImage, requestStart);
       }
 
-      return finalize(recipe, url);
+      return finalize(recipe, url, requestStart);
     }
 
     // Step 3: No JSON-LD — use Claude to extract from page text
@@ -167,7 +197,7 @@ export async function POST(request: NextRequest) {
     } catch (claudeError: any) {
       console.log("[URL Extract] Claude page-text extraction failed:", claudeError.message, "— trying web search");
       const recipe = await fallbackWebSearch(url);
-      return finalize(recipe, url);
+      return finalize(recipe, url, requestStart);
     }
   } catch (error) {
     const message =
@@ -220,9 +250,9 @@ export async function POST(request: NextRequest) {
  */
 async function findImageViaWebSearch(pageUrl: string, title: string): Promise<string | null> {
   // Hard time budget — fallbackWebSearch can already take 30-40s, and we must
-  // stay under Vercel's 60s maxDuration. If Claude doesn't return in 15s,
+  // stay under Vercel's 60s maxDuration. If Claude doesn't return in 8s,
   // abort and let the recipe save without an image.
-  const TIMEOUT_MS = 15000;
+  const TIMEOUT_MS = 8000;
   return await Promise.race([
     findImageViaWebSearchInner(pageUrl, title),
     new Promise<null>((resolve) =>
@@ -313,7 +343,8 @@ Als je de pagina niet kunt bereiken of geen og:image vindt: retourneer {"image_u
 async function extractWithClaude(
   pageText: string,
   url: string,
-  ogImage: string | null
+  ogImage: string | null,
+  requestStart: number,
 ): Promise<NextResponse> {
   const client = new Anthropic();
 
@@ -361,7 +392,7 @@ Retourneer dit als een enkel JSON-object volgens het opgegeven schema. ALLEEN JS
     recipe.bron = detectBronFromUrl(url);
   }
 
-  return finalize(recipe, url);
+  return finalize(recipe, url, requestStart);
 }
 
 async function fallbackWebSearch(url: string, quick = false): Promise<any> {
@@ -399,7 +430,13 @@ De website is mogelijk niet direct bereikbaar. Gebruik daarom MEERDERE zoekstrat
 STAP 1: Zoek op "${slug} recept ingredienten ${hostname}".
 STAP 2: Als stap 1 niet genoeg oplevert, zoek op "${slug} recept ingredienten hoeveelheden".
 STAP 3: Zoek op "${slug} recept bereidingswijze" voor de stappen.
-STAP 4: Zoek naar een afbeelding via "${slug} ${hostname}" en zoek naar directe afbeelding-URLs.
+STAP 4: Zoek naar de og:image van de receptpagina. Probeer de pagina te openen via web_search (werkt vaak ook al is de site niet direct bereikbaar) en haal de <meta property="og:image"> tag uit de HTML.
+
+KRITIEK — image_url:
+- GEEN GOKKEN: als je de exacte og:image-URL niet kunt verifiëren, zet image_url op null.
+- Raad NOOIT een URL uit de slug (bijv. "${slug}.jpg" onder /wp-content/uploads/ zonder dat je dat hebt geverifieerd).
+- De URL moet LETTERLIJK in de pagina-HTML of rich-result snippet staan.
+- Accepteer ALLEEN URLs op ${hostname} zelf of op een WordPress Jetpack-CDN (i0.wp.com/${hostname}/..., i1.wp.com/${hostname}/...). Nooit Pinterest, Instagram of andere sites.
 
 BELANGRIJK: Gebruik ALLEEN informatie van ${hostname}. Gebruik GEEN recepten van andere websites.
 
@@ -462,7 +499,7 @@ Als het recept in het Engels is, vertaal dan alles naar het Nederlands.`,
     messages: [
       {
         role: "user",
-        content: `Hier is de receptinformatie gevonden op ${url}:\n\n${fullText}\n\nRetourneer dit als een enkel JSON-object volgens het opgegeven schema. Zorg dat ELKE ingrediënt een hoeveelheid en eenheid heeft als die beschikbaar is. Zorg dat image_url wordt ingevuld als je een afbeelding hebt gevonden. Let op: als er een aantal porties/personen vermeld wordt (bijv. "Twee personen", "4 porties", "Voor 2 personen"), vul dan basis_porties in als getal. ALLEEN JSON, geen andere tekst.`,
+        content: `Hier is de receptinformatie gevonden op ${url}:\n\n${fullText}\n\nRetourneer dit als een enkel JSON-object volgens het opgegeven schema. Zorg dat ELKE ingrediënt een hoeveelheid en eenheid heeft als die beschikbaar is. Voor image_url: vul ALLEEN in als je in de zoekresultaten een letterlijke og:image / twitter:image URL hebt gezien — NOOIT gokken vanuit de slug. Bij twijfel: image_url = null. Let op: als er een aantal porties/personen vermeld wordt (bijv. "Twee personen", "4 porties", "Voor 2 personen"), vul dan basis_porties in als getal. ALLEEN JSON, geen andere tekst.`,
       },
     ],
   });

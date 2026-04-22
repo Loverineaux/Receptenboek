@@ -3,7 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 const CHROME_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
-const IMAGE_TIMEOUT_MS = 15000;
+const IMAGE_TIMEOUT_MS = 8000;
 const MIN_IMAGE_BYTES = 1024;
 
 /**
@@ -126,7 +126,7 @@ async function downloadAndStore(
  */
 export async function findOgImageDirectly(pageUrl: string): Promise<string | null> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 10000);
+  const timer = setTimeout(() => controller.abort(), 4000);
   try {
     const res = await fetch(pageUrl, {
       headers: {
