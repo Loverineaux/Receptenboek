@@ -6,6 +6,15 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '1.15.0',
+    date: '22 april 2026',
+    highlights: [
+      'Kon de automatische extractie geen foto vinden? In de voorbeeldweergave staat nu een "Foto toevoegen"-knop waarmee je zelf een foto kiest',
+      'De geüploade foto verschijnt meteen in het voorbeeld en wordt na bevestiging mee opgeslagen in je receptenboek',
+      'Ook bij een gelukte foto-extractie kun je de foto nog vervangen via de "Vervang foto"-knop rechtsonder in het voorbeeld',
+    ],
+  },
+  {
     version: '1.14.14',
     date: '22 april 2026',
     highlights: [
@@ -20,13 +29,6 @@ export const releaseNotes: ReleaseNote[] = [
     highlights: [
       'Recept-foto\'s van websites die onze server blokkeren worden nu alsnog opgehaald via een publieke image-proxy en opgeslagen in je receptenboek',
       'Geen kapotte fotoicoontjes meer bij import — er is altijd een werkende weergave-URL, ook als de originele bron onze server blokkeert',
-    ],
-  },
-  {
-    version: '1.14.12',
-    date: '22 april 2026',
-    highlights: [
-      'Geen timeout-foutmeldingen meer bij het importeren van recepten — de foto-zoekactie haakt op tijd af als het te lang duurt',
     ],
   },
 ];
