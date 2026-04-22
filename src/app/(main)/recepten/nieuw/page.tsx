@@ -298,6 +298,41 @@ export default function NieuwReceptPage() {
 
   const [photoProgress, setPhotoProgress] = useState('');
 
+  // Preview photo upload: shown when no image_url was extracted. Uploads the
+  // chosen file to Supabase Storage and patches extractedPreview.image_url so
+  // mapExtractedToFormData picks it up when the user confirms.
+  const previewImageInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingPreviewImage, setUploadingPreviewImage] = useState(false);
+  const [previewImageError, setPreviewImageError] = useState<string | null>(null);
+
+  const handlePreviewImageUpload = async (file: File) => {
+    if (!file || !file.type.startsWith('image/')) {
+      setPreviewImageError('Kies een afbeelding (JPG, PNG, WEBP).');
+      return;
+    }
+    setUploadingPreviewImage(true);
+    setPreviewImageError(null);
+    try {
+      const { createClient } = await import('@/lib/supabase/client');
+      const supabase = createClient();
+      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+      const path = `recipes/preview-${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from('recipe-images')
+        .upload(path, file, { contentType: file.type, upsert: true });
+      if (upErr) throw new Error(upErr.message);
+      const { data: urlData } = supabase.storage.from('recipe-images').getPublicUrl(path);
+      setExtractedPreview((prev: any) =>
+        prev ? { ...prev, image_url: urlData.publicUrl } : prev
+      );
+    } catch (err: any) {
+      setPreviewImageError(err.message || 'Upload mislukt');
+    } finally {
+      setUploadingPreviewImage(false);
+      if (previewImageInputRef.current) previewImageInputRef.current.value = '';
+    }
+  };
+
   const handleExtractPhotos = async () => {
     if (photoFiles.length === 0) return;
 
@@ -1049,10 +1084,60 @@ export default function NieuwReceptPage() {
 
           {/* Recipe preview */}
           <div className="space-y-4">
-            {extractedPreview.image_url && (
+            {/* Image: show extracted photo with a replace button, or an
+                upload dropzone when no image was found. Uploaded files are
+                pushed into extractedPreview.image_url so they save with the
+                recipe when the user confirms. */}
+            <input
+              ref={previewImageInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) handlePreviewImageUpload(f);
+              }}
+            />
+            {extractedPreview.image_url ? (
               <div className="relative h-48 w-full">
                 <Image src={extractedPreview.image_url} alt="" fill className="rounded-lg object-cover" sizes="(max-width: 768px) 100vw, 50vw" />
+                <button
+                  type="button"
+                  onClick={() => previewImageInputRef.current?.click()}
+                  disabled={uploadingPreviewImage}
+                  className="absolute bottom-2 right-2 flex items-center gap-1 rounded-lg bg-white/90 px-3 py-1.5 text-xs font-medium text-text-primary shadow-sm backdrop-blur-sm hover:bg-white disabled:opacity-60"
+                >
+                  {uploadingPreviewImage ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Camera className="h-3.5 w-3.5" />
+                  )}
+                  {uploadingPreviewImage ? 'Uploaden...' : 'Vervang foto'}
+                </button>
               </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => previewImageInputRef.current?.click()}
+                disabled={uploadingPreviewImage}
+                className="flex h-48 w-full flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 text-sm text-text-muted transition hover:border-primary hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {uploadingPreviewImage ? (
+                  <>
+                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                    <span>Foto uploaden...</span>
+                  </>
+                ) : (
+                  <>
+                    <Camera className="h-6 w-6" />
+                    <span className="font-medium text-text-primary">Foto toevoegen</span>
+                    <span className="text-xs">Klik of tik om een foto te kiezen</span>
+                  </>
+                )}
+              </button>
+            )}
+            {previewImageError && (
+              <p className="text-sm text-red-600">{previewImageError}</p>
             )}
 
             <div>
