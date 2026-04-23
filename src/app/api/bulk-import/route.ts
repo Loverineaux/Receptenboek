@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { scrapePage, jsonLdToRecipe, detectBronFromUrl } from '@/lib/extraction/scrape';
+import { scrapePage, jsonLdToRecipe, detectBronFromUrl, normalizeBron } from '@/lib/extraction/scrape';
 import { cleanStepTitle, EXTRACTION_SYSTEM_PROMPT, parseRecipeResponse } from '@/lib/extraction/prompt';
 import Anthropic from '@anthropic-ai/sdk';
 
@@ -146,7 +146,7 @@ export async function POST(request: NextRequest) {
           title: recipe.title,
           subtitle: recipe.subtitle || null,
           image_url: recipe.image_url || null,
-          bron: recipe.bron || 'Albert Heijn',
+          bron: normalizeBron(recipe.bron) || 'Albert Heijn',
           basis_porties: recipe.basis_porties ?? 2,
           tijd: recipe.tijd || null,
           moeilijkheid: recipe.moeilijkheid || 'Gemiddeld',

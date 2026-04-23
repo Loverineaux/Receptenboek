@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Flame, Copy, UtensilsCrossed, Loader2, CheckCircle, AlertTriangle, Trash2 } from 'lucide-react';
+import { Flame, Copy, UtensilsCrossed, Loader2, CheckCircle, AlertTriangle, Trash2, Tag } from 'lucide-react';
 
 interface DuplicateRecipe {
   id: string; title: string; image_url: string | null; bron: string | null; created_at: string; user: { display_name: string } | null;
@@ -26,6 +26,10 @@ export default function OnderhoudPage() {
   // Ingredient fixer
   const [fixingIngredients, setFixingIngredients] = useState(false);
   const [ingredientResult, setIngredientResult] = useState<string | null>(null);
+
+  // Bron normalizer
+  const [normalizingBronnen, setNormalizingBronnen] = useState(false);
+  const [bronResult, setBronResult] = useState<string | null>(null);
 
   const handleBackfill = async () => {
     setBackfilling(true);
@@ -84,6 +88,29 @@ export default function OnderhoudPage() {
     }
   };
 
+  const handleNormalizeBronnen = async () => {
+    setNormalizingBronnen(true);
+    setBronResult(null);
+    try {
+      const res = await fetch('/api/admin/normalize-bronnen', { method: 'POST' });
+      const data = await res.json();
+      if (data.error) {
+        setBronResult(`Fout: ${data.error}`);
+      } else if (data.changed === 0) {
+        setBronResult(`${data.scanned} bronnen gecontroleerd — alles ziet er al netjes uit`);
+      } else {
+        const summary = (data.changes || [])
+          .map((c: any) => `"${c.from}" → "${c.to}" (${c.updated})`)
+          .join(', ');
+        setBronResult(`${data.changed} bronnen samengevoegd: ${summary}`);
+      }
+    } catch {
+      setBronResult('Fout bij normaliseren');
+    } finally {
+      setNormalizingBronnen(false);
+    }
+  };
+
   return (
     <div className="space-y-8">
       <h1 className="text-2xl font-bold text-text-primary">Onderhoud</h1>
@@ -122,6 +149,17 @@ export default function OnderhoudPage() {
           <span className="text-sm font-semibold text-text-primary">Ingrediënten herstellen</span>
           <span className="text-xs text-text-muted">Herstel hoeveelheden die in de naam zijn terechtgekomen</span>
         </button>
+
+        {/* Bron normalizer */}
+        <button
+          onClick={handleNormalizeBronnen}
+          disabled={normalizingBronnen}
+          className="flex flex-col items-center gap-2 rounded-xl border border-gray-200 bg-surface p-5 text-center transition-colors hover:bg-gray-50 disabled:opacity-50"
+        >
+          {normalizingBronnen ? <Loader2 className="h-8 w-8 animate-spin text-purple-600" /> : <Tag className="h-8 w-8 text-purple-600" />}
+          <span className="text-sm font-semibold text-text-primary">Bronnen samenvoegen</span>
+          <span className="text-xs text-text-muted">Voeg dubbele bron-namen samen (bijv. eefkooktzo.nl → Eef Kookt Zo)</span>
+        </button>
       </div>
 
       {/* Results */}
@@ -136,6 +174,13 @@ export default function OnderhoudPage() {
         <div className="flex items-center gap-2 rounded-lg bg-green-50 px-4 py-3 text-sm text-green-800">
           <CheckCircle className="h-4 w-4 shrink-0" />
           {ingredientResult}
+        </div>
+      )}
+
+      {bronResult && (
+        <div className="flex items-center gap-2 rounded-lg bg-purple-50 px-4 py-3 text-sm text-purple-800">
+          <CheckCircle className="h-4 w-4 shrink-0" />
+          {bronResult}
         </div>
       )}
 

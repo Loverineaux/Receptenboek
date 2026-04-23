@@ -700,3 +700,32 @@ export function detectBronFromUrl(url: string): string {
     return "Onbekend";
   }
 }
+
+/**
+ * Normalize a free-form bron string. Handles the common "hostname vs nice
+ * display name" drift (e.g. both "eefkooktzo.nl" and "Eef Kookt Zo" appearing
+ * as separate filter options) by routing hostname-like strings through the
+ * same HOSTNAME_MAP lookup as detectBronFromUrl. Non-hostname bronnen are
+ * passed through unchanged so user-chosen names like "Eigen recept" stay.
+ */
+export function normalizeBron(bron: string | null | undefined): string | null {
+  if (!bron) return null;
+  const trimmed = bron.trim();
+  if (!trimmed) return null;
+
+  // Does it look like a hostname? e.g. "eefkooktzo.nl", "www.eefkooktzo.nl",
+  // "https://eefkooktzo.nl/recept", "picnic.app"
+  const looksLikeHostname = /^(https?:\/\/)?([a-z0-9-]+\.)+[a-z]{2,}(\/|$)/i.test(trimmed);
+  if (!looksLikeHostname) return trimmed;
+
+  try {
+    const toParse = trimmed.startsWith("http") ? trimmed : `https://${trimmed}`;
+    const hostname = new URL(toParse).hostname.replace(/^www\./, "");
+    if (HOSTNAME_MAP[hostname]) return HOSTNAME_MAP[hostname];
+    const parts = hostname.split(".");
+    const domain = parts.length > 2 ? parts.slice(-2).join(".") : hostname;
+    if (HOSTNAME_MAP[domain]) return HOSTNAME_MAP[domain];
+  } catch {}
+
+  return trimmed;
+}
