@@ -2,6 +2,7 @@
 
 import { createContext, useEffect, useState, useCallback, type ReactNode } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { recordTiming, recordNavigationTiming } from '@/lib/telemetry'
 import type { User, AuthError } from '@supabase/supabase-js'
 
 interface Profile {
@@ -38,11 +39,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchProfile = useCallback(
     async (userId: string) => {
+      const tProfile = performance.now()
       const { data } = await supabase
         .from('profiles')
         .select('id, email, display_name, avatar_url, bio, role, is_blocked, has_completed_tour')
         .eq('id', userId)
         .single()
+      recordTiming('auth.fetchProfile', performance.now() - tProfile)
 
       // Redirect blocked users
       if (data?.is_blocked && typeof window !== 'undefined' && !window.location.pathname.includes('/geblokkeerd')) {
@@ -57,15 +60,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false
+    const t0 = performance.now()
+
+    // Fire once after load: browser navigation timing
+    if (typeof window !== 'undefined') {
+      if (document.readyState === 'complete') {
+        recordNavigationTiming()
+      } else {
+        window.addEventListener('load', recordNavigationTiming, { once: true })
+      }
+    }
 
     // Get initial session — first try getSession (reads cookie + auto-refreshes token),
     // then verify with getUser if we have a session
     const getInitialSession = async () => {
+      const tSession = performance.now()
       const { data: { session } } = await supabase.auth.getSession()
+      recordTiming('auth.getSession', performance.now() - tSession)
+
       let currentUser = session?.user ?? null
 
       if (currentUser) {
+        const tUser = performance.now()
         const { data: { user: verified } } = await supabase.auth.getUser()
+        recordTiming('auth.getUser', performance.now() - tUser)
         if (verified) currentUser = verified
       }
 
@@ -73,6 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setUser(currentUser)
       setLoading(false)
+      recordTiming('auth.ready', performance.now() - t0, { hasUser: !!currentUser })
 
       if (currentUser) {
         fetchProfile(currentUser.id)

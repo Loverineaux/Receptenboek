@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Plus } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { recordTiming } from '@/lib/telemetry';
 import { useAuth } from '@/hooks/useAuth';
 import SearchBar from '@/components/ui/SearchBar';
 import CategoryFilter from '@/components/ui/CategoryFilter';
@@ -102,6 +103,7 @@ function ReceptenPage() {
         pageRef.current = 0;
       }
 
+      const tStart = performance.now();
       try {
         const page = loadMore ? pageRef.current + 1 : 0;
         const from = page * PAGE_SIZE;
@@ -217,7 +219,13 @@ function ReceptenPage() {
         // Apply pagination
         query = query.range(from, to);
 
+        const tQuery = performance.now();
         const { data, count, error: queryError } = await query;
+        recordTiming('recepten.mainQuery', performance.now() - tQuery, {
+          loadMore,
+          rows: data?.length ?? 0,
+          total: count ?? 0,
+        });
 
         if (queryError) {
           console.error('[Recepten] Supabase error:', queryError.message, queryError.details, queryError.hint);
@@ -257,6 +265,11 @@ function ReceptenPage() {
         pageRef.current = page;
         setLoading(false);
         setLoadingMore(false);
+
+        recordTiming('recepten.total', performance.now() - tStart, {
+          loadMore,
+          rows: processed.length,
+        });
 
         // Fetch stats + user favorites in background, merge when ready
         const ids = processed.map((r) => r.id);
