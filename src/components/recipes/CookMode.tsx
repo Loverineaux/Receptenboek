@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { X, ChevronLeft, ChevronRight, ChefHat, Bot } from 'lucide-react';
 import RecipeChat, { type ChatMessage } from '@/components/recipes/RecipeChat';
 import type { RecipeWithRelations } from '@/types';
+import { readCookStep, writeCookStep, clearCookSession } from '@/lib/recipe-session';
 
 interface CookModeProps {
   title: string;
@@ -12,14 +13,33 @@ interface CookModeProps {
   portions: number;
   onClose: () => void;
   recipe?: RecipeWithRelations;
+  /** When provided, currentStep is persisted per recipe so switching apps
+   *  and returning restores the place you were at (24h TTL). */
+  recipeId?: string;
   chatMessages?: ChatMessage[];
   onChatMessagesChange?: (messages: ChatMessage[]) => void;
 }
 
-export default function CookMode({ title, steps, ingredients, portions, onClose, recipe, chatMessages, onChatMessagesChange }: CookModeProps) {
-  const [currentStep, setCurrentStep] = useState(-1); // -1 = ingredients overview
+export default function CookMode({ title, steps, ingredients, portions, onClose, recipe, recipeId, chatMessages, onChatMessagesChange }: CookModeProps) {
+  // Lazy initializer so the persisted step is restored on the very first
+  // render — no flash of "stap 1" before a useEffect catches up.
+  const [currentStep, setCurrentStep] = useState<number>(() => {
+    if (typeof window === 'undefined' || !recipeId) return -1;
+    const stored = readCookStep(recipeId);
+    if (stored === null) return -1;
+    // Guard against stale data pointing past the current step count
+    if (stored >= steps.length) return -1;
+    return stored;
+  });
   const [chatOpen, setChatOpen] = useState(false);
   const totalSteps = steps.length;
+
+  // Write the current step to storage whenever it changes, so a backgrounded
+  // PWA resumes where the user was when they switched apps.
+  useEffect(() => {
+    if (!recipeId) return;
+    writeCookStep(recipeId, currentStep);
+  }, [currentStep, recipeId]);
 
   // Keep screen awake
   useEffect(() => {
@@ -172,7 +192,12 @@ export default function CookMode({ title, steps, ingredients, portions, onClose,
 
         {isLastStep ? (
           <button
-            onClick={onClose}
+            onClick={() => {
+              // Finished cooking — wipe persisted step + checked ingredients
+              // so the next open of this recipe starts with a clean slate.
+              if (recipeId) clearCookSession(recipeId);
+              onClose();
+            }}
             className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90"
           >
             Klaar!
