@@ -68,11 +68,11 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // Main recipes query. Tags live in a separate parallel query further down —
+  // PostgREST's nested-select (tags:recipe_tags(tag:tags(id,name))) occasionally
+  // runs 7s+ on otherwise-trivial result sets, so we fetch them manually.
   let query = supabase.from('recipes').select(
-    `
-      id, title, subtitle, image_url, bron, tijd, created_at,
-      tags:recipe_tags(tag:tags(id, name))
-    `,
+    `id, title, subtitle, image_url, bron, tijd, created_at`,
     { count: 'planned' },
   );
 
@@ -114,17 +114,40 @@ export async function GET(request: NextRequest) {
 
   query = query.range(offset, offset + limit - 1);
 
+  const tMain = Date.now();
   const { data, count, error } = await query;
+  const mainMs = Date.now() - tMain;
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Flatten tags to match the client's old post-processing
-  const recipes = (data ?? []).map((r: Record<string, unknown>) => {
-    const rawTags = (r.tags as Array<{ tag: unknown }> | undefined) ?? [];
-    const flatTags = rawTags.map((rt) => rt.tag).filter(Boolean);
-    return { ...r, tags: flatTags };
-  });
+  const recipes = data ?? [];
+  const ids = recipes.map((r: { id: string }) => r.id);
 
-  return NextResponse.json({ recipes, total: count ?? 0 });
+  // Fetch tags in parallel for just the 24 recipes we returned. Split query
+  // is typically cheaper than PostgREST's correlated subselect.
+  let tagsByRecipe: Map<string, Array<{ id: string; name: string }>> = new Map();
+  let tagsMs = 0;
+  if (ids.length > 0) {
+    const tTags = Date.now();
+    const { data: tagRows } = await supabase
+      .from('recipe_tags')
+      .select('recipe_id, tag:tags(id, name)')
+      .in('recipe_id', ids);
+    tagsMs = Date.now() - tTags;
+    for (const row of tagRows ?? []) {
+      const list = tagsByRecipe.get(row.recipe_id) ?? [];
+      if (row.tag) list.push(row.tag as { id: string; name: string });
+      tagsByRecipe.set(row.recipe_id, list);
+    }
+  }
+
+  console.log(`[cards] main=${mainMs}ms tags=${tagsMs}ms rows=${recipes.length} total=${count ?? 0}`);
+
+  const result = recipes.map((r: Record<string, unknown>) => ({
+    ...r,
+    tags: tagsByRecipe.get(r.id as string) ?? [],
+  }));
+
+  return NextResponse.json({ recipes: result, total: count ?? 0 });
 }
