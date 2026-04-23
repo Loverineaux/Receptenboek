@@ -173,7 +173,10 @@ function ReceptenPage() {
             id, title, subtitle, image_url, bron, tijd, created_at,
             tags:recipe_tags(tag:tags(id, name))
           `,
-            { count: 'exact' }
+            // 'planned' uses Postgres' cached planner statistics — a few ms
+            // vs 3-4s for 'exact' on the full recipes table. The total is
+            // only used for a "X recepten" display, approximate is fine.
+            { count: 'planned' }
           );
 
         // Apply pre-queried ID filter

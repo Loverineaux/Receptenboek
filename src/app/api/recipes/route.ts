@@ -136,7 +136,8 @@ export async function GET(request: NextRequest) {
       ratings(*),
       user:profiles!recipes_user_id_fkey(id, display_name, avatar_url)
     `,
-      { count: 'exact' }
+      // Use Postgres planner statistics (ms) instead of count(*) (seconds).
+      { count: 'planned' }
     );
 
   // -- filters --
