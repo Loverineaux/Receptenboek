@@ -211,6 +211,15 @@ Retourneer dit als een enkel JSON-object volgens het opgegeven schema. ALLEEN JS
 
   const recipe = parseRecipeResponse(responseText);
 
+  // Quality gate: when a site serves a client-side-rendered SPA shell
+  // (e.g. picnic.app) scrapePage returns HTTP 200 with mostly-empty page
+  // text, and Claude extracts a near-empty recipe. Throwing here triggers
+  // the outer catch in POST() which routes through fallbackWebSearch —
+  // Claude's web_search tool reaches the actual recipe content.
+  if ((recipe.ingredients?.length ?? 0) < 3 || (recipe.steps?.length ?? 0) < 2) {
+    throw new Error("SPA-shell extractie te spaars — via web search proberen");
+  }
+
   // Ensure image is set from OG if Claude didn't find one
   if (!recipe.image_url && ogImage) {
     recipe.image_url = ogImage;
