@@ -42,8 +42,16 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   return (
     <html lang="nl">
+      <head>
+        {/* Warm the TLS connection to Supabase before the first auth call.
+            Saves ~200-400ms on mobile cold opens where the handshake would
+            otherwise block the initial rest/v1 request. */}
+        {supabaseUrl && <link rel="preconnect" href={supabaseUrl} crossOrigin="anonymous" />}
+        {supabaseUrl && <link rel="dns-prefetch" href={supabaseUrl} />}
+      </head>
       <body className="font-sans antialiased">
         <AuthProvider>
           <NavigationProgress />
