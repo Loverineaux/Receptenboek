@@ -23,6 +23,10 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import {
+  readCheckedIngredients,
+  writeCheckedIngredients,
+} from '@/lib/recipe-session';
 import BronBadge from '@/components/ui/BronBadge';
 import PortieSelector from '@/components/ui/PortieSelector';
 import StarRating from '@/components/ui/StarRating';
@@ -219,6 +223,26 @@ function RecipeDetailPage() {
 
   const [recipe, setRecipe] = useState<RecipeWithRelations | null>(null);
   const [loading, setLoading] = useState(true);
+  // Ingredient checkboxes are persisted per-recipe in localStorage (24h TTL)
+  // so switching apps on a phone and returning keeps what you already
+  // ticked off while shopping the kitchen.
+  const [checkedIngredients, setCheckedIngredients] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (!params.id) return;
+    setCheckedIngredients(readCheckedIngredients(params.id));
+  }, [params.id]);
+  const toggleIngredientChecked = useCallback(
+    (ingredientId: string) => {
+      setCheckedIngredients((prev) => {
+        const next = new Set(prev);
+        if (next.has(ingredientId)) next.delete(ingredientId);
+        else next.add(ingredientId);
+        if (params.id) writeCheckedIngredients(params.id, next);
+        return next;
+      });
+    },
+    [params.id],
+  );
   const [tab, setTab] = useState<Tab>(() => {
     const t = searchParams.get('tab');
     return t === 'bereiding' || t === 'voeding' ? t : 'ingredienten';
@@ -1028,6 +1052,7 @@ function RecipeDetailPage() {
               ? smartUnit(eenheid, scaled)
               : eenheid;
 
+            const isChecked = checkedIngredients.has(ing.id);
             return (
               <label
                 key={ing.id}
@@ -1035,9 +1060,15 @@ function RecipeDetailPage() {
               >
                 <input
                   type="checkbox"
+                  checked={isChecked}
+                  onChange={() => toggleIngredientChecked(ing.id)}
                   className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary/20"
                 />
-                <span className="flex-1 text-sm text-text-primary">
+                <span
+                  className={`flex-1 text-sm ${
+                    isChecked ? 'text-text-muted line-through' : 'text-text-primary'
+                  }`}
+                >
                   {amount && (
                     <span className="font-semibold">{amount}</span>
                   )}{' '}
@@ -1376,6 +1407,7 @@ function RecipeDetailPage() {
           portions={portions}
           onClose={() => setCookMode(false)}
           recipe={recipe}
+          recipeId={params.id}
           chatMessages={chatMessages}
           onChatMessagesChange={setChatMessages}
         />
