@@ -49,6 +49,11 @@ function ReceptenPage() {
   // spinner when the cache or prior fetch already filled the list.
   const recipesRef = useRef<RecipeWithRelations[]>([]);
   recipesRef.current = recipes;
+  // Set synchronously by the hydrate effect so the very next fetchRecipes
+  // call knows the UI already shows cached recipes. Prevents the flash of
+  // "spinner-without-recepten" that happens when setRecipes from hydrate
+  // hasn't committed yet by the time fetchRecipes reads recipesRef.
+  const skipLoadingOnceRef = useRef(false);
 
   // Initialize filters from URL params
   const [search, setSearch] = useState(searchParams.get('q') || '');
@@ -112,6 +117,8 @@ function ReceptenPage() {
         excludedSources.size === 0 &&
         sort === 'newest';
       const havePrevRecipes = recipesRef.current.length > 0;
+      const skipLoading = skipLoadingOnceRef.current;
+      skipLoadingOnceRef.current = false;
 
       if (loadMore) {
         setLoadingMore(true);
@@ -119,7 +126,7 @@ function ReceptenPage() {
         // Don't flip to loading spinner if we're already showing recipes
         // (either from the in-memory state or the hydrated cache). The
         // background refresh replaces them silently when it completes.
-        if (!havePrevRecipes) setLoading(true);
+        if (!havePrevRecipes && !skipLoading) setLoading(true);
         pageRef.current = 0;
       }
 
@@ -323,6 +330,9 @@ function ReceptenPage() {
       setRecipes(cached.recipes);
       setTotalCount(cached.total ?? cached.recipes.length);
       setLoading(false);
+      // Tell the next fetchRecipes call (running in the same commit before
+      // setRecipes has re-rendered) that the UI is already populated.
+      skipLoadingOnceRef.current = true;
     }
     hasHydratedRef.current = true;
   }, [user?.id, search, category, source, includedSources, excludedSources, sort]);
