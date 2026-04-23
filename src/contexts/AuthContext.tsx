@@ -71,21 +71,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // Get initial session — first try getSession (reads cookie + auto-refreshes token),
-    // then verify with getUser if we have a session
+    // Get initial session — rely on getSession (signed cookie, local-only,
+    // ~20ms) for the initial paint. Run getUser() in the background so
+    // fetchProfile and the recepten query don't have to wait for a cold
+    // ~2s roundtrip to Supabase Auth. RLS still enforces real auth on
+    // every data query, so the signed-cookie user is safe enough for UX.
     const getInitialSession = async () => {
       const tSession = performance.now()
       const { data: { session } } = await supabase.auth.getSession()
       recordTiming('auth.getSession', performance.now() - tSession)
 
-      let currentUser = session?.user ?? null
-
-      if (currentUser) {
-        const tUser = performance.now()
-        const { data: { user: verified } } = await supabase.auth.getUser()
-        recordTiming('auth.getUser', performance.now() - tUser)
-        if (verified) currentUser = verified
-      }
+      const currentUser = session?.user ?? null
 
       if (cancelled) return
 
@@ -96,6 +92,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (currentUser) {
         fetchProfile(currentUser.id)
         fetch('/api/users/heartbeat', { method: 'POST' }).catch(() => {})
+        // Background verification — if Supabase Auth disagrees with the
+        // cookie, onAuthStateChange will fire and the user state resets.
+        const tUser = performance.now()
+        supabase.auth
+          .getUser()
+          .then(() => recordTiming('auth.getUser', performance.now() - tUser, { background: true }))
+          .catch(() => {})
       }
     }
 
