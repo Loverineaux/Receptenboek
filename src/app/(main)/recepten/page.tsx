@@ -155,9 +155,27 @@ function ReceptenPage() {
         }
 
         const tQuery = performance.now();
-        const res = await fetch(`/api/recipes/cards?${params.toString()}`, {
-          credentials: 'same-origin',
-        });
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 20000);
+        let res: Response;
+        try {
+          res = await fetch(`/api/recipes/cards?${params.toString()}`, {
+            credentials: 'same-origin',
+            signal: controller.signal,
+            cache: 'no-store',
+          });
+        } catch (err: any) {
+          clearTimeout(timer);
+          recordTiming('recepten.mainQuery', performance.now() - tQuery, {
+            loadMore,
+            error: err?.name === 'AbortError' ? 'timeout' : (err?.message || 'network'),
+          });
+          console.error('[Recepten] /api/recipes/cards fetch failed:', err?.message || err);
+          setLoading(false);
+          setLoadingMore(false);
+          return;
+        }
+        clearTimeout(timer);
         recordTiming('recepten.mainQuery', performance.now() - tQuery, {
           loadMore,
           status: res.status,
@@ -245,6 +263,12 @@ function ReceptenPage() {
             return updated;
           });
         }
+      } catch (err: any) {
+        console.error('[Recepten] fetchRecipes threw:', err?.message || err, err);
+        recordTiming('recepten.error', performance.now() - tStart, {
+          loadMore,
+          message: err?.message || String(err),
+        });
       } finally {
         setLoading(false);
         setLoadingMore(false);
