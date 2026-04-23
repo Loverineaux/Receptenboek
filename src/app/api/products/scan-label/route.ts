@@ -105,9 +105,13 @@ Alle waarden per 100g. Gebruik null als iets niet leesbaar is.`,
       );
     }
 
-    // 4. Create product in the products table
+    // 4. Upsert: the barcode scan flow often creates the product first via
+    //    Open Food Facts, so a straight insert here would 409 on the
+    //    barcode unique constraint. Check for an existing row and update
+    //    only its nutrition fields, otherwise insert a fresh one.
+    const trimmedBarcode = barcode.trim();
     const productData = {
-      barcode: barcode.trim(),
+      barcode: trimmedBarcode,
       product_name:
         product_name || parsed.product_name || 'Onbekend product',
       kcal: typeof parsed.kcal === 'number' ? parsed.kcal : null,
@@ -128,17 +132,54 @@ Alle waarden per 100g. Gebruik null als iets niet leesbaar is.`,
       source: 'user_photo' as const,
     };
 
-    const { data: savedProduct, error: insertError } = await supabaseAdmin
+    const { data: existing } = await supabaseAdmin
       .from('products')
-      .insert(productData)
-      .select()
-      .single();
+      .select('id, product_name')
+      .eq('barcode', trimmedBarcode)
+      .maybeSingle();
 
-    if (insertError) {
-      return NextResponse.json(
-        { error: insertError.message },
-        { status: 500 }
-      );
+    let savedProduct;
+    if (existing) {
+      // Keep the existing product_name (often better than the label scan)
+      // but refresh the nutrition fields with the freshly scanned values.
+      const updatePayload = {
+        kcal: productData.kcal,
+        protein: productData.protein,
+        fat: productData.fat,
+        saturated_fat: productData.saturated_fat,
+        carbs: productData.carbs,
+        sugars: productData.sugars,
+        fiber: productData.fiber,
+        salt: productData.salt,
+        weight_grams: productData.weight_grams,
+        source: 'user_photo' as const,
+      };
+      const { data: updated, error: updateError } = await supabaseAdmin
+        .from('products')
+        .update(updatePayload)
+        .eq('id', existing.id)
+        .select()
+        .single();
+      if (updateError) {
+        return NextResponse.json(
+          { error: updateError.message },
+          { status: 500 }
+        );
+      }
+      savedProduct = updated;
+    } else {
+      const { data: inserted, error: insertError } = await supabaseAdmin
+        .from('products')
+        .insert(productData)
+        .select()
+        .single();
+      if (insertError) {
+        return NextResponse.json(
+          { error: insertError.message },
+          { status: 500 }
+        );
+      }
+      savedProduct = inserted;
     }
 
     // 5. Return the product
