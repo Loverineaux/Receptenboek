@@ -14,6 +14,8 @@ export async function GET() {
     '/api/users/heartbeat',
     // Main recipe list — heaviest query on the initial /recepten page
     '/api/recipes?limit=1',
+    // Card-view endpoint that /recepten actually uses on cold open
+    '/api/recipes/cards?limit=1',
   ];
 
   await Promise.allSettled(
