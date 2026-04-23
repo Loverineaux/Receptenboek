@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Plus } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { recordTiming } from '@/lib/telemetry';
+import { readRecipesCardCache, writeRecipesCardCache } from '@/lib/recipes-card-cache';
 import { useAuth } from '@/hooks/useAuth';
 import SearchBar from '@/components/ui/SearchBar';
 import CategoryFilter from '@/components/ui/CategoryFilter';
@@ -44,6 +45,10 @@ function ReceptenPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
   const pageRef = useRef(0);
+  // fetchRecipes reads current recipes via a ref so it can skip the loading
+  // spinner when the cache or prior fetch already filled the list.
+  const recipesRef = useRef<RecipeWithRelations[]>([]);
+  recipesRef.current = recipes;
 
   // Initialize filters from URL params
   const [search, setSearch] = useState(searchParams.get('q') || '');
@@ -96,10 +101,25 @@ function ReceptenPage() {
 
   const fetchRecipes = useCallback(
     async (loadMore = false) => {
+      // Default view = no filters, default sort, first page. Only default-view
+      // gets the localStorage stale-while-revalidate treatment.
+      const isDefaultView =
+        !loadMore &&
+        !search &&
+        !category &&
+        !source &&
+        includedSources.size === 0 &&
+        excludedSources.size === 0 &&
+        sort === 'newest';
+      const havePrevRecipes = recipesRef.current.length > 0;
+
       if (loadMore) {
         setLoadingMore(true);
       } else {
-        setLoading(true);
+        // Don't flip to loading spinner if we're already showing recipes
+        // (either from the in-memory state or the hydrated cache). The
+        // background refresh replaces them silently when it completes.
+        if (!havePrevRecipes) setLoading(true);
         pageRef.current = 0;
       }
 
@@ -220,6 +240,14 @@ function ReceptenPage() {
         setLoading(false);
         setLoadingMore(false);
 
+        // Cache the default view so the next cold open is instant.
+        if (isDefaultView) {
+          writeRecipesCardCache(userIdRef.current, {
+            recipes: processed,
+            total: count ?? 0,
+          });
+        }
+
         recordTiming('recepten.total', performance.now() - tStart, {
           loadMore,
           rows: processed.length,
@@ -276,6 +304,28 @@ function ReceptenPage() {
     },
     [supabase, search, searchIngredients, category, source, includedSources, excludedSources, sort]
   );
+
+  // Hydrate from the localStorage cache on the very first render of the
+  // default view — shows the last-seen recipes instantly while the real
+  // fetch runs in the background. Never hard-refreshes; if the fetch
+  // takes forever or fails, the cached list stays visible.
+  const hasHydratedRef = useRef(false);
+  useEffect(() => {
+    if (hasHydratedRef.current) return;
+    if (!user?.id) return;
+    const isDefaultView =
+      !search && !category && !source &&
+      includedSources.size === 0 && excludedSources.size === 0 &&
+      sort === 'newest';
+    if (!isDefaultView) return;
+    const cached = readRecipesCardCache<{ recipes: RecipeWithRelations[]; total: number }>(user.id);
+    if (cached && cached.recipes?.length > 0) {
+      setRecipes(cached.recipes);
+      setTotalCount(cached.total ?? cached.recipes.length);
+      setLoading(false);
+    }
+    hasHydratedRef.current = true;
+  }, [user?.id, search, category, source, includedSources, excludedSources, sort]);
 
   // Fetch recipes once session is read from cookie (instant via getSession)
   useEffect(() => {
