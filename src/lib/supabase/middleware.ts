@@ -55,8 +55,13 @@ export async function updateSession(request: NextRequest) {
     return response
   }
 
-  // Auth check — use getUser() for reliable server verification
-  const { data: { user } } = await supabase.auth.getUser()
+  // Auth check — use getSession() which reads the signed cookie (no network
+  // roundtrip). getUser() would verify against the Supabase Auth server, but
+  // on cold start that adds ~1-2s to TTFB on every page load. For a
+  // middleware redirect decision the signed-cookie check is sufficient; RLS
+  // enforces real authentication on every data query anyway.
+  const { data: { session } } = await supabase.auth.getSession()
+  const user = session?.user ?? null
 
   if (!user) {
     // Not logged in → redirect to login, remember where they wanted to go
