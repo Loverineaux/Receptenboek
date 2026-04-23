@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { normalizeBron } from '@/lib/extraction/scrape';
 import Anthropic from '@anthropic-ai/sdk';
 
 const CATEGORY_TAGS = ['Kip', 'Vlees', 'Vis', 'Vegetarisch', 'Veganistisch', 'Pasta', 'Salade', 'Soep', 'Dessert', 'Ontbijt', 'Lunch'];
@@ -325,7 +326,7 @@ export async function POST(request: NextRequest) {
       title: body.title,
       subtitle: body.subtitle || null,
       image_url: imageUrl,
-      bron: (body.bron && body.bron.trim()) || 'Eigen recept',
+      bron: normalizeBron(body.bron) || 'Eigen recept',
       basis_porties: body.basis_porties ?? 2,
       tijd: body.tijd || null,
       moeilijkheid: body.moeilijkheid || 'Gemiddeld',
