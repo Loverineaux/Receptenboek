@@ -107,30 +107,14 @@ function ReceptenPage() {
       try {
         const page = loadMore ? pageRef.current + 1 : 0;
         const from = page * PAGE_SIZE;
-        const to = from + PAGE_SIZE - 1;
 
-        // Pre-query: if category filter is active, get matching recipe IDs via tags
-        let categoryRecipeIds: string[] | null = null;
-        if (category) {
-          const { data: tagMatches } = await supabase
-            .from('recipe_tags')
-            .select('recipe_id, tag:tags!inner(name)')
-            .ilike('tags.name', category);
-          categoryRecipeIds = (tagMatches ?? []).map((t: any) => t.recipe_id);
-          if (categoryRecipeIds.length === 0) {
-            if (!loadMore) setRecipes([]);
-            setTotalCount(0);
-            setLoading(false);
-            setLoadingMore(false);
-            return;
-          }
-        }
-
-        // Pre-query: if searching by ingredients, get matching recipe IDs (parallel)
+        // Ingredient search stays client-side (multi-table intersection).
+        // When active we resolve recipe IDs here and pass them to the warm
+        // server endpoint as ?ids=...  Everything else — category, search,
+        // source/include/exclude, sort — is handled server-side.
         let ingredientRecipeIds: string[] | null = null;
         if (search && searchIngredients) {
           const words = search.trim().split(/\s+/).filter(Boolean);
-          // Find recipes where ingredients match ALL words — queries per word run in parallel
           const matchSets = await Promise.all(
             words.map(async (word) => {
               const [ingResult, titleResult] = await Promise.all([
@@ -143,7 +127,6 @@ function ReceptenPage() {
               ]);
             })
           );
-          // Intersect all sets — recipe must match ALL words
           if (matchSets.length > 0) {
             const intersection = matchSets.reduce((a, b) => new Set([...a].filter((x) => b.has(x))));
             ingredientRecipeIds = [...intersection];
@@ -157,106 +140,56 @@ function ReceptenPage() {
           }
         }
 
-        // Combine ID filters
-        let filteredIds: string[] | null = null;
-        if (categoryRecipeIds && ingredientRecipeIds) {
-          const catSet = new Set(categoryRecipeIds);
-          filteredIds = ingredientRecipeIds.filter((id) => catSet.has(id));
-        } else {
-          filteredIds = categoryRecipeIds || ingredientRecipeIds;
+        // Build query string for the warm server endpoint
+        const params = new URLSearchParams();
+        params.set('offset', String(from));
+        params.set('limit', String(PAGE_SIZE));
+        params.set('sort', sort);
+        if (category) params.set('category', category);
+        if (source) params.set('source', source);
+        if (includedSources.size > 0) params.set('included', [...includedSources].join(','));
+        if (excludedSources.size > 0) params.set('excluded', [...excludedSources].join(','));
+        if (search && !searchIngredients) params.set('search', search);
+        if (ingredientRecipeIds && ingredientRecipeIds.length > 0) {
+          params.set('ids', ingredientRecipeIds.join(','));
         }
-
-        let query = supabase
-          .from('recipes')
-          .select(
-            `
-            id, title, subtitle, image_url, bron, tijd, created_at,
-            tags:recipe_tags(tag:tags(id, name))
-          `,
-            // 'planned' uses Postgres' cached planner statistics — a few ms
-            // vs 3-4s for 'exact' on the full recipes table. The total is
-            // only used for a "X recepten" display, approximate is fine.
-            { count: 'planned' }
-          );
-
-        // Apply pre-queried ID filter
-        if (filteredIds) {
-          query = query.in('id', filteredIds);
-        }
-
-        // Server-side multi-word search on title + subtitle
-        if (search && !searchIngredients) {
-          const words = search.trim().split(/\s+/).filter(Boolean);
-          for (const word of words) {
-            query = query.or(`title.ilike.%${word}%,subtitle.ilike.%${word}%`);
-          }
-        }
-
-        // Server-side source filtering
-        if (source) {
-          query = query.eq('bron', source);
-        } else if (includedSources.size > 0) {
-          query = query.in('bron', [...includedSources]);
-        }
-        if (excludedSources.size > 0) {
-          query = query.not('bron', 'in', `(${[...excludedSources].join(',')})`);
-        }
-
-        // Server-side sorting
-        switch (sort) {
-          case 'time':
-            query = query.order('tijd', { ascending: true, nullsFirst: false });
-            break;
-          case 'az':
-            query = query.order('title', { ascending: true });
-            break;
-          case 'za':
-            query = query.order('title', { ascending: false });
-            break;
-          case 'rating':
-          case 'newest':
-          default:
-            query = query.order('created_at', { ascending: false });
-        }
-
-        // Apply pagination
-        query = query.range(from, to);
 
         const tQuery = performance.now();
-        const { data, count, error: queryError } = await query;
+        const res = await fetch(`/api/recipes/cards?${params.toString()}`, {
+          credentials: 'same-origin',
+        });
         recordTiming('recepten.mainQuery', performance.now() - tQuery, {
           loadMore,
-          rows: data?.length ?? 0,
-          total: count ?? 0,
+          status: res.status,
         });
 
-        if (queryError) {
-          console.error('[Recepten] Supabase error:', queryError.message, queryError.details, queryError.hint);
+        if (!res.ok) {
+          console.error('[Recepten] /api/recipes/cards error:', res.status);
           setLoading(false);
           setLoadingMore(false);
           return;
         }
 
-        // Post-process: flatten tags — show cards immediately, stats load in background
-        const processed: RecipeWithRelations[] = (data ?? []).map((r: any) => {
-          const flatTags = (r.tags ?? [])
-            .map((rt: any) => rt.tag)
-            .filter(Boolean);
+        const payload = (await res.json()) as {
+          recipes: Array<Record<string, unknown>>;
+          total: number;
+        };
+        const data = payload.recipes ?? [];
+        const count = payload.total ?? 0;
 
-          return {
-            ...r,
-            tags: flatTags,
-            average_rating: null,
-            rating_count: 0,
-            comment_count: 0,
-            favorite_count: 0,
-            ratings: [],
-            comments: [],
-            ingredients: [],
-            nutrition: null,
-            steps: [],
-          };
-        });
+        // Cards are already flattened on the server
+        const processed: RecipeWithRelations[] = data.map((r: any) => ({
+          ...r,
+          average_rating: null,
+          rating_count: 0,
+          comment_count: 0,
+          favorite_count: 0,
+          ratings: [],
+          comments: [],
+          ingredients: [],
+          nutrition: null,
+          steps: [],
+        }));
 
         // Show cards immediately (images + titles + tags visible)
         if (loadMore) {
