@@ -93,16 +93,46 @@ Antwoord ALLEEN als JSON array waarbij elk item: {"idx": <input-rij-nummer>, "pa
   });
 
   const text = response.content[0].type === 'text' ? response.content[0].text : '';
-  let parsed: SplitResult[];
+  let parsedRaw: unknown;
   try {
     const jsonMatch = text.match(/\[[\s\S]*\]/);
-    parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : [];
+    parsedRaw = jsonMatch ? JSON.parse(jsonMatch[0]) : [];
   } catch {
+    console.log('[fix-ingredients] parse failed:', text.slice(0, 500));
     return NextResponse.json(
       { error: 'Claude response kon niet geparsed worden', raw: text.slice(0, 500) },
       { status: 500 },
     );
   }
+
+  // Accept both the new shape ({idx, parts:[...]}) and the legacy flat
+  // shape ({idx, hoeveelheid, eenheid, naam}) — Claude sometimes ignores
+  // the format hint and returns the older one.
+  const parsed: SplitResult[] = Array.isArray(parsedRaw)
+    ? (parsedRaw as Array<Record<string, unknown>>).map((entry) => {
+        if (entry && Array.isArray(entry.parts)) {
+          return {
+            idx: Number(entry.idx),
+            parts: entry.parts as SplitResult['parts'],
+          };
+        }
+        // Legacy flat shape — wrap as single-part
+        return {
+          idx: Number(entry.idx),
+          parts: [
+            {
+              hoeveelheid: (entry.hoeveelheid as string | null) ?? null,
+              eenheid: (entry.eenheid as string | null) ?? null,
+              naam: String(entry.naam ?? ''),
+            },
+          ],
+        };
+      })
+    : [];
+
+  console.log(
+    `[fix-ingredients] candidates=${needsFix.length} claudeReturned=${parsed.length}`,
+  );
 
   let fixed = 0;
   let split = 0;
