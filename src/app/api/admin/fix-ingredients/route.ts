@@ -134,6 +134,22 @@ Antwoord ALLEEN als JSON array waarbij elk item: {"idx": <input-rij-nummer>, "pa
     `[fix-ingredients] candidates=${needsFix.length} claudeReturned=${parsed.length}`,
   );
 
+  // Temporary verbose logging: show every parsed entry alongside the
+  // original row so we can see why Claude only splits some cases.
+  for (const fix of parsed) {
+    const original = needsFix[fix.idx];
+    if (!original) continue;
+    const partsSummary = fix.parts
+      .map(
+        (p) =>
+          `${p.hoeveelheid ?? 'null'}|${p.eenheid ?? 'null'}|${p.naam}`,
+      )
+      .join('  ||  ');
+    console.log(
+      `[fix-ingredients] idx=${fix.idx} parts=${fix.parts.length}\n  orig: ${original.hoeveelheid ?? ''}|${original.eenheid ?? ''}|${original.naam}\n  -> ${partsSummary}`,
+    );
+  }
+
   let fixed = 0;
   let split = 0;
   for (const fix of parsed) {
