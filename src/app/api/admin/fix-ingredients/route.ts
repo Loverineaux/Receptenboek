@@ -150,11 +150,30 @@ Antwoord ALLEEN als JSON array waarbij elk item: {"idx": <input-rij-nummer>, "pa
     );
   }
 
+  // Collect a per-row diagnostic that's also returned to the client so it's
+  // visible without digging through Vercel logs.
+  const debug: Array<{
+    idx: number;
+    orig: string;
+    parts: string[];
+    action: 'updated' | 'split' | 'unchanged' | 'skipped';
+  }> = [];
+
   let fixed = 0;
   let split = 0;
   for (const fix of parsed) {
     const original = needsFix[fix.idx];
-    if (!original || !Array.isArray(fix.parts) || fix.parts.length === 0) continue;
+    if (!original || !Array.isArray(fix.parts) || fix.parts.length === 0) {
+      if (original) {
+        debug.push({
+          idx: fix.idx,
+          orig: `${original.hoeveelheid ?? ''}|${original.eenheid ?? ''}|${original.naam}`,
+          parts: [],
+          action: 'skipped',
+        });
+      }
+      continue;
+    }
 
     const first = fix.parts[0];
     const restParts = fix.parts.slice(1);
@@ -175,6 +194,15 @@ Antwoord ALLEEN als JSON array waarbij elk item: {"idx": <input-rij-nummer>, "pa
         .eq('id', original.id);
       fixed++;
     }
+
+    debug.push({
+      idx: fix.idx,
+      orig: `${original.hoeveelheid ?? ''}|${original.eenheid ?? ''}|${original.naam}`,
+      parts: fix.parts.map(
+        (p) => `${p.hoeveelheid ?? ''}|${p.eenheid ?? ''}|${p.naam}`,
+      ),
+      action: restParts.length > 0 ? 'split' : firstChanged ? 'updated' : 'unchanged',
+    });
 
     // Split: insert any additional parts with the same sort_order as the
     // original. Postgres falls back to id ordering when sort_order ties,
@@ -198,6 +226,7 @@ Antwoord ALLEEN als JSON array waarbij elk item: {"idx": <input-rij-nummer>, "pa
     fixed,
     split,
     total: needsFix.length,
+    debug,
     message:
       split > 0
         ? `${fixed} ingrediënten hersteld, ${split} extra ingrediënten afgesplitst`

@@ -80,7 +80,19 @@ export default function OnderhoudPage() {
     try {
       const res = await fetch('/api/admin/fix-ingredients', { method: 'POST' });
       const data = await res.json();
-      setIngredientResult(data.message || `${data.fixed} ingrediënten hersteld`);
+      const summary = data.message || `${data.fixed} ingrediënten hersteld`;
+      // Append a compact dump of every row Claude inspected so we can see
+      // exactly why a stubborn row didn't get split. Long-press / select to
+      // copy this on a phone.
+      const debugLines = Array.isArray(data.debug)
+        ? data.debug
+            .map(
+              (d: any) =>
+                `[${d.action}] orig: ${d.orig}\n  -> ${d.parts.join('  ||  ')}`,
+            )
+            .join('\n\n')
+        : '';
+      setIngredientResult(debugLines ? `${summary}\n\n${debugLines}` : summary);
     } catch {
       setIngredientResult('Fout bij herstellen');
     } finally {
