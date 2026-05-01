@@ -29,16 +29,35 @@ export async function POST() {
     return NextResponse.json({ error: 'Geen toegang' }, { status: 403 });
   }
 
-  // Pull every ingredient row whose naam looks suspicious — regardless of
-  // whether hoeveelheid is set, because the "merged two ingredients" case
-  // already has the first quantity in the column. Supabase's default page
-  // size is 1000 and a normal user has thousands of ingredient rows; bump
-  // the range so the broken row (~row 1500 in one user's set) is included.
-  const { data: allRows } = await supabaseAdmin
-    .from('ingredients')
-    .select('id, recipe_id, hoeveelheid, eenheid, naam, sort_order')
-    .order('recipe_id')
-    .range(0, 19999);
+  // PostgREST caps responses at ~1000 rows server-side regardless of what
+  // .range() asks for, so paginate until exhausted. Users have a few
+  // thousand ingredient rows total and we need to scan all of them to
+  // find the broken ones (one user reported a stuck row beyond row 1000).
+  const PAGE_SIZE = 1000;
+  let allRows: Array<{
+    id: string;
+    recipe_id: string;
+    hoeveelheid: string | null;
+    eenheid: string | null;
+    naam: string;
+    sort_order: number | null;
+  }> = [];
+  for (let offset = 0; ; offset += PAGE_SIZE) {
+    const { data, error } = await supabaseAdmin
+      .from('ingredients')
+      .select('id, recipe_id, hoeveelheid, eenheid, naam, sort_order')
+      .order('id')
+      .range(offset, offset + PAGE_SIZE - 1);
+    if (error) {
+      console.log('[fix-ingredients] fetch error at offset', offset, error.message);
+      break;
+    }
+    if (!data || data.length === 0) break;
+    allRows = allRows.concat(data);
+    if (data.length < PAGE_SIZE) break;
+    if (allRows.length >= 50000) break; // hard stop
+  }
+  console.log(`[fix-ingredients] fetched ${allRows.length} ingredient rows in total`);
 
   const needsFix = (allRows ?? []).filter(
     (i) => typeof i.naam === 'string' && QUANTITY_IN_NAME_RE.test(i.naam),
