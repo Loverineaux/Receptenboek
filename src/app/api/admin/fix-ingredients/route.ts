@@ -31,11 +31,14 @@ export async function POST() {
 
   // Pull every ingredient row whose naam looks suspicious — regardless of
   // whether hoeveelheid is set, because the "merged two ingredients" case
-  // already has the first quantity in the column.
+  // already has the first quantity in the column. Supabase's default page
+  // size is 1000 and a normal user has thousands of ingredient rows; bump
+  // the range so the broken row (~row 1500 in one user's set) is included.
   const { data: allRows } = await supabaseAdmin
     .from('ingredients')
     .select('id, recipe_id, hoeveelheid, eenheid, naam, sort_order')
-    .order('recipe_id');
+    .order('recipe_id')
+    .range(0, 19999);
 
   const needsFix = (allRows ?? []).filter(
     (i) => typeof i.naam === 'string' && QUANTITY_IN_NAME_RE.test(i.naam),
@@ -150,11 +153,30 @@ Antwoord ALLEEN als JSON array waarbij elk item: {"idx": <input-rij-nummer>, "pa
     );
   }
 
+  // Collect a per-row diagnostic that's also returned to the client so it's
+  // visible without digging through Vercel logs.
+  const debug: Array<{
+    idx: number;
+    orig: string;
+    parts: string[];
+    action: 'updated' | 'split' | 'unchanged' | 'skipped';
+  }> = [];
+
   let fixed = 0;
   let split = 0;
   for (const fix of parsed) {
     const original = needsFix[fix.idx];
-    if (!original || !Array.isArray(fix.parts) || fix.parts.length === 0) continue;
+    if (!original || !Array.isArray(fix.parts) || fix.parts.length === 0) {
+      if (original) {
+        debug.push({
+          idx: fix.idx,
+          orig: `${original.hoeveelheid ?? ''}|${original.eenheid ?? ''}|${original.naam}`,
+          parts: [],
+          action: 'skipped',
+        });
+      }
+      continue;
+    }
 
     const first = fix.parts[0];
     const restParts = fix.parts.slice(1);
@@ -175,6 +197,15 @@ Antwoord ALLEEN als JSON array waarbij elk item: {"idx": <input-rij-nummer>, "pa
         .eq('id', original.id);
       fixed++;
     }
+
+    debug.push({
+      idx: fix.idx,
+      orig: `${original.hoeveelheid ?? ''}|${original.eenheid ?? ''}|${original.naam}`,
+      parts: fix.parts.map(
+        (p) => `${p.hoeveelheid ?? ''}|${p.eenheid ?? ''}|${p.naam}`,
+      ),
+      action: restParts.length > 0 ? 'split' : firstChanged ? 'updated' : 'unchanged',
+    });
 
     // Split: insert any additional parts with the same sort_order as the
     // original. Postgres falls back to id ordering when sort_order ties,
@@ -198,6 +229,7 @@ Antwoord ALLEEN als JSON array waarbij elk item: {"idx": <input-rij-nummer>, "pa
     fixed,
     split,
     total: needsFix.length,
+    debug,
     message:
       split > 0
         ? `${fixed} ingrediënten hersteld, ${split} extra ingrediënten afgesplitst`
