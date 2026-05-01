@@ -31,11 +31,14 @@ export async function POST() {
 
   // Pull every ingredient row whose naam looks suspicious — regardless of
   // whether hoeveelheid is set, because the "merged two ingredients" case
-  // already has the first quantity in the column.
+  // already has the first quantity in the column. Supabase's default page
+  // size is 1000 and a normal user has thousands of ingredient rows; bump
+  // the range so the broken row (~row 1500 in one user's set) is included.
   const { data: allRows } = await supabaseAdmin
     .from('ingredients')
     .select('id, recipe_id, hoeveelheid, eenheid, naam, sort_order')
-    .order('recipe_id');
+    .order('recipe_id')
+    .range(0, 19999);
 
   const needsFix = (allRows ?? []).filter(
     (i) => typeof i.naam === 'string' && QUANTITY_IN_NAME_RE.test(i.naam),
