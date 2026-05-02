@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 import {
   EXTRACTION_SYSTEM_PROMPT,
   parseRecipeResponse,
@@ -159,6 +159,8 @@ Antwoord ALLEEN met {"image_url": "https://..."} of {"image_url": null}.`,
 }
 
 export async function POST(request: NextRequest) {
+  const tStart = Date.now();
+  const elapsed = () => Date.now() - tStart;
   let url = '';
   try {
     const body = await request.json();
@@ -269,7 +271,9 @@ export async function POST(request: NextRequest) {
               (pageTextRecipe.ingredients?.length ?? 0) >= 3
             ) {
               if (!pageTextRecipe.bron) pageTextRecipe.bron = detectBronFromUrl(url);
-              if (!pageTextRecipe.image_url) {
+              // Only rescue an image if we still have time — fallback flow
+              // already burned 25s+ on the pageText extraction.
+              if (!pageTextRecipe.image_url && elapsed() < 90000) {
                 const imageUrl = await findImageViaWebSearch(url, pageTextRecipe.title);
                 if (imageUrl) pageTextRecipe.image_url = imageUrl;
               }
@@ -288,7 +292,7 @@ export async function POST(request: NextRequest) {
         console.log("[URL Extract] Falling back to web search");
         const fallbackRecipe = await fallbackWebSearch(url);
         if (!fallbackRecipe.bron) fallbackRecipe.bron = detectBronFromUrl(url);
-        if (!fallbackRecipe.image_url) {
+        if (!fallbackRecipe.image_url && elapsed() < 90000) {
           const imageUrl = await findImageViaWebSearch(url, fallbackRecipe.title);
           if (imageUrl) fallbackRecipe.image_url = imageUrl;
         }
