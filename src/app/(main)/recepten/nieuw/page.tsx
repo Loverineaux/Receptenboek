@@ -398,7 +398,12 @@ export default function NieuwReceptPage() {
         }
       }
 
-      if (!extracted) throw new Error('Geen recept geëxtraheerd');
+      if (!extracted) {
+        // Stream ended without a `done` event — most often a Vercel function
+        // timeout (Claude on a heavy photo can hit 60s+ and Vercel kills the
+        // stream before the recipe lands). Give the user a clearer reason.
+        throw new Error('Geen recept geëxtraheerd — de foto duurde te lang om te verwerken of was te onduidelijk. Probeer het opnieuw met een kleinere/duidelijkere foto.');
+      }
 
       // Upload the separate dish photo if provided
       if (dishPhoto) {
