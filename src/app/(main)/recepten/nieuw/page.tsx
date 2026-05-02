@@ -214,6 +214,11 @@ const PROGRESS_STEPS = [
   'Ingrediënten verwerken...',
   'Bereidingsstappen verwerken...',
   'Bijna klaar...',
+  // Reached on slow imports where the URL was bot-detected and we fall
+  // back to web search + image rescue. Explicitly tells the user the
+  // wait is from photo lookup, so they don't think the app is stuck.
+  'Foto opzoeken — dit kan even duren...',
+  'Nog even geduld, foto wordt gezocht...',
 ];
 
 export default function NieuwReceptPage() {
@@ -494,9 +499,11 @@ export default function NieuwReceptPage() {
     setExtractError(null);
     setProgressStep(0);
 
-    // Animate progress steps while waiting
+    // Animate progress steps while waiting. Walks all the way to the last
+    // step so users on slow imports see the "foto opzoeken" message
+    // instead of staring at a frozen "bereidingsstappen verwerken".
     const interval = setInterval(() => {
-      setProgressStep((prev) => (prev < PROGRESS_STEPS.length - 2 ? prev + 1 : prev));
+      setProgressStep((prev) => Math.min(prev + 1, PROGRESS_STEPS.length - 1));
     }, 3000);
 
     try {
