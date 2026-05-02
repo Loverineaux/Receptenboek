@@ -6,7 +6,12 @@ import {
   EXTRACTION_SYSTEM_PROMPT,
   parseRecipeResponse,
 } from "@/lib/extraction/prompt";
-import { scrapePage, jsonLdToRecipe, detectBronFromUrl } from "@/lib/extraction/scrape";
+import {
+  scrapePage,
+  scrapePageAsGooglebot,
+  jsonLdToRecipe,
+  detectBronFromUrl,
+} from "@/lib/extraction/scrape";
 import { getCachedRecipe, setCachedRecipe } from "@/lib/extraction/cache";
 import { validateRecipe } from "@/lib/extraction/validate";
 
@@ -292,6 +297,38 @@ export async function POST(request: NextRequest) {
         console.log(
           `[URL Extract] JSON-LD title "${recipe.title}" does not match URL slug — likely bot-detected stub.`,
         );
+
+        // Strategy A0: refetch with a Googlebot User-Agent. Sites that
+        // bot-stub regular scrapers usually whitelist Googlebot for SEO,
+        // so the real recipe (with full quantities + image) often comes
+        // back here. Cheap (one HTTP fetch, no Claude calls) and only
+        // runs on the bot-stub path so unaffected sites are untouched.
+        try {
+          const googlebotScraped = await scrapePageAsGooglebot(url);
+          if (googlebotScraped?.jsonLd) {
+            const googlebotRecipe = jsonLdToRecipe(
+              googlebotScraped.jsonLd,
+              googlebotScraped.ogImage,
+            );
+            if (
+              googlebotRecipe.title &&
+              titleMatchesUrlSlug(googlebotRecipe.title, url) &&
+              (googlebotRecipe.ingredients?.length ?? 0) >= 3
+            ) {
+              console.log(
+                `[URL Extract] Googlebot fetch returned the real recipe ("${googlebotRecipe.title}") — using it instead of stub`,
+              );
+              if (!googlebotRecipe.bron) googlebotRecipe.bron = detectBronFromUrl(url);
+              setCachedRecipe(url, googlebotRecipe);
+              return respondWithValidation(googlebotRecipe);
+            }
+            console.log(
+              `[URL Extract] Googlebot fetch returned ${googlebotRecipe.title ? `"${googlebotRecipe.title}"` : "no title"} — also looks stubbed, falling through`,
+            );
+          }
+        } catch (err: any) {
+          console.log("[URL Extract] Googlebot fetch failed:", err.message);
+        }
 
         // Strategy A: the JSON-LD is stubbed but the page BODY usually still
         // contains the real recipe text. Ask Claude to parse pageText.

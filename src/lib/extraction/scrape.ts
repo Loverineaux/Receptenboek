@@ -47,6 +47,32 @@ const SIMPLE_HEADERS: Record<string, string> = {
   "Accept-Language": "nl-NL,nl;q=0.9",
 };
 
+// Googlebot identification — sites that bot-detect regular scrapers (AH
+// allerhande) often allow Googlebot through unmolested for SEO. Used as
+// a recovery scrape when the regular fetch returns a bot-stub.
+// IP verification is the only fully reliable way for sites to block
+// fake Googlebot UAs, and most consumer sites don't bother.
+const GOOGLEBOT_HEADERS: Record<string, string> = {
+  "User-Agent":
+    "Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+  Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+  "Accept-Language": "en-US,en;q=0.9,nl;q=0.8",
+};
+
+/**
+ * Recovery fetch with a Googlebot User-Agent. Used when the regular scrape
+ * returns a bot-stub (e.g. AH allerhande mismatched JSON-LD). Most consumer
+ * sites whitelist Googlebot to keep their search ranking, so this often
+ * pulls the real recipe even when the same URL with a regular UA returned
+ * a stub. Returns null on any failure — caller falls through to other
+ * recovery strategies.
+ */
+export async function scrapePageAsGooglebot(
+  url: string,
+): Promise<ScrapedRecipe | null> {
+  return tryFetch(url, GOOGLEBOT_HEADERS);
+}
+
 /**
  * Heuristic: does this URL look like a short-link that needs to be expanded
  * (e.g. ah.nl/r/abc123, jum.bo/x/...) or an already-canonical recipe URL
