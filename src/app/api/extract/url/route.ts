@@ -26,6 +26,59 @@ function respondWithValidation(recipe: any) {
   return NextResponse.json({ ...recipe, _validation: validation });
 }
 
+/**
+ * Heuristic: does the extracted recipe title share any meaningful word with
+ * the URL slug? Used to detect bot-stub pages where the site serves
+ * unrelated JSON-LD to scraping requests (AH allerhande does this).
+ *
+ * Returns true when:
+ *  - The URL has no recognisable slug (give up, accept the title)
+ *  - At least one slug token of 4+ chars appears in the title (case-
+ *    insensitive, accent-folded)
+ *
+ * Returns false when slug clearly disagrees with title — caller should
+ * treat the JSON-LD as untrustworthy.
+ */
+function titleMatchesUrlSlug(title: string, url: string): boolean {
+  let slug: string;
+  try {
+    const path = new URL(url).pathname;
+    // Take the longest path segment — usually the recipe slug
+    slug = path
+      .split('/')
+      .filter(Boolean)
+      .filter((s) => !/^R-?R?\d+$/i.test(s)) // skip recipe-id segments
+      .reduce((longest, s) => (s.length > longest.length ? s : longest), '');
+  } catch {
+    return true;
+  }
+  if (!slug || slug.length < 6) return true; // no usable slug → trust the title
+
+  const fold = (s: string) =>
+    s
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9]+/g, ' ');
+
+  const slugTokens = fold(slug)
+    .split(/\s+/)
+    .filter((t) => t.length >= 4);
+  const titleFolded = fold(title);
+
+  if (slugTokens.length === 0) return true;
+
+  // Strict-ish heuristic: at least HALF of the meaningful slug tokens must
+  // appear in the title. A single coincidental match (e.g. AH stub recipe
+  // happens to share "ricotta" with the macaroni-met-ricotta URL) is not
+  // enough to call it a real match. Also require the FIRST significant
+  // token — usually the main ingredient — to be present, since stubs
+  // tend to share secondary ingredients but not the headline one.
+  const matched = slugTokens.filter((t) => titleFolded.includes(t)).length;
+  const firstHit = titleFolded.includes(slugTokens[0]);
+  return firstHit && matched >= Math.ceil(slugTokens.length / 2);
+}
+
 export async function POST(request: NextRequest) {
   let url = '';
   try {
@@ -108,6 +161,22 @@ export async function POST(request: NextRequest) {
       // Set bron from URL if not detected from JSON-LD
       if (!recipe.bron) {
         recipe.bron = detectBronFromUrl(url);
+      }
+
+      // Sanity check: does the extracted recipe title plausibly match the
+      // page URL slug? Some sites (AH allerhande) serve a stub page with
+      // unrelated JSON-LD when a request looks like a bot — we'd happily
+      // accept the wrong recipe otherwise. If title and slug don't share
+      // any meaningful word, fall through to Claude web_search via the
+      // catch path further down.
+      if (recipe.title && !titleMatchesUrlSlug(recipe.title, url)) {
+        console.log(
+          `[URL Extract] JSON-LD title "${recipe.title}" does not match URL slug — likely bot-detected stub. Falling back to web search.`,
+        );
+        const fallbackRecipe = await fallbackWebSearch(url);
+        if (!fallbackRecipe.bron) fallbackRecipe.bron = detectBronFromUrl(url);
+        setCachedRecipe(url, fallbackRecipe);
+        return respondWithValidation(fallbackRecipe);
       }
 
       // If JSON-LD is missing steps or ingredients, enhance with Claude
