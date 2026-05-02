@@ -79,6 +79,85 @@ function titleMatchesUrlSlug(title: string, url: string): boolean {
   return firstHit && matched >= Math.ceil(slugTokens.length / 2);
 }
 
+/**
+ * Targeted image-URL hunt for recipes where the main extraction (JSON-LD
+ * or fallbackWebSearch) couldn't surface a usable image. Cheap (Haiku +
+ * 3 web searches) and strictly limited to the source domain — never
+ * returns Pinterest/Instagram/stock photos. Returns null on any miss.
+ */
+async function findImageViaWebSearch(
+  pageUrl: string,
+  title: string | null | undefined,
+): Promise<string | null> {
+  if (!title) return null;
+  let hostname: string;
+  try {
+    hostname = new URL(pageUrl).hostname.replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+
+  // Hard 8s budget; outer route still has plenty of headroom under 60s.
+  const TIMEOUT_MS = 8000;
+  const inner = (async (): Promise<string | null> => {
+    try {
+      const client = new Anthropic();
+      const res = await client.messages.create({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 1024,
+        system: `Je zoekt de directe afbeelding-URL van een specifieke receptpagina op ${hostname}. Retourneer UITSLUITEND geldig JSON: {"image_url": "https://..."} of {"image_url": null}. Geen uitleg.`,
+        tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }],
+        messages: [
+          {
+            role: "user",
+            content: `Vind de directe URL van de hoofdfoto voor dit recept op ${hostname}:
+- Pagina: ${pageUrl}
+- Titel: "${title}"
+
+De URL MOET op ${hostname} of een subdomein daarvan staan (bijv. static.${hostname}, cdn.${hostname}, i0.wp.com/${hostname}/...). NOOIT Pinterest, Instagram, Facebook, stock-sites, of andere websites. NOOIT een gerelateerd recept.
+
+Antwoord ALLEEN met {"image_url": "https://..."} of {"image_url": null}.`,
+          },
+        ],
+      });
+      const text = res.content
+        .filter((b) => b.type === "text")
+        .map((b) => (b.type === "text" ? b.text : ""))
+        .join("\n");
+      const match = text.match(/\{[^{}]*"image_url"[^{}]*\}/);
+      if (!match) return null;
+      const parsed = JSON.parse(match[0]);
+      const img = parsed?.image_url;
+      if (typeof img !== "string" || !/^https?:\/\//i.test(img)) return null;
+      // Origin guard: must be source host or a subdomain of it
+      try {
+        const imgHost = new URL(img).hostname.replace(/^www\./, "");
+        const sameHost =
+          imgHost === hostname || imgHost.endsWith("." + hostname);
+        const isJetpack =
+          /^i\d+\.wp\.com$/i.test(imgHost) &&
+          new URL(img).pathname.includes(hostname);
+        if (!sameHost && !isJetpack) {
+          console.log(`[URL Extract] Image rejected: unrelated host ${imgHost}`);
+          return null;
+        }
+      } catch {
+        return null;
+      }
+      console.log(`[URL Extract] Image rescue found: ${img}`);
+      return img;
+    } catch (err: any) {
+      console.log("[URL Extract] Image rescue failed:", err.message);
+      return null;
+    }
+  })();
+
+  return await Promise.race([
+    inner,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), TIMEOUT_MS)),
+  ]);
+}
+
 export async function POST(request: NextRequest) {
   let url = '';
   try {
@@ -171,10 +250,48 @@ export async function POST(request: NextRequest) {
       // catch path further down.
       if (recipe.title && !titleMatchesUrlSlug(recipe.title, url)) {
         console.log(
-          `[URL Extract] JSON-LD title "${recipe.title}" does not match URL slug — likely bot-detected stub. Falling back to web search.`,
+          `[URL Extract] JSON-LD title "${recipe.title}" does not match URL slug — likely bot-detected stub.`,
         );
+
+        // Strategy A: the JSON-LD is stubbed but the page BODY usually still
+        // contains the real recipe text. Ask Claude to parse pageText.
+        if (scraped.pageText && scraped.pageText.length > 500) {
+          try {
+            console.log("[URL Extract] Trying pageText extraction with Claude (JSON-LD was stubbed)");
+            const pageTextRecipe = await extractRecipeFromPageText(
+              scraped.pageText,
+              url,
+              scraped.ogImage,
+            );
+            if (
+              pageTextRecipe.title &&
+              titleMatchesUrlSlug(pageTextRecipe.title, url) &&
+              (pageTextRecipe.ingredients?.length ?? 0) >= 3
+            ) {
+              if (!pageTextRecipe.bron) pageTextRecipe.bron = detectBronFromUrl(url);
+              if (!pageTextRecipe.image_url) {
+                const imageUrl = await findImageViaWebSearch(url, pageTextRecipe.title);
+                if (imageUrl) pageTextRecipe.image_url = imageUrl;
+              }
+              setCachedRecipe(url, pageTextRecipe);
+              return respondWithValidation(pageTextRecipe);
+            }
+            console.log(
+              `[URL Extract] pageText extraction did not match URL slug ("${pageTextRecipe.title}") — falling through to web search`,
+            );
+          } catch (err: any) {
+            console.log("[URL Extract] pageText extraction failed:", err.message);
+          }
+        }
+
+        // Strategy B: web_search via Anthropic's infrastructure.
+        console.log("[URL Extract] Falling back to web search");
         const fallbackRecipe = await fallbackWebSearch(url);
         if (!fallbackRecipe.bron) fallbackRecipe.bron = detectBronFromUrl(url);
+        if (!fallbackRecipe.image_url) {
+          const imageUrl = await findImageViaWebSearch(url, fallbackRecipe.title);
+          if (imageUrl) fallbackRecipe.image_url = imageUrl;
+        }
         setCachedRecipe(url, fallbackRecipe);
         return respondWithValidation(fallbackRecipe);
       }
@@ -237,6 +354,38 @@ export async function POST(request: NextRequest) {
       { status: 422 }
     );
   }
+}
+
+/**
+ * Same Claude prompt as extractWithClaude() but returns the parsed recipe
+ * object instead of a NextResponse — used when we want to inspect/modify
+ * the result before returning (e.g. bot-stub fallback flow).
+ */
+async function extractRecipeFromPageText(
+  pageText: string,
+  url: string,
+  ogImage: string | null,
+): Promise<any> {
+  const client = new Anthropic();
+  const imageInstruction = ogImage
+    ? `\n\nDe afbeelding van dit recept is: ${ogImage} — gebruik dit als image_url.`
+    : "";
+  const response = await client.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 4096,
+    system: EXTRACTION_SYSTEM_PROMPT,
+    messages: [
+      {
+        role: "user",
+        content: `Hier is de tekst van een receptpagina (${url}):\n\n${pageText}${imageInstruction}\n\nRetourneer dit als een enkel JSON-object volgens het opgegeven schema. ALLEEN JSON, geen andere tekst.`,
+      },
+    ],
+  });
+  const responseText = response.content
+    .filter((b) => b.type === "text")
+    .map((b) => (b.type === "text" ? b.text : ""))
+    .join("\n");
+  return parseRecipeResponse(responseText);
 }
 
 async function extractWithClaude(
