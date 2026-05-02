@@ -337,7 +337,12 @@ function extractJsonLd(html: string, pageUrl?: string): any | null {
   }
 
   if (recipes.length === 0) return null;
-  if (recipes.length === 1 || !pageUrl) return recipes[0];
+  if (recipes.length === 1 || !pageUrl) {
+    console.log(
+      `[Scrape] Single recipe block returned: "${recipes[0]?.name}" (id=${recipes[0]?.['@id'] ?? 'none'})`,
+    );
+    return recipes[0];
+  }
 
   // Diagnostic: show every recipe block we found so a future mismatch is
   // debuggable from Vercel logs alone.
