@@ -1,6 +1,6 @@
 {
   "name": "receptenboek",
-  "version": "1.18.15",
+  "version": "1.18.16",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",

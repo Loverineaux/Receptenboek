@@ -80,6 +80,44 @@ function titleMatchesUrlSlug(title: string, url: string): boolean {
 }
 
 /**
+ * Quick pre-check before sending pageText to Claude: does the body contain
+ * any meaningful URL-slug tokens? When the answer is "no" the page body
+ * is also bot-stubbed and we'd waste ~25s on a Claude call that returns
+ * the same wrong recipe again.
+ */
+function pageTextContainsUrlSlug(pageText: string, url: string): boolean {
+  let slug: string;
+  try {
+    const path = new URL(url).pathname;
+    slug = path
+      .split('/')
+      .filter(Boolean)
+      .filter((s) => !/^R-?R?\d+$/i.test(s))
+      .reduce((longest, s) => (s.length > longest.length ? s : longest), '');
+  } catch {
+    return true;
+  }
+  if (!slug || slug.length < 6) return true;
+
+  const fold = (s: string) =>
+    s
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9]+/g, ' ');
+  const slugTokens = fold(slug)
+    .split(/\s+/)
+    .filter((t) => t.length >= 5);
+  if (slugTokens.length === 0) return true;
+
+  const bodyFolded = fold(pageText.slice(0, 20000));
+  // Be generous: even one meaningful slug token in the body suggests
+  // there's relevant content to parse. We only block obvious total
+  // stubs where zero tokens appear.
+  return slugTokens.some((t) => bodyFolded.includes(t));
+}
+
+/**
  * Targeted image-URL hunt for recipes where the main extraction (JSON-LD
  * or fallbackWebSearch) couldn't surface a usable image. Cheap (Haiku +
  * 3 web searches) and strictly limited to the source domain — never
@@ -257,7 +295,13 @@ export async function POST(request: NextRequest) {
 
         // Strategy A: the JSON-LD is stubbed but the page BODY usually still
         // contains the real recipe text. Ask Claude to parse pageText.
-        if (scraped.pageText && scraped.pageText.length > 500) {
+        // Skip this expensive Claude call when the body itself is also
+        // clearly stubbed (no meaningful slug tokens anywhere).
+        if (
+          scraped.pageText &&
+          scraped.pageText.length > 500 &&
+          pageTextContainsUrlSlug(scraped.pageText, url)
+        ) {
           try {
             console.log("[URL Extract] Trying pageText extraction with Claude (JSON-LD was stubbed)");
             const pageTextRecipe = await extractRecipeFromPageText(
@@ -286,6 +330,10 @@ export async function POST(request: NextRequest) {
           } catch (err: any) {
             console.log("[URL Extract] pageText extraction failed:", err.message);
           }
+        } else if (scraped.pageText) {
+          console.log(
+            "[URL Extract] pageText also looks stubbed (no slug tokens) — skipping Claude pageText call to save time",
+          );
         }
 
         // Strategy B: web_search via Anthropic's infrastructure.
