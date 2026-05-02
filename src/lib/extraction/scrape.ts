@@ -339,8 +339,23 @@ function extractJsonLd(html: string, pageUrl?: string): any | null {
   if (recipes.length === 0) return null;
   if (recipes.length === 1 || !pageUrl) return recipes[0];
 
-  // Prefer the recipe whose @id or url field matches the current page URL.
-  // Compare on slug + path tail (ignores trailing slashes / query strings).
+  // Diagnostic: show every recipe block we found so a future mismatch is
+  // debuggable from Vercel logs alone.
+  console.log(
+    `[Scrape] Found ${recipes.length} recipe blocks for ${pageUrl}:`,
+    recipes.map((r) => ({
+      name: typeof r.name === 'string' ? r.name : null,
+      id: r['@id'] ?? null,
+      url: r.url ?? null,
+      mainEntityOfPage:
+        typeof r.mainEntityOfPage === 'string'
+          ? r.mainEntityOfPage
+          : r.mainEntityOfPage?.['@id'] ?? null,
+    })),
+  );
+
+  // Strategy 1: prefer the recipe whose @id/url/mainEntityOfPage matches the
+  // current page URL (slug-level path compare).
   const pagePath = (() => {
     try {
       return new URL(pageUrl).pathname.replace(/\/+$/, '').toLowerCase();
@@ -349,29 +364,69 @@ function extractJsonLd(html: string, pageUrl?: string): any | null {
     }
   })();
 
-  const matched = recipes.find((r) => {
-    const candidates: string[] = [];
-    if (typeof r['@id'] === 'string') candidates.push(r['@id']);
-    if (typeof r.url === 'string') candidates.push(r.url);
-    if (typeof r.mainEntityOfPage === 'string') candidates.push(r.mainEntityOfPage);
+  const refsOf = (r: any): string[] => {
+    const refs: string[] = [];
+    if (typeof r['@id'] === 'string') refs.push(r['@id']);
+    if (typeof r.url === 'string') refs.push(r.url);
+    if (typeof r.mainEntityOfPage === 'string') refs.push(r.mainEntityOfPage);
     else if (r.mainEntityOfPage && typeof r.mainEntityOfPage['@id'] === 'string') {
-      candidates.push(r.mainEntityOfPage['@id']);
+      refs.push(r.mainEntityOfPage['@id']);
     }
-    return candidates.some((c) => {
+    return refs;
+  };
+
+  const exactMatch = recipes.find((r) =>
+    refsOf(r).some((ref) => {
       try {
-        return new URL(c).pathname.replace(/\/+$/, '').toLowerCase() === pagePath;
+        return new URL(ref).pathname.replace(/\/+$/, '').toLowerCase() === pagePath;
       } catch {
-        return c.toLowerCase().includes(pagePath);
+        return ref.toLowerCase().includes(pagePath);
+      }
+    }),
+  );
+  if (exactMatch) {
+    console.log(`[Scrape] Exact-path match: "${exactMatch.name}"`);
+    return exactMatch;
+  }
+
+  // Strategy 2: many sites embed a recipe id in the URL (AH: R-R1190830,
+  // others: numeric, slugs). If we can extract identifier-shaped tokens
+  // from the page URL, prefer a recipe whose refs contain the same token.
+  const idTokens = pageUrl.match(/R-R\d+|[A-Za-z]+[-_]?\d{4,}/g) ?? [];
+  if (idTokens.length > 0) {
+    const tokenMatch = recipes.find((r) => {
+      const refs = refsOf(r).join(' ').toLowerCase();
+      return idTokens.some((t) => refs.includes(t.toLowerCase()));
+    });
+    if (tokenMatch) {
+      console.log(`[Scrape] Id-token match (${idTokens.join(',')}): "${tokenMatch.name}"`);
+      return tokenMatch;
+    }
+  }
+
+  // Strategy 3: drop any recipe whose @id/url clearly points to a *different*
+  // page than the one we're scraping. The remaining recipes either match or
+  // have no identifier at all (probably the main recipe).
+  const cleaned = recipes.filter((r) => {
+    const refs = refsOf(r);
+    if (refs.length === 0) return true;
+    return refs.some((ref) => {
+      try {
+        const refPath = new URL(ref).pathname.replace(/\/+$/, '').toLowerCase();
+        return refPath === pagePath || refPath === '' || refPath === '/';
+      } catch {
+        return true;
       }
     });
   });
-
-  if (matched) {
-    console.log(`[Scrape] Picked recipe matching page URL out of ${recipes.length} candidates`);
-    return matched;
+  if (cleaned.length > 0 && cleaned.length < recipes.length) {
+    console.log(
+      `[Scrape] Filtered out ${recipes.length - cleaned.length} unrelated recipe(s); using "${cleaned[0].name}"`,
+    );
+    return cleaned[0];
   }
 
-  console.log(`[Scrape] Multiple recipes (${recipes.length}) on page, none matched URL — using first`);
+  console.log(`[Scrape] No recipe matched URL — falling back to first: "${recipes[0].name}"`);
   return recipes[0];
 }
 
