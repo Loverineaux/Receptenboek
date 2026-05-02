@@ -47,8 +47,38 @@ const SIMPLE_HEADERS: Record<string, string> = {
   "Accept-Language": "nl-NL,nl;q=0.9",
 };
 
-/** Resolve short redirect URLs (e.g. ah.nl/r/123) to their final destination */
+/**
+ * Heuristic: does this URL look like a short-link that needs to be expanded
+ * (e.g. ah.nl/r/abc123, jum.bo/x/...) or an already-canonical recipe URL
+ * that should be left alone?
+ *
+ * AH allerhande full URLs trigger a server-side redirect to a *different*
+ * recipe id when fetched with HEAD only — likely bot defense — and we
+ * accidentally followed it, scraping the wrong page. Solution: only
+ * resolve when the URL really looks short.
+ */
+function looksLikeShortUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    const path = u.pathname;
+    // Path is just a /code or empty → likely a short URL
+    if (path.length <= 12) return true;
+    // Common short-redirect patterns
+    if (/^\/r\/[\w-]+$/i.test(path)) return true; // ah.nl/r/123
+    if (/^\/[a-z0-9]{4,12}$/i.test(path)) return true; // bit.ly/abc123 etc
+    // Otherwise it has a real path — assume canonical
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/** Resolve short redirect URLs (e.g. ah.nl/r/123) to their final destination.
+ *  Returns the input URL unchanged if it already looks canonical. */
 async function resolveRedirects(url: string): Promise<string> {
+  if (!looksLikeShortUrl(url)) {
+    return url;
+  }
   try {
     const res = await fetch(url, {
       method: 'HEAD',
