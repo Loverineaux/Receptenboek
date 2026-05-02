@@ -341,18 +341,10 @@ export default function NieuwReceptPage() {
     setPhotoProgress('Foto\'s voorbereiden...');
 
     try {
-      // Convert files to base64
-      const images = await Promise.all(
-        photoFiles.map(async (file) => {
-          const buffer = await file.arrayBuffer();
-          const bytes = new Uint8Array(buffer);
-          let binary = '';
-          for (let i = 0; i < bytes.length; i++) {
-            binary += String.fromCharCode(bytes[i]);
-          }
-          return { data: btoa(binary), media_type: file.type };
-        })
-      );
+      // Resize phone photos before upload — Anthropic vision rejects images
+      // over ~5MB after base64, and OCR doesn't need full 12MP resolution.
+      const { shrinkImageForExtraction } = await import('@/lib/extraction/shrink-image');
+      const images = await Promise.all(photoFiles.map((f) => shrinkImageForExtraction(f)));
 
       setPhotoProgress('Foto\'s uploaden naar AI...');
 
