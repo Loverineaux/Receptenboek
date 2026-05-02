@@ -283,8 +283,10 @@ async function tryFetch(url: string, headers: Record<string, string>): Promise<S
 }
 
 function parseHtml(html: string, url: string): ScrapedRecipe {
-  // 1. Extract JSON-LD
-  const jsonLd = extractJsonLd(html);
+  // 1. Extract JSON-LD — pass the URL so the picker can prefer a recipe
+  // whose @id/url matches the page (AH and others put related-recipe
+  // JSON-LD blocks alongside the main one).
+  const jsonLd = extractJsonLd(html, url);
 
   // 2. Extract OG image
   const ogImage = extractMetaContent(html, 'property="og:image"')
@@ -304,30 +306,29 @@ function parseHtml(html: string, url: string): ScrapedRecipe {
   return { jsonLd, ogImage, pageText, rawHtml, pageTitle };
 }
 
-function extractJsonLd(html: string): any | null {
-  // Find all <script type="application/ld+json"> blocks
+function extractJsonLd(html: string, pageUrl?: string): any | null {
+  // Some sites (AH allerhande, NYT Cooking, ...) embed multiple Recipe
+  // JSON-LD blocks on the same page — main recipe + related/alternative
+  // recipes. Picking the first one returns the wrong recipe. Collect them
+  // all, then prefer the one whose @id or url matches the page URL.
   const regex = /<script[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  const recipes: any[] = [];
   let match;
 
   while ((match = regex.exec(html)) !== null) {
     try {
       const data = JSON.parse(match[1].trim());
-
-      // Could be a single object or an array
       const items = Array.isArray(data) ? data : [data];
-
       for (const item of items) {
-        // Direct Recipe type
         if (item["@type"] === "Recipe" || item["@type"]?.includes?.("Recipe")) {
-          return item;
+          recipes.push(item);
         }
-
-        // Nested in @graph
         if (item["@graph"] && Array.isArray(item["@graph"])) {
-          const recipe = item["@graph"].find(
-            (g: any) => g["@type"] === "Recipe" || g["@type"]?.includes?.("Recipe")
-          );
-          if (recipe) return recipe;
+          for (const g of item["@graph"]) {
+            if (g["@type"] === "Recipe" || g["@type"]?.includes?.("Recipe")) {
+              recipes.push(g);
+            }
+          }
         }
       }
     } catch {
@@ -335,7 +336,43 @@ function extractJsonLd(html: string): any | null {
     }
   }
 
-  return null;
+  if (recipes.length === 0) return null;
+  if (recipes.length === 1 || !pageUrl) return recipes[0];
+
+  // Prefer the recipe whose @id or url field matches the current page URL.
+  // Compare on slug + path tail (ignores trailing slashes / query strings).
+  const pagePath = (() => {
+    try {
+      return new URL(pageUrl).pathname.replace(/\/+$/, '').toLowerCase();
+    } catch {
+      return pageUrl.toLowerCase();
+    }
+  })();
+
+  const matched = recipes.find((r) => {
+    const candidates: string[] = [];
+    if (typeof r['@id'] === 'string') candidates.push(r['@id']);
+    if (typeof r.url === 'string') candidates.push(r.url);
+    if (typeof r.mainEntityOfPage === 'string') candidates.push(r.mainEntityOfPage);
+    else if (r.mainEntityOfPage && typeof r.mainEntityOfPage['@id'] === 'string') {
+      candidates.push(r.mainEntityOfPage['@id']);
+    }
+    return candidates.some((c) => {
+      try {
+        return new URL(c).pathname.replace(/\/+$/, '').toLowerCase() === pagePath;
+      } catch {
+        return c.toLowerCase().includes(pagePath);
+      }
+    });
+  });
+
+  if (matched) {
+    console.log(`[Scrape] Picked recipe matching page URL out of ${recipes.length} candidates`);
+    return matched;
+  }
+
+  console.log(`[Scrape] Multiple recipes (${recipes.length}) on page, none matched URL — using first`);
+  return recipes[0];
 }
 
 function extractImageFromJsonLd(jsonLd: any): string | null {
