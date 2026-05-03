@@ -63,14 +63,26 @@ const GOOGLEBOT_HEADERS: Record<string, string> = {
  * Recovery fetch with a Googlebot User-Agent. Used when the regular scrape
  * returns a bot-stub (e.g. AH allerhande mismatched JSON-LD). Most consumer
  * sites whitelist Googlebot to keep their search ranking, so this often
- * pulls the real recipe even when the same URL with a regular UA returned
- * a stub. Returns null on any failure — caller falls through to other
- * recovery strategies.
+ * pulls the real recipe even when the same UA returned a stub.
+ *
+ * Hard 5s budget — sites that validate Googlebot via reverse-DNS (AH does)
+ * just stall the connection, and we don't want to burn 15s per import on a
+ * dead-end attempt. Always logs so we can see why it failed in Vercel.
  */
+const GOOGLEBOT_TIMEOUT = 5000;
 export async function scrapePageAsGooglebot(
   url: string,
 ): Promise<ScrapedRecipe | null> {
-  return tryFetch(url, GOOGLEBOT_HEADERS);
+  console.log("[Scrape] Googlebot UA recovery fetch starting…");
+  const t0 = Date.now();
+  const result = await tryFetch(url, GOOGLEBOT_HEADERS, GOOGLEBOT_TIMEOUT);
+  const elapsed = Date.now() - t0;
+  if (result) {
+    console.log(`[Scrape] Googlebot fetch returned in ${elapsed}ms (jsonLd=${!!result.jsonLd})`);
+  } else {
+    console.log(`[Scrape] Googlebot fetch returned no usable result in ${elapsed}ms`);
+  }
+  return result;
 }
 
 /**
@@ -262,9 +274,13 @@ async function tryHeadlessBrowser(url: string): Promise<ScrapedRecipe | null> {
   }
 }
 
-async function tryFetch(url: string, headers: Record<string, string>): Promise<ScrapedRecipe | null> {
+async function tryFetch(
+  url: string,
+  headers: Record<string, string>,
+  timeoutMs: number = FETCH_TIMEOUT,
+): Promise<ScrapedRecipe | null> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const res = await fetch(url, {
