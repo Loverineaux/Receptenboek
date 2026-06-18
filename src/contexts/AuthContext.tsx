@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { recordTiming, recordNavigationTiming } from '@/lib/telemetry'
 import type { User, AuthError } from '@supabase/supabase-js'
 
-interface Profile {
+export interface Profile {
   id: string
   email: string | null
   display_name: string | null
@@ -30,10 +30,25 @@ export interface AuthContextValue {
 
 export const AuthContext = createContext<AuthContextValue | null>(null)
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
-  const [profile, setProfile] = useState<Profile | null>(null)
-  const [loading, setLoading] = useState(true)
+export function AuthProvider({
+  children,
+  initialUser = null,
+  initialProfile = null,
+}: {
+  children: ReactNode
+  /** User resolved server-side from the auth cookie and passed in by the root
+   *  layout. When present, `user` is known on the very first render, so the
+   *  app is interactive immediately — no client-side getSession() round trip
+   *  blocks the cold open. The client effect below still reconciles against
+   *  the real cookie in the background. */
+  initialUser?: User | null
+  initialProfile?: Profile | null
+}) {
+  const [user, setUser] = useState<User | null>(initialUser)
+  const [profile, setProfile] = useState<Profile | null>(initialProfile)
+  // If the server already resolved a user we are not "loading" — render the
+  // authenticated UI on first paint instead of a spinner.
+  const [loading, setLoading] = useState(!initialUser)
 
   const supabase = createClient()
 
@@ -71,11 +86,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // Get initial session — rely on getSession (signed cookie, local-only,
-    // ~20ms) for the initial paint. Run getUser() in the background so
-    // fetchProfile and the recepten query don't have to wait for a cold
-    // ~2s roundtrip to Supabase Auth. RLS still enforces real auth on
-    // every data query, so the signed-cookie user is safe enough for UX.
+    // Reconcile the client against the real auth cookie. When the server
+    // already injected `initialUser` this no longer blocks the first paint
+    // (loading is already false); it just corrects the state if the cookie
+    // disagrees (e.g. a stale PWA cache). RLS enforces real auth on every
+    // data query, so the signed-cookie user is safe enough for UX.
     const getInitialSession = async () => {
       const tSession = performance.now()
       const { data: { session } } = await supabase.auth.getSession()
@@ -90,7 +105,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       recordTiming('auth.ready', performance.now() - t0, { hasUser: !!currentUser })
 
       if (currentUser) {
-        fetchProfile(currentUser.id)
+        // Skip the profile round trip when the server already gave us this
+        // user's profile — it's fresh and avoids a redundant query on boot.
+        if (!initialProfile || initialProfile.id !== currentUser.id) {
+          fetchProfile(currentUser.id)
+        }
         fetch('/api/users/heartbeat', { method: 'POST' }).catch(() => {})
         // Background verification — if Supabase Auth disagrees with the
         // cookie, onAuthStateChange will fire and the user state resets.

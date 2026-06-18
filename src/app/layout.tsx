@@ -3,6 +3,7 @@ import './globals.css';
 import PWAInstall from '@/components/layout/PWAInstall';
 import NavigationProgress from '@/components/layout/NavigationProgress';
 import { AuthProvider } from '@/contexts/AuthContext';
+import { getInitialAuth } from '@/lib/supabase/initial-auth';
 
 export const metadata: Metadata = {
   title: 'Receptenboek',
@@ -37,12 +38,15 @@ export const viewport: Viewport = {
   maximumScale: 1,
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  // Resolve the user server-side so AuthProvider knows it on first paint —
+  // no client-side getSession() round trip blocking the cold open.
+  const { user, profile } = await getInitialAuth();
   return (
     <html lang="nl">
       <head>
@@ -53,7 +57,7 @@ export default function RootLayout({
         {supabaseUrl && <link rel="dns-prefetch" href={supabaseUrl} />}
       </head>
       <body className="font-sans antialiased">
-        <AuthProvider>
+        <AuthProvider initialUser={user} initialProfile={profile}>
           <NavigationProgress />
           {children}
           <PWAInstall />
