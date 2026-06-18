@@ -6,6 +6,13 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '1.18.21',
+    date: '18 juni 2026',
+    highlights: [
+      'De app draait nu vanaf een Europese server (Dublin) vlak naast de database, in plaats van vanuit de Verenigde Staten — dat scheelt bij elke handeling een reis over de oceaan en maakt openen, zoeken en laden merkbaar sneller',
+    ],
+  },
+  {
     version: '1.18.20',
     date: '18 juni 2026',
     highlights: [
@@ -19,13 +26,6 @@ export const releaseNotes: ReleaseNote[] = [
     highlights: [
       'De app opent nu een stuk sneller: je gegevens zijn meteen bekend bij het openen, zodat je direct door recepten kunt zoeken en ze kunt openen zonder eerst te wachten',
       'Geen onnodige wachttijd meer na inloggen — de receptenlijst is meteen bruikbaar in plaats van alleen zichtbaar',
-    ],
-  },
-  {
-    version: '1.18.18',
-    date: '3 mei 2026',
-    highlights: [
-      'Recept-import wacht nog maximaal 5 seconden op de Googlebot-poging in plaats van 15, zodat sites die ons toch blokkeren niet onnodig lang vasthouden — de logregels laten nu ook duidelijk zien of de poging slaagde of mislukte',
     ],
   },
 ];
