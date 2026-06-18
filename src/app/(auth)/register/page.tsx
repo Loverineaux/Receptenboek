@@ -42,6 +42,7 @@ function RegisterPage() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [googleSubmitting, setGoogleSubmitting] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
 
   const [verifyingCode, setVerifyingCode] = useState(false)
@@ -110,17 +111,27 @@ function RegisterPage() {
   }
 
   const handleGoogleSignIn = async () => {
+    // Show feedback immediately — without it the button looks frozen while the
+    // browser redirects to Google.
     setError(null)
-    // Set cookie to prove access code was verified
-    document.cookie = 'access_code_verified=true; path=/; max-age=300; SameSite=Lax'
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/api/auth/callback`,
-      },
-    })
-    if (error) {
-      setError(translateAuthError(error.message))
+    setGoogleSubmitting(true)
+    try {
+      // Set cookie to prove access code was verified
+      document.cookie = 'access_code_verified=true; path=/; max-age=300; SameSite=Lax'
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/api/auth/callback`,
+        },
+      })
+      if (error) {
+        setError(translateAuthError(error.message))
+        setGoogleSubmitting(false)
+      }
+      // On success the browser navigates away; keep the spinner until then.
+    } catch (err: any) {
+      setError(err?.message || 'Er ging iets mis bij het registreren met Google')
+      setGoogleSubmitting(false)
     }
   }
 
@@ -221,10 +232,20 @@ function RegisterPage() {
               {/* Google sign up */}
               <button
                 onClick={handleGoogleSignIn}
-                className="flex w-full items-center justify-center gap-3 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-text-primary transition-colors hover:bg-gray-50"
+                disabled={googleSubmitting}
+                className="flex w-full items-center justify-center gap-3 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-text-primary transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <GoogleLogo />
-                Registreren met Google
+                {googleSubmitting ? (
+                  <>
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-gray-400 border-t-transparent" />
+                    Doorsturen naar Google…
+                  </>
+                ) : (
+                  <>
+                    <GoogleLogo />
+                    Registreren met Google
+                  </>
+                )}
               </button>
 
               {/* Divider */}

@@ -26,7 +26,32 @@ function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [googleSubmitting, setGoogleSubmitting] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+
+  const handleGoogleSignIn = async () => {
+    // Show feedback immediately — the browser redirect to Google can take a
+    // moment, and without this the button looks frozen ("reageert niet").
+    setError(null)
+    setGoogleSubmitting(true)
+    try {
+      const callbackUrl = redirectTo && redirectTo.startsWith('/')
+        ? `${window.location.origin}/api/auth/callback?next=${encodeURIComponent(redirectTo)}`
+        : `${window.location.origin}/api/auth/callback`
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: callbackUrl },
+      })
+      if (error) {
+        setError(translateAuthError(error.message))
+        setGoogleSubmitting(false)
+      }
+      // On success the browser navigates away; keep the spinner until then.
+    } catch (err: any) {
+      setError(err?.message || 'Er ging iets mis bij het inloggen met Google')
+      setGoogleSubmitting(false)
+    }
+  }
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -128,22 +153,21 @@ function LoginPage() {
 
           {/* Google sign in */}
           <button
-            onClick={async () => {
-              const callbackUrl = redirectTo && redirectTo.startsWith('/')
-                ? `${window.location.origin}/api/auth/callback?next=${encodeURIComponent(redirectTo)}`
-                : `${window.location.origin}/api/auth/callback`
-              const { error } = await supabase.auth.signInWithOAuth({
-                provider: 'google',
-                options: {
-                  redirectTo: callbackUrl,
-                },
-              })
-              if (error) setError(translateAuthError(error.message))
-            }}
-            className="flex w-full items-center justify-center gap-3 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-text-primary transition-colors hover:bg-gray-50"
+            onClick={handleGoogleSignIn}
+            disabled={googleSubmitting}
+            className="flex w-full items-center justify-center gap-3 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-text-primary transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <GoogleLogo />
-            Inloggen met Google
+            {googleSubmitting ? (
+              <>
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-gray-400 border-t-transparent" />
+                Doorsturen naar Google…
+              </>
+            ) : (
+              <>
+                <GoogleLogo />
+                Inloggen met Google
+              </>
+            )}
           </button>
 
           <p className="mt-6 text-center text-sm text-text-secondary">
