@@ -1,18 +1,32 @@
 import type { Metadata } from 'next';
+import { cache } from 'react';
 import { createClient } from '@/lib/supabase/server';
+import { RECIPE_DETAIL_SELECT, mapRecipeRow } from '@/lib/recipes/recipe-detail-query';
 import RecipeDetailClient from './RecipeDetailClient';
 
 interface Props {
-  params: { id: string };
+  // Next.js 15: route params are async and must be awaited.
+  params: Promise<{ id: string }>;
 }
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
+// Load the full recipe once per request. cache() dedupes the call between
+// generateMetadata and the page component, so the nested query runs a single
+// time server-side (in Dublin, next to the DB) instead of the old setup where
+// the page fetched nothing and the client had to fetch the whole thing after
+// hydrating — the waterfall that made opening a recipe take seconds.
+const getRecipe = cache(async (id: string) => {
   const supabase = await createClient();
-  const { data: recipe } = await supabase
+  const { data } = await supabase
     .from('recipes')
-    .select('title, subtitle, image_url')
-    .eq('id', params.id)
+    .select(RECIPE_DETAIL_SELECT)
+    .eq('id', id)
     .single();
+  return data ? mapRecipeRow(data) : null;
+});
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { id } = await params;
+  const recipe = await getRecipe(id);
 
   if (!recipe) {
     return { title: 'Recept niet gevonden — Receptenboek' };
@@ -35,7 +49,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       title,
       description,
       type: 'article',
-      url: `${siteUrl}/recepten/${params.id}`,
+      url: `${siteUrl}/recepten/${id}`,
       siteName: 'Receptenboek',
       ...(ogImageUrl && {
         images: [
@@ -57,6 +71,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-export default function RecipeDetailPage() {
-  return <RecipeDetailClient />;
+export default async function RecipeDetailPage({ params }: Props) {
+  // Hand the recipe to the client component as initial data, so it renders
+  // immediately instead of showing a spinner while it fetches client-side.
+  const { id } = await params;
+  const recipe = await getRecipe(id);
+  return <RecipeDetailClient initialRecipe={recipe} />;
 }

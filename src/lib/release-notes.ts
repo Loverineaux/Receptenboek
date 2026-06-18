@@ -6,6 +6,13 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '1.18.22',
+    date: '18 juni 2026',
+    highlights: [
+      'Een recept openen gaat nu een stuk sneller: het recept wordt direct meegeladen met de pagina in plaats van pas erna apart op te halen, dus je ziet meteen de inhoud in plaats van een laadcirkel',
+    ],
+  },
+  {
     version: '1.18.21',
     date: '18 juni 2026',
     highlights: [
@@ -18,14 +25,6 @@ export const releaseNotes: ReleaseNote[] = [
     highlights: [
       'Inloggen met Google geeft nu meteen feedback: de knop toont "Doorsturen naar Google…" zodra je erop klikt, in plaats van dat er ogenschijnlijk niets gebeurt',
       'Je kunt niet meer per ongeluk dubbelklikken op de Google-knop terwijl je wordt doorgestuurd',
-    ],
-  },
-  {
-    version: '1.18.19',
-    date: '18 juni 2026',
-    highlights: [
-      'De app opent nu een stuk sneller: je gegevens zijn meteen bekend bij het openen, zodat je direct door recepten kunt zoeken en ze kunt openen zonder eerst te wachten',
-      'Geen onnodige wachttijd meer na inloggen — de receptenlijst is meteen bruikbaar in plaats van alleen zichtbaar',
     ],
   },
 ];

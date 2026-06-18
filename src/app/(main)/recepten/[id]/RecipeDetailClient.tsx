@@ -43,6 +43,7 @@ const ShareModal = dynamic(() => import('@/components/ui/ShareModal'));
 import { useAdmin } from '@/hooks/useAdmin';
 import { useRealtimeSubscription, useRealtimeRefresh } from '@/hooks/useRealtimeSubscription';
 import type { RecipeWithRelations, Comment as CommentType } from '@/types';
+import { RECIPE_DETAIL_SELECT, mapRecipeRow } from '@/lib/recipes/recipe-detail-query';
 
 // ── fraction parsing + formatting ────────────────
 
@@ -205,15 +206,23 @@ type Tab = 'ingredienten' | 'bereiding' | 'voeding';
 
 const CATEGORY_LIST = ['Kip', 'Vlees', 'Vis', 'Vegetarisch', 'Veganistisch', 'Pasta', 'Salade', 'Soep', 'Dessert', 'Ontbijt', 'Lunch'];
 
-export default function RecipeDetailPageWrapper() {
+export default function RecipeDetailPageWrapper({
+  initialRecipe = null,
+}: {
+  initialRecipe?: RecipeWithRelations | null;
+}) {
   return (
     <Suspense>
-      <RecipeDetailPage />
+      <RecipeDetailPage initialRecipe={initialRecipe} />
     </Suspense>
   );
 }
 
-function RecipeDetailPage() {
+function RecipeDetailPage({
+  initialRecipe,
+}: {
+  initialRecipe: RecipeWithRelations | null;
+}) {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -221,8 +230,14 @@ function RecipeDetailPage() {
   const { isAdmin: isAdminUser } = useAdmin();
   const supabase = createClient();
 
-  const [recipe, setRecipe] = useState<RecipeWithRelations | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [recipe, setRecipe] = useState<RecipeWithRelations | null>(initialRecipe);
+  // When the server already provided the recipe we render it immediately; the
+  // fetchRecipe effect below still runs to refresh + load user-specific data
+  // (favorite count, own rating) in the background.
+  const [loading, setLoading] = useState(!initialRecipe);
+  // Tracks whether a recipe is already on screen, so the background refresh
+  // doesn't flash the loading spinner over existing content.
+  const hasRecipeRef = useRef<boolean>(!!initialRecipe);
   // Ingredient checkboxes are persisted per-recipe in localStorage (24h TTL)
   // so switching apps on a phone and returning keeps what you already
   // ticked off while shopping the kitchen.
@@ -249,7 +264,8 @@ function RecipeDetailPage() {
   });
   const [portions, setPortions] = useState(() => {
     const p = Number(searchParams.get('porties'));
-    return p > 0 ? p : 2;
+    if (p > 0) return p;
+    return initialRecipe?.basis_porties ?? 2;
   });
   const [isFavorited, setIsFavorited] = useState(false);
   const [favoriteCount, setFavoriteCount] = useState(0);
@@ -303,25 +319,16 @@ function RecipeDetailPage() {
   // ── fetch recipe ────────────────────────────────
 
   const fetchRecipe = useCallback(async () => {
-    setLoading(true);
+    // Only show the spinner when nothing is on screen yet. When the server
+    // already injected the recipe (initialRecipe), this runs as a silent
+    // background refresh and must not flash a spinner over the content.
+    if (!hasRecipeRef.current) setLoading(true);
 
     // Fetch recipe data and favorite count in parallel
     const [recipeResult, fcResult] = await Promise.all([
       supabase
         .from('recipes')
-        .select(
-          `
-        *,
-        ingredients(*),
-        steps(*),
-        tags:recipe_tags(tag:tags(*)),
-        nutrition(*),
-        ratings(*),
-        benodigdheden(*),
-        comments(*, user:profiles!comments_user_id_fkey(id, display_name, avatar_url)),
-        user:profiles!recipes_user_id_fkey(id, display_name, avatar_url)
-      `
-        )
+        .select(RECIPE_DETAIL_SELECT)
         .eq('id', params.id)
         .single(),
       fetch(`/api/recipes/${params.id}/favorite-count`)
@@ -337,34 +344,16 @@ function RecipeDetailPage() {
     }
 
     const ratings = data.ratings ?? [];
-    const avg =
-      ratings.length > 0
-        ? ratings.reduce((s: number, r: any) => s + r.sterren, 0) / ratings.length
-        : null;
-
-    const flatTags = (data.tags ?? []).map((rt: any) => rt.tag).filter(Boolean);
 
     const fetchedFavCount = fcResult.count ?? 0;
     const fetchedIsFavorited = fcResult.is_favorited ?? false;
 
     const r: RecipeWithRelations = {
-      ...(data as any),
-      tags: flatTags,
-      average_rating: avg,
+      ...mapRecipeRow(data),
       favorite_count: fetchedFavCount,
-      nutrition: Array.isArray(data.nutrition)
-        ? data.nutrition[0] ?? null
-        : data.nutrition,
-      ingredients: (data.ingredients ?? []).sort(
-        (a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0)
-      ),
-      steps: (data.steps ?? []).sort(
-        (a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0)
-      ),
-      comments: data.comments ?? [],
-      user: data.user as any,
     };
 
+    hasRecipeRef.current = true;
     setRecipe(r);
     // Only set default portions if not already set via URL params
     setPortions((prev) => {
