@@ -1092,6 +1092,34 @@ export default function NieuwReceptPage() {
             </div>
           )}
 
+          {/* Extractie mislukt (transient API-fout / SPA / blokkade) */}
+          {extractedPreview._extractionFailed && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              <p className="font-medium">Automatische extractie is mislukt</p>
+              <p className="mt-1 text-xs text-amber-600">
+                We konden het recept niet uit deze pagina halen. We hebben de titel en bron al ingevuld op basis van de URL — vul de rest handmatig aan, of probeer het opnieuw via een foto of PDF.
+              </p>
+              <div className="mt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setExtractedPreview(null); setActiveTab('foto'); }}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700"
+                >
+                  <Camera className="h-3.5 w-3.5" />
+                  Upload foto
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setExtractedPreview(null); setActiveTab('pdf'); }}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-50"
+                >
+                  <FileUp className="h-3.5 w-3.5" />
+                  Upload PDF
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Validation issues */}
           {extractedPreview._validation && (
             <div className="space-y-2">

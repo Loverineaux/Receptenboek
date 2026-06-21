@@ -205,6 +205,9 @@ export async function POST(request: NextRequest) {
   const tStart = Date.now();
   const elapsed = () => Date.now() - tStart;
   let url = '';
+  // Hoisted so the outer catch can recover the og:image when all extraction
+  // attempts fail and we degrade to a slug-based recipe.
+  let scraped: Awaited<ReturnType<typeof scrapePage>> | undefined;
   try {
     const body = await request.json();
     url = body.url;
@@ -256,7 +259,6 @@ export async function POST(request: NextRequest) {
     console.log("[URL Extract] Scraping:", url);
 
     // Step 1: Scrape the page directly
-    let scraped;
     try {
       scraped = await scrapePage(url);
       console.log("[URL Extract] Scraped OK. JSON-LD:", !!scraped.jsonLd, "OG Image:", !!scraped.ogImage);
@@ -411,32 +413,42 @@ export async function POST(request: NextRequest) {
       error instanceof Error ? error.message : "Unknown error occurred";
     console.error("[URL Extract] Fatal error:", message);
 
-    // Last resort: try to extract a minimal recipe from URL slug
-    if (message.includes("missing a valid title")) {
-      try {
-        const slug = new URL(url).pathname.split("/").filter(Boolean).pop() || "";
-        const title = slug.replace(/[-_]/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-        if (title.length > 3) {
-          console.log("[URL Extract] Using URL slug as title fallback:", title);
-          return NextResponse.json({
-            title,
-            subtitle: null,
-            image_url: null,
-            tijd: null,
-            moeilijkheid: null,
-            bron: detectBronFromUrl(url),
-            basis_porties: null,
-            ingredients: [],
-            steps: [],
-            nutrition: null,
-            tags: null,
-            weetje: null,
-            allergenen: null,
-            benodigdheden: null,
-          });
-        }
-      } catch {}
-    }
+    // Per project policy: als de bron niet genoeg info geeft, geef terug
+    // wat je hebt — de gebruiker kan handmatig aanvullen. Transient
+    // Anthropic 5xx errors or scrape failures should not leave the user
+    // staring at a "extractie mislukt" toast: prefill what we know
+    // (title from URL slug, og:image when scrape succeeded, bron from
+    // hostname) so they can continue editing.
+    try {
+      const slug = new URL(url).pathname.split("/").filter(Boolean).pop() || "";
+      const title = slug
+        ? decodeURIComponent(slug)
+            .replace(/[-_]/g, " ")
+            .replace(/\b\w/g, (c) => c.toUpperCase())
+        : "";
+      if (title.length > 3) {
+        console.log("[URL Extract] Degraded fallback — slug title:", title);
+        return NextResponse.json({
+          title,
+          subtitle: null,
+          image_url: scraped?.ogImage ?? null,
+          tijd: null,
+          moeilijkheid: null,
+          bron: detectBronFromUrl(url),
+          basis_porties: null,
+          ingredients: [],
+          steps: [],
+          nutrition: null,
+          tags: null,
+          weetje: null,
+          allergenen: null,
+          benodigdheden: null,
+          _incomplete: true,
+          _extractionFailed: true,
+          _extractionError: message,
+        });
+      }
+    } catch {}
 
     return NextResponse.json(
       { error: `Failed to extract recipe: ${message}` },
