@@ -324,53 +324,55 @@ function RecipeDetailPage({
     // background refresh and must not flash a spinner over the content.
     if (!hasRecipeRef.current) setLoading(true);
 
-    // Fetch recipe data and favorite count in parallel
-    const [recipeResult, fcResult] = await Promise.all([
-      supabase
-        .from('recipes')
-        .select(RECIPE_DETAIL_SELECT)
-        .eq('id', params.id)
-        .single(),
-      fetch(`/api/recipes/${params.id}/favorite-count`)
-        .then((r) => (r.ok ? r.json() : { count: 0, is_favorited: false }))
-        .catch(() => ({ count: 0, is_favorited: false })),
-    ]);
+    // finally guarantees the spinner always clears — even if the query throws
+    // or the session is in a bad state. Without it a rejected/hung auth query
+    // left `loading` stuck on true and the page span forever.
+    try {
+      // Fetch recipe data and favorite count in parallel
+      const [recipeResult, fcResult] = await Promise.all([
+        supabase
+          .from('recipes')
+          .select(RECIPE_DETAIL_SELECT)
+          .eq('id', params.id)
+          .single(),
+        fetch(`/api/recipes/${params.id}/favorite-count`)
+          .then((r) => (r.ok ? r.json() : { count: 0, is_favorited: false }))
+          .catch(() => ({ count: 0, is_favorited: false })),
+      ]);
 
-    const { data } = recipeResult;
+      const { data } = recipeResult;
 
-    if (!data) {
+      if (!data) return;
+
+      const ratings = data.ratings ?? [];
+
+      const fetchedFavCount = fcResult.count ?? 0;
+      const fetchedIsFavorited = fcResult.is_favorited ?? false;
+
+      const r: RecipeWithRelations = {
+        ...mapRecipeRow(data),
+        favorite_count: fetchedFavCount,
+      };
+
+      hasRecipeRef.current = true;
+      setRecipe(r);
+      // Only set default portions if not already set via URL params
+      setPortions(() => {
+        const urlPortions = Number(searchParams.get('porties'));
+        return urlPortions > 0 ? urlPortions : r.basis_porties;
+      });
+      setComments(data.comments ?? []);
+      setFavoriteCount(fetchedFavCount);
+      setIsFavorited(fetchedIsFavorited);
+
+      // Check user rating
+      if (user) {
+        const myRating = ratings.find((rt: any) => rt.user_id === user.id);
+        if (myRating) setUserRating(myRating.sterren);
+      }
+    } finally {
       setLoading(false);
-      return;
     }
-
-    const ratings = data.ratings ?? [];
-
-    const fetchedFavCount = fcResult.count ?? 0;
-    const fetchedIsFavorited = fcResult.is_favorited ?? false;
-
-    const r: RecipeWithRelations = {
-      ...mapRecipeRow(data),
-      favorite_count: fetchedFavCount,
-    };
-
-    hasRecipeRef.current = true;
-    setRecipe(r);
-    // Only set default portions if not already set via URL params
-    setPortions((prev) => {
-      const urlPortions = Number(searchParams.get('porties'));
-      return urlPortions > 0 ? urlPortions : r.basis_porties;
-    });
-    setComments(data.comments ?? []);
-    setFavoriteCount(fetchedFavCount);
-    setIsFavorited(fetchedIsFavorited);
-
-    // Check user rating
-    if (user) {
-      const myRating = ratings.find((rt: any) => rt.user_id === user.id);
-      if (myRating) setUserRating(myRating.sterren);
-    }
-
-    setLoading(false);
   }, [supabase, params.id, user]);
 
   useEffect(() => {

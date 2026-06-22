@@ -137,7 +137,9 @@ export async function GET(request: NextRequest) {
     tagsMs = Date.now() - tTags;
     for (const row of tagRows ?? []) {
       const list = tagsByRecipe.get(row.recipe_id) ?? [];
-      if (row.tag) list.push(row.tag as { id: string; name: string });
+      // `tag` is a many-to-one join so it's a single row at runtime, but
+      // PostgREST's generated types infer it as an array — cast via unknown.
+      if (row.tag) list.push(row.tag as unknown as { id: string; name: string });
       tagsByRecipe.set(row.recipe_id, list);
     }
   }

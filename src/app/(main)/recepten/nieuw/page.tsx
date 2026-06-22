@@ -187,6 +187,8 @@ function mapExtractedToFormData(extracted: any, sourceUrl?: string): RecipeFormD
     image_url: extracted.image_url || '',
     tijd: extracted.tijd || '',
     moeilijkheid: mapDifficulty(extracted.moeilijkheid),
+    temperatuur: extracted.temperatuur || '',
+    kerntemperatuur: extracted.kerntemperatuur || '',
     bron: mapSource(extracted.bron),
     basis_porties: extracted.basis_porties ?? 2,
     is_public: false,
