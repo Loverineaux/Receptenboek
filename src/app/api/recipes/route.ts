@@ -6,6 +6,40 @@ import Anthropic from '@anthropic-ai/sdk';
 
 const CATEGORY_TAGS = ['Kip', 'Vlees', 'Vis', 'Vegetarisch', 'Veganistisch', 'Pasta', 'Salade', 'Soep', 'Dessert', 'Ontbijt', 'Lunch'];
 
+/**
+ * Sørensen–Dice similarity (0..1) over character bigrams of two titles,
+ * after stripping case and non-alphanumerics. Used for duplicate detection.
+ * This replaces an earlier position-by-position character compare, which
+ * broke on any insertion/shift and produced false "duplicate" warnings.
+ */
+function titleSimilarity(a: string, b: string): number {
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const x = norm(a);
+  const y = norm(b);
+  if (!x || !y) return 0;
+  if (x === y) return 1;
+  if (x.length < 2 || y.length < 2) return 0;
+
+  const bigrams = (s: string) => {
+    const m = new Map<string, number>();
+    for (let i = 0; i < s.length - 1; i++) {
+      const g = s.slice(i, i + 2);
+      m.set(g, (m.get(g) ?? 0) + 1);
+    }
+    return m;
+  };
+
+  const ax = bigrams(x);
+  const bx = bigrams(y);
+  let intersection = 0;
+  for (const [g, count] of ax) {
+    const other = bx.get(g);
+    if (other) intersection += Math.min(count, other);
+  }
+  const total = (x.length - 1) + (y.length - 1);
+  return (2 * intersection) / total;
+}
+
 async function autoCategorize(recipeId: string, title: string, ingredients: any[]) {
   const client = new Anthropic();
 
@@ -232,26 +266,20 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   console.log('[POST /api/recipes] Body keys:', Object.keys(body));
 
-  // Check for duplicates (skip if force=true)
+  // Check for duplicates (skip if force=true).
+  //
+  // We only warn on STRONG signals that the *same recipe* already exists:
+  //   - the exact same image URL, or
+  //   - a near-identical title (Dice similarity ≥ 0.85).
+  // We deliberately do NOT warn on "same website/bron" alone: bron is the
+  // source site (e.g. "Allerhande"), not a per-recipe identifier, so almost
+  // every new recipe shares a bron with an existing one — that check flagged
+  // ~9 of 10 saves as false duplicates.
   if (!body._force) {
     const duplicates: { id: string; title: string; image_url: string | null; bron: string | null; match_reason: string }[] = [];
 
-    // 1. Check for same source/bron (exact URL match)
-    if (body.bron && body.bron !== 'Eigen recept') {
-      const { data: bronMatches } = await supabaseAdmin
-        .from('recipes')
-        .select('id, title, image_url, bron')
-        .eq('bron', body.bron)
-        .limit(3);
-      for (const d of bronMatches ?? []) {
-        if (!duplicates.find((x) => x.id === d.id)) {
-          duplicates.push({ ...d, match_reason: 'Zelfde bron/website' });
-        }
-      }
-    }
-
-    // 2. Check for same image URL (exact match, skip base64)
-    if (body.image_url && !body.image_url.startsWith('data:')) {
+    // 1. Same image URL (exact match — skip base64 and non-http values)
+    if (body.image_url && /^https?:\/\//i.test(body.image_url)) {
       const { data: imgMatches } = await supabaseAdmin
         .from('recipes')
         .select('id, title, image_url, bron')
@@ -264,26 +292,18 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 3. Check for similar title (70% character overlap)
-    if (body.title) {
+    // 2. Near-identical title (Dice bigram similarity ≥ 0.85)
+    if (body.title && body.title.trim().length >= 3) {
       const { data: titleMatches } = await supabaseAdmin
         .from('recipes')
         .select('id, title, image_url, bron')
-        .ilike('title', `%${body.title.substring(0, 30)}%`)
-        .limit(5);
+        .ilike('title', `%${body.title.trim().substring(0, 20)}%`)
+        .limit(10);
 
       for (const d of titleMatches ?? []) {
         if (duplicates.find((x) => x.id === d.id)) continue;
-        const a = d.title.toLowerCase().replace(/[^a-z0-9]/g, '');
-        const b = body.title.toLowerCase().replace(/[^a-z0-9]/g, '');
-        const shorter = Math.min(a.length, b.length);
-        if (shorter === 0) continue;
-        let matches = 0;
-        for (let i = 0; i < shorter; i++) {
-          if (a[i] === b[i]) matches++;
-        }
-        if (matches / shorter > 0.7) {
-          duplicates.push({ ...d, match_reason: 'Vergelijkbare titel' });
+        if (titleSimilarity(d.title, body.title) >= 0.85) {
+          duplicates.push({ ...d, match_reason: 'Vrijwel dezelfde titel' });
         }
       }
     }
