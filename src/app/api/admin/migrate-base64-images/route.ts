@@ -1,8 +1,14 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { createClient } from '@/lib/supabase/server';
+import { isAdmin } from '@/lib/admin';
 
 // One-time migration: upload base64 images to Supabase Storage
 export async function POST() {
+  if (!(await isAdmin(await createClient()))) {
+    return NextResponse.json({ error: 'Geen toegang' }, { status: 403 });
+  }
+
   const { data: recipes, error } = await supabaseAdmin
     .from('recipes')
     .select('id, title, image_url')

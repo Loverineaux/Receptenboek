@@ -1,5 +1,7 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { createClient as createServerClient } from '@/lib/supabase/server';
+import { isAdmin } from '@/lib/admin';
 import Anthropic from '@anthropic-ai/sdk';
 
 const OFF_SEARCH = 'https://world.openfoodfacts.net/cgi/search.pl';
@@ -104,6 +106,10 @@ function avgField(items: OffProduct[], field: keyof OffNutrients): number | null
 
 // POST /api/ingredients/enrich — fetch nutrition from OFF for all ingredients without data
 export async function POST(request: NextRequest) {
+  if (!(await isAdmin(await createServerClient()))) {
+    return NextResponse.json({ error: 'Geen toegang' }, { status: 403 });
+  }
+
   const admin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!

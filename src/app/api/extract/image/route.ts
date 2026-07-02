@@ -3,6 +3,8 @@ import Anthropic from "@anthropic-ai/sdk";
 
 export const maxDuration = 120;
 import { parseRecipeResponse } from "@/lib/extraction/prompt";
+import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/admin";
 
 const ALLOWED_MEDIA_TYPES = [
   "image/jpeg",
@@ -124,6 +126,9 @@ BELANGRIJK voor de receptinhoud:
 Retourneer ALLEEN het JSON-object.`;
 
 export async function POST(request: NextRequest) {
+  if (!(await requireUser(await createClient()))) {
+    return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+  }
   try {
     const body = await request.json();
     const { images, bron } = body;

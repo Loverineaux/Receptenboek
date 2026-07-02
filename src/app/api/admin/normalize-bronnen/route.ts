@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { normalizeBron } from '@/lib/extraction/scrape';
+import { createClient } from '@/lib/supabase/server';
+import { isAdmin } from '@/lib/admin';
 
 /**
  * One-time migration: collapse duplicate bron filter entries that differ only
@@ -10,6 +12,10 @@ import { normalizeBron } from '@/lib/extraction/scrape';
  * bron changes value.
  */
 export async function POST() {
+  if (!(await isAdmin(await createClient()))) {
+    return NextResponse.json({ error: 'Geen toegang' }, { status: 403 });
+  }
+
   const { data: rows, error: selectError } = await supabaseAdmin
     .from('recipes')
     .select('bron')

@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { scrapePage, jsonLdToRecipe, detectBronFromUrl, normalizeBron } from '@/lib/extraction/scrape';
 import { cleanStepTitle, EXTRACTION_SYSTEM_PROMPT, parseRecipeResponse } from '@/lib/extraction/prompt';
+import { createClient } from '@/lib/supabase/server';
+import { requireUser, isAdmin } from '@/lib/admin';
 import Anthropic from '@anthropic-ai/sdk';
+
+// Bovengrens op het aantal URLs per bulk-import om AI-/scrape-misbruik te beperken.
+const MAX_BULK_URLS = 50;
 
 export const maxDuration = 300;
 
@@ -90,10 +95,23 @@ async function resolveUrl(url: string): Promise<string> {
 }
 
 export async function POST(request: NextRequest) {
-  const { urls, user_id } = await request.json();
+  // Auth vereist; user_id komt uit de sessie, NOOIT uit de request body.
+  const user = await requireUser(await createClient());
+  if (!user) {
+    return NextResponse.json({ error: 'Niet ingelogd' }, { status: 401 });
+  }
+  const user_id = user.id;
 
-  if (!urls?.length || !user_id) {
-    return NextResponse.json({ error: 'Missing urls or user_id' }, { status: 400 });
+  const { urls } = await request.json();
+
+  if (!urls?.length) {
+    return NextResponse.json({ error: 'Missing urls' }, { status: 400 });
+  }
+  if (!Array.isArray(urls) || urls.length > MAX_BULK_URLS) {
+    return NextResponse.json(
+      { error: `Maximaal ${MAX_BULK_URLS} URLs per keer` },
+      { status: 400 },
+    );
   }
 
   const results: { url: string; title: string; status: string; error?: string }[] = [];
@@ -216,6 +234,10 @@ export async function POST(request: NextRequest) {
 
 // GET /api/bulk-import?categorize=missing — categorize recipes without tags
 export async function GET(request: NextRequest) {
+  if (!(await isAdmin(await createClient()))) {
+    return NextResponse.json({ error: 'Geen toegang' }, { status: 403 });
+  }
+
   const { data: allRecipes } = await supabaseAdmin
     .from('recipes')
     .select('id, title, ingredients(hoeveelheid, eenheid, naam), recipe_tags(tag:tags(name))')

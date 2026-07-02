@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { createClient } from '@/lib/supabase/server';
+import { requireUser } from '@/lib/admin';
 
 export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
+  if (!(await requireUser(await createClient()))) {
+    return NextResponse.json({ error: 'Niet ingelogd' }, { status: 401 });
+  }
   try {
     const body = await request.json();
     const { barcode, image, product_name } = body;

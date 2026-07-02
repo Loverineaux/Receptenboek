@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { createClient } from '@/lib/supabase/server';
+import { requireUser, isAdmin } from '@/lib/admin';
 import { matchIngredient, convertToGrams } from '@/lib/ingredients/matcher';
 import type { NutritionCalculation } from '@/types';
 
@@ -11,6 +13,15 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+
+  // Berekenen mag elke ingelogde gebruiker (ook op andermans publieke
+  // recepten). Wegschrijven (save) mag alleen de eigenaar of een admin.
+  const supabase = await createClient();
+  const user = await requireUser(supabase);
+  if (!user) {
+    return NextResponse.json({ error: 'Niet ingelogd' }, { status: 401 });
+  }
+
   const body = await request.json().catch(() => ({}));
   const save = body.save === true;
 
@@ -144,8 +155,11 @@ export async function POST(
   };
 
   // 6. Coverage threshold
-  // 7. Save if requested and coverage is sufficient
-  if (save && result.coverage > 0.5) {
+  // 7. Save if requested and coverage is sufficient — alleen de eigenaar of
+  //    een admin mag de berekende voeding persistent opslaan.
+  const maySave =
+    save && (recipe.user_id === user.id || (await isAdmin(supabase)));
+  if (maySave && result.coverage > 0.5) {
     await supabaseAdmin.from('nutrition').upsert(
       {
         recipe_id: id,

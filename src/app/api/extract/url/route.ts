@@ -13,6 +13,8 @@ import {
   detectBronFromUrl,
 } from "@/lib/extraction/scrape";
 import { getCachedRecipe, setCachedRecipe } from "@/lib/extraction/cache";
+import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/admin";
 import { validateRecipe } from "@/lib/extraction/validate";
 
 function detectSocialPlatform(url: string): string | null {
@@ -202,6 +204,9 @@ Antwoord ALLEEN met {"image_url": "https://..."} of {"image_url": null}.`,
 }
 
 export async function POST(request: NextRequest) {
+  if (!(await requireUser(await createClient()))) {
+    return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+  }
   const tStart = Date.now();
   const elapsed = () => Date.now() - tStart;
   let url = '';

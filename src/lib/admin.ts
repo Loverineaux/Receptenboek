@@ -1,6 +1,20 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 
 /**
+ * Vereis een ingelogde gebruiker. Geeft de user terug, of null wanneer er
+ * geen geldige sessie is. Gebruikt getSession() — consistent met de rest van
+ * de API-routes; RLS blijft de uiteindelijke backstop op elke query.
+ */
+export async function requireUser(
+  supabase: SupabaseClient
+): Promise<{ id: string } | null> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  return session?.user ? { id: session.user.id } : null;
+}
+
+/**
  * Check if the current user is an admin.
  */
 export async function isAdmin(supabase: SupabaseClient): Promise<boolean> {

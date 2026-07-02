@@ -6,6 +6,8 @@
  *   3. Fall back to raw HTML text for Claude
  */
 
+import { assertPublicUrl } from "@/lib/security/ssrf";
+
 const FETCH_TIMEOUT = 15000;
 
 const CHROME_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
@@ -73,6 +75,7 @@ const GOOGLEBOT_TIMEOUT = 5000;
 export async function scrapePageAsGooglebot(
   url: string,
 ): Promise<ScrapedRecipe | null> {
+  await assertPublicUrl(url); // SSRF-guard: weiger interne/private bestemmingen
   console.log("[Scrape] Googlebot UA recovery fetch starting…");
   const t0 = Date.now();
   const result = await tryFetch(url, GOOGLEBOT_HEADERS, GOOGLEBOT_TIMEOUT);
@@ -117,6 +120,8 @@ async function resolveRedirects(url: string): Promise<string> {
   if (!looksLikeShortUrl(url)) {
     return url;
   }
+  // SSRF-guard: valideer vóór we de URL zelf ophalen.
+  await assertPublicUrl(url);
   try {
     const res = await fetch(url, {
       method: 'HEAD',
@@ -137,6 +142,8 @@ async function resolveRedirects(url: string): Promise<string> {
     const location = res.headers.get('location');
     if (location) {
       const resolved = location.startsWith('http') ? location : new URL(location, url).href;
+      // SSRF-guard: een redirect mag niet naar een intern adres wijzen.
+      await assertPublicUrl(resolved);
       return resolveRedirects(resolved);
     }
   } catch {}
@@ -144,8 +151,14 @@ async function resolveRedirects(url: string): Promise<string> {
 }
 
 export async function scrapePage(url: string): Promise<ScrapedRecipe> {
+  // SSRF-guard: valideer de opgegeven URL vóór we iets ophalen.
+  await assertPublicUrl(url);
+
   // Resolve short/redirect URLs first (e.g. ah.nl/r/123 → full allerhande URL)
   const resolvedUrl = await resolveRedirects(url);
+
+  // Na redirect-resolutie opnieuw valideren — de bestemming kan verschillen.
+  await assertPublicUrl(resolvedUrl);
 
   // Strategy 1: Direct fetch with full browser headers (fast)
   const directResult = await tryFetch(resolvedUrl, BROWSER_HEADERS);
