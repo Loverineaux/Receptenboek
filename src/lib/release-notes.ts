@@ -6,6 +6,17 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '1.18.25',
+    date: '2 juli 2026',
+    highlights: [
+      'Privé-recepten van andere gebruikers zijn nu écht privé — ze kunnen niet langer door anderen worden opgevraagd',
+      'Beheerfuncties zoals opschoon- en migratieacties zijn nu alleen nog voor beheerders toegankelijk',
+      'Recepten importeren en producten scannen kan voortaan alleen wanneer je bent ingelogd, wat misbruik voorkomt',
+      'Het inladen van recepten en afbeeldingen via een link is beter beveiligd tegen misbruik van onze servers',
+      'Na het inloggen kom je altijd op een pagina binnen de app terecht, nooit op een onbekende externe website',
+    ],
+  },
+  {
     version: '1.18.24',
     date: '22 juni 2026',
     highlights: [
@@ -20,13 +31,6 @@ export const releaseNotes: ReleaseNote[] = [
       'Je wordt niet langer zomaar tussendoor uitgelogd — je blijft ingelogd zoals het hoort',
       'Recepten die soms eindeloos bleven laden met een draaiend cirkeltje openen nu gewoon weer netjes',
       'Het snelle inloggen en openen van de vorige versies blijft volledig behouden',
-    ],
-  },
-  {
-    version: '1.18.22',
-    date: '18 juni 2026',
-    highlights: [
-      'Een recept openen gaat nu een stuk sneller: het recept wordt direct meegeladen met de pagina in plaats van pas erna apart op te halen, dus je ziet meteen de inhoud in plaats van een laadcirkel',
     ],
   },
 ];
