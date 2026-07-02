@@ -1,5 +1,7 @@
 import { NextRequest } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/admin";
 
 export const maxDuration = 60;
 
@@ -181,6 +183,9 @@ Alleen JSON.`,
 }
 
 export async function POST(request: NextRequest) {
+  if (!(await requireUser(await createClient()))) {
+    return Response.json({ error: "Niet ingelogd" }, { status: 401 });
+  }
   try {
     const contentType = request.headers.get("content-type") || "";
 

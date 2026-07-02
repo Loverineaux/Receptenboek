@@ -7,7 +7,10 @@ export async function GET(request: NextRequest) {
   const code = requestUrl.searchParams.get('code')
   const token_hash = requestUrl.searchParams.get('token_hash')
   const type = requestUrl.searchParams.get('type')
-  const next = requestUrl.searchParams.get('next') || '/recepten'
+  // Alleen interne paden toestaan als redirect-doel — voorkom open redirect
+  // naar externe of protocol-relatieve URLs (bijv. next=//evil.com).
+  const rawNext = requestUrl.searchParams.get('next') || '/recepten'
+  const next = rawNext.startsWith('/') && !rawNext.startsWith('//') ? rawNext : '/recepten'
 
   const supabase = await createClient()
 

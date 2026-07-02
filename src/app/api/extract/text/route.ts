@@ -4,10 +4,15 @@ import {
   EXTRACTION_SYSTEM_PROMPT,
   parseRecipeResponse,
 } from "@/lib/extraction/prompt";
+import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/admin";
 
 const MAX_TEXT_LENGTH = 50000;
 
 export async function POST(request: NextRequest) {
+  if (!(await requireUser(await createClient()))) {
+    return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+  }
   try {
     const body = await request.json();
     const { text } = body;

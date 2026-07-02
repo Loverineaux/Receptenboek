@@ -1,8 +1,14 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { matchIngredient } from '@/lib/ingredients/matcher';
+import { createClient } from '@/lib/supabase/server';
+import { isAdmin } from '@/lib/admin';
 
 export async function POST(request: NextRequest) {
+  if (!(await isAdmin(await createClient()))) {
+    return NextResponse.json({ error: 'Geen toegang' }, { status: 403 });
+  }
+
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream({

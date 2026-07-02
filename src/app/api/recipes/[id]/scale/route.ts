@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/admin";
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  if (!(await requireUser(await createClient()))) {
+    return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+  }
   const { id } = await params;
   const body = await request.json();
   const { steps, ingredients, basisPorties, newPorties } = body;

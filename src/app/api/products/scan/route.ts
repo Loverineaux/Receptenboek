@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { GenericIngredient } from '@/types/ingredients';
+import { createClient } from '@/lib/supabase/server';
+import { requireUser } from '@/lib/admin';
 
 export async function POST(request: NextRequest) {
+  if (!(await requireUser(await createClient()))) {
+    return NextResponse.json({ error: 'Niet ingelogd' }, { status: 401 });
+  }
   try {
     const body = await request.json();
     const { barcode } = body;

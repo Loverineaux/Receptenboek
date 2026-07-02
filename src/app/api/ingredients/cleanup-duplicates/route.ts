@@ -1,10 +1,16 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { createClient } from '@/lib/supabase/server';
+import { isAdmin } from '@/lib/admin';
 
 // POST /api/ingredients/cleanup-duplicates
 // 1. Removes duplicate products per ingredient (same product_name, keeping the one with most nutrition data)
 // 2. Recalculates nutrition averages for ALL ingredients to fix stale/inconsistent data
 export async function POST() {
+  if (!(await isAdmin(await createClient()))) {
+    return NextResponse.json({ error: 'Geen toegang' }, { status: 403 });
+  }
+
   try {
     // Get ALL ingredients
     const { data: allIngredients, error: ingErr } = await supabaseAdmin

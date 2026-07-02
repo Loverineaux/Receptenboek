@@ -1,7 +1,13 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { createClient } from '@/lib/supabase/server';
+import { isAdmin } from '@/lib/admin';
 
 export async function POST() {
+  if (!(await isAdmin(await createClient()))) {
+    return NextResponse.json({ error: 'Geen toegang' }, { status: 403 });
+  }
+
   // Fetch all steps that have a titel matching "Stap X" / "Step X" patterns
   const { data: steps, error } = await supabaseAdmin
     .from('steps')
