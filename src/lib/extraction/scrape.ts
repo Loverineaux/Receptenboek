@@ -8,7 +8,11 @@
 
 import { assertPublicUrl } from "@/lib/security/ssrf";
 
-const FETCH_TIMEOUT = 15000;
+// Verlaagd van 15s → 8s: twee opeenvolgende pogingen (browser- en simple-
+// headers) kostten in het slechtste geval 30s vóór er überhaupt een LLM in
+// beeld kwam. 8s is ruim genoeg voor een echte respons; trage/blokkerende
+// sites geven we sneller op zodat we eerder naar de fallback gaan.
+const FETCH_TIMEOUT = 8000;
 
 const CHROME_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
