@@ -6,12 +6,12 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
-    version: '1.18.27',
+    version: '1.18.28',
     date: '2 juli 2026',
     highlights: [
-      'Recepten van Picnic geven nu netjes de titel en foto terug, zodat je alleen de ingrediënten en stappen zelf hoeft aan te vullen',
-      'Je kunt nu ook een heel gedeeld bericht plakken (met de link erin) — de titel wordt er automatisch uitgehaald',
-      'Links van bronnen die alleen in hun eigen app werken blijven niet meer eindeloos laden, maar geven direct een bruikbaar startpunt',
+      'Picnic-recepten die eerder correct werden opgehaald werken gewoon weer — de automatische import blijft behouden',
+      'Lukt een import toch niet, dan krijg je nu tenminste de titel terug om zelf aan te vullen, in plaats van een leeg recept',
+      'Je kunt een heel gedeeld bericht plakken (met de link erin) — de titel wordt er automatisch uitgehaald',
     ],
   },
   {

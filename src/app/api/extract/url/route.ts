@@ -38,24 +38,6 @@ function respondWithValidation(recipe: any) {
   return NextResponse.json({ ...recipe, _validation: validation });
 }
 
-// Bronnen waar recepten uitsluitend in de app leven: de HTML is een lege
-// client-side SPA-shell (of blokkeert scrapers), en de recepten staan niet op
-// het publieke web. Ingrediënten/stappen zijn dus onmogelijk automatisch op te
-// halen — en volgens CLAUDE.md mogen we ze NIET van een andere website halen.
-// Wel beschikbaar: de og:image en de recept-naam (uit de slug of het gedeelde
-// bericht). We geven daarom een net skelet terug dat de gebruiker aanvult,
-// i.p.v. tijd te verspillen aan een kansloze web-search.
-const APP_ONLY_HOSTS = ["picnic.app"];
-
-function isAppOnlyHost(url: string): boolean {
-  try {
-    const host = new URL(url).hostname.replace(/^www\./, "");
-    return APP_ONLY_HOSTS.some((h) => host === h || host.endsWith("." + h));
-  } catch {
-    return false;
-  }
-}
-
 /** Leid een leesbare titel af uit de URL-slug (sentence-case). Geeft null als
  *  er geen betekenisvolle slug is (bijv. korte deelcodes als /go/bnvmhlj). */
 function slugToTitle(url: string): string | null {
@@ -74,37 +56,19 @@ function slugToTitle(url: string): string | null {
   return null;
 }
 
-async function buildAppOnlySkeleton(url: string, titleHint: string | null) {
-  // Probeer nog wél de og:image op te halen (die serveren deze sites vaak
-  // server-side voor link-previews); faalt dat, dan gewoon zonder foto.
-  let ogImage: string | null = null;
-  try {
-    const scraped = await scrapePage(url);
-    ogImage = scraped.ogImage || null;
-  } catch {
-    /* SPA-shell of geblokkeerd — geen probleem, we vullen alsnog een skelet */
+/**
+ * Vangnet: als de extractie een (vrijwel) leeg recept teruggeeft, vul dan
+ * tenminste een zinnige titel in — uit het gedeelde bericht of de URL-slug —
+ * zodat de gebruiker een "Onbekend recept" met alleen een titel-veld krijgt om
+ * aan te vullen i.p.v. helemaal niets. Raakt NIET de gevallen waar de scrape
+ * wél gelukt is (die hebben al een titel + ingrediënten).
+ */
+function ensureTitle(recipe: any, url: string, titleHint: string | null): any {
+  if (recipe && (!recipe.title || String(recipe.title).trim() === "")) {
+    recipe.title = titleHint || slugToTitle(url) || recipe.title || null;
+    if (recipe.title) recipe._incomplete = true;
   }
-  return {
-    title: titleHint || slugToTitle(url) || null,
-    subtitle: null,
-    image_url: ogImage,
-    tijd: null,
-    moeilijkheid: null,
-    bron: detectBronFromUrl(url),
-    basis_porties: null,
-    categorie: null,
-    temperatuur: null,
-    kerntemperatuur: null,
-    ingredients: [],
-    steps: [],
-    nutrition: null,
-    tags: null,
-    weetje: null,
-    allergenen: null,
-    benodigdheden: null,
-    _incomplete: true,
-    _appOnly: true,
-  };
+  return recipe;
 }
 
 /**
@@ -284,12 +248,14 @@ export async function POST(request: NextRequest) {
   const tStart = Date.now();
   const elapsed = () => Date.now() - tStart;
   let url = '';
+  // Optionele titel-hint uit een geplakt deelbericht (bijv. Picnic-share),
+  // gebruikt als vangnet wanneer de bron zelf geen titel prijsgeeft. Buiten de
+  // try zodat de catch hem ook kan gebruiken.
+  let titleHint: string | null = null;
   try {
     const body = await request.json();
     url = body.url;
-    // Optionele titel-hint uit een geplakt deelbericht (bijv. Picnic-share),
-    // gebruikt wanneer de bron zelf geen titel prijsgeeft.
-    const titleHint =
+    titleHint =
       typeof body.title === "string" && body.title.trim()
         ? body.title.trim()
         : null;
@@ -317,22 +283,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(cached);
     }
 
-    // App-only bron (Picnic e.d.): recept staat alleen in de app en is niet
-    // publiek te scrapen/zoeken. Geef direct een net skelet terug (titel +
-    // og:image + bron) zodat de gebruiker aanvult, i.p.v. een kansloze
-    // web-search van ~30s die tóch niets oplevert.
-    if (isAppOnlyHost(url)) {
-      console.log("[URL Extract] App-only source detected, returning skeleton:", url);
-      const recipe = await buildAppOnlySkeleton(url, titleHint);
-      setCachedRecipe(url, recipe);
-      return respondWithValidation(recipe);
-    }
-
     // Social media detection — skip scrape, go straight to web search
     const socialPlatform = detectSocialPlatform(url);
     if (socialPlatform) {
       console.log(`[URL Extract] Social media detected (${socialPlatform}), skipping scrape, using web search`);
-      const recipe = await fallbackWebSearch(url);
+      const recipe = await fallbackWebSearch(url, false, titleHint);
       if (!recipe.bron) recipe.bron = detectBronFromUrl(url);
       setCachedRecipe(url, recipe);
       return respondWithValidation(recipe);
@@ -342,7 +297,7 @@ export async function POST(request: NextRequest) {
     // Direct fetch/puppeteer can't render these on Vercel — use web search
     if (url.includes('#/') || url.includes('#!')) {
       console.log(`[URL Extract] Hash-based SPA detected, using web search`);
-      const recipe = await fallbackWebSearch(url, true);
+      const recipe = await fallbackWebSearch(url, true, titleHint);
       if (!recipe.bron) recipe.bron = detectBronFromUrl(url);
       recipe._hashSPA = true;
       setCachedRecipe(url, recipe);
@@ -358,7 +313,7 @@ export async function POST(request: NextRequest) {
       console.log("[URL Extract] Scraped OK. JSON-LD:", !!scraped.jsonLd, "OG Image:", !!scraped.ogImage);
     } catch (scrapeError: any) {
       console.log("[URL Extract] Scrape failed:", scrapeError.message, "— falling back to web search");
-      const recipe = await fallbackWebSearch(url);
+      const recipe = await fallbackWebSearch(url, false, titleHint);
 
       if (!recipe.bron) recipe.bron = detectBronFromUrl(url);
 
@@ -471,7 +426,7 @@ export async function POST(request: NextRequest) {
 
         // Strategy B: web_search via Anthropic's infrastructure.
         console.log("[URL Extract] Falling back to web search");
-        const fallbackRecipe = await fallbackWebSearch(url);
+        const fallbackRecipe = await fallbackWebSearch(url, false, titleHint);
         if (!fallbackRecipe.bron) fallbackRecipe.bron = detectBronFromUrl(url);
         if (!fallbackRecipe.image_url && elapsed() < IMAGE_RESCUE_DEADLINE_MS) {
           const imageUrl = await findImageViaWebSearch(url, fallbackRecipe.title);
@@ -497,7 +452,7 @@ export async function POST(request: NextRequest) {
       return await extractWithClaude(scraped.pageText, url, scraped.ogImage);
     } catch (claudeError: any) {
       console.log("[URL Extract] Claude page-text extraction failed:", claudeError.message, "— trying web search");
-      const recipe = await fallbackWebSearch(url);
+      const recipe = await fallbackWebSearch(url, false, titleHint);
 
       setCachedRecipe(url, recipe);
       return respondWithValidation(recipe);
@@ -507,31 +462,30 @@ export async function POST(request: NextRequest) {
       error instanceof Error ? error.message : "Unknown error occurred";
     console.error("[URL Extract] Fatal error:", message);
 
-    // Last resort: try to extract a minimal recipe from URL slug
-    if (message.includes("missing a valid title")) {
-      try {
-        const slug = new URL(url).pathname.split("/").filter(Boolean).pop() || "";
-        const title = slug.replace(/[-_]/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-        if (title.length > 3) {
-          console.log("[URL Extract] Using URL slug as title fallback:", title);
-          return NextResponse.json({
-            title,
-            subtitle: null,
-            image_url: null,
-            tijd: null,
-            moeilijkheid: null,
-            bron: detectBronFromUrl(url),
-            basis_porties: null,
-            ingredients: [],
-            steps: [],
-            nutrition: null,
-            tags: null,
-            weetje: null,
-            allergenen: null,
-            benodigdheden: null,
-          });
-        }
-      } catch {}
+    // Vangnet: als de hele pijplijn (inclusief web search) niets opleverde maar
+    // we een titel kunnen afleiden — uit het gedeelde bericht of de URL-slug —
+    // geef dan een net skelet terug zodat de gebruiker handmatig aanvult, i.p.v.
+    // een harde fout. We verzinnen NOOIT ingrediënten van een andere website.
+    const fallbackTitle = titleHint || slugToTitle(url);
+    if (fallbackTitle) {
+      console.log("[URL Extract] Titel-skelet als vangnet na mislukking:", fallbackTitle);
+      return NextResponse.json({
+        title: fallbackTitle,
+        subtitle: null,
+        image_url: null,
+        tijd: null,
+        moeilijkheid: null,
+        bron: detectBronFromUrl(url),
+        basis_porties: null,
+        ingredients: [],
+        steps: [],
+        nutrition: null,
+        tags: null,
+        weetje: null,
+        allergenen: null,
+        benodigdheden: null,
+        _incomplete: true,
+      });
     }
 
     return NextResponse.json(
@@ -646,7 +600,7 @@ Retourneer dit als een enkel JSON-object volgens het opgegeven schema. ALLEEN JS
   return respondWithValidation(recipe);
 }
 
-async function fallbackWebSearch(url: string, quick = false): Promise<any> {
+async function fallbackWebSearch(url: string, quick = false, titleHint: string | null = null): Promise<any> {
   console.log("[URL Extract] Using web search fallback for:", url);
   const client = new Anthropic();
 
@@ -756,5 +710,7 @@ Als het recept in het Engels is, vertaal dan alles naar het Nederlands.`,
     recipe.bron = detectBronFromUrl(url);
   }
 
-  return recipe;
+  // Vangnet: als web search geen titel opleverde, val terug op de gedeelde
+  // titel of de URL-slug (raakt niets als er al een titel is).
+  return ensureTitle(recipe, url, titleHint);
 }
