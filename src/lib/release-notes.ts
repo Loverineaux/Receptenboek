@@ -6,6 +6,15 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '1.18.27',
+    date: '2 juli 2026',
+    highlights: [
+      'Recepten van Picnic geven nu netjes de titel en foto terug, zodat je alleen de ingrediënten en stappen zelf hoeft aan te vullen',
+      'Je kunt nu ook een heel gedeeld bericht plakken (met de link erin) — de titel wordt er automatisch uitgehaald',
+      'Links van bronnen die alleen in hun eigen app werken blijven niet meer eindeloos laden, maar geven direct een bruikbaar startpunt',
+    ],
+  },
+  {
     version: '1.18.26',
     date: '2 juli 2026',
     highlights: [
@@ -24,14 +33,6 @@ export const releaseNotes: ReleaseNote[] = [
       'Recepten importeren en producten scannen kan voortaan alleen wanneer je bent ingelogd, wat misbruik voorkomt',
       'Het inladen van recepten en afbeeldingen via een link is beter beveiligd tegen misbruik van onze servers',
       'Na het inloggen kom je altijd op een pagina binnen de app terecht, nooit op een onbekende externe website',
-    ],
-  },
-  {
-    version: '1.18.24',
-    date: '22 juni 2026',
-    highlights: [
-      'De melding "Mogelijk duplicaat" verschijnt nu alleen nog als een recept écht al bestaat — niet meer onterecht bij elk recept van dezelfde website',
-      'De controle kijkt voortaan naar een vrijwel identieke titel of dezelfde foto, in plaats van enkel naar de website waar het recept vandaan komt',
     ],
   },
 ];

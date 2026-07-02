@@ -38,6 +38,75 @@ function respondWithValidation(recipe: any) {
   return NextResponse.json({ ...recipe, _validation: validation });
 }
 
+// Bronnen waar recepten uitsluitend in de app leven: de HTML is een lege
+// client-side SPA-shell (of blokkeert scrapers), en de recepten staan niet op
+// het publieke web. Ingrediënten/stappen zijn dus onmogelijk automatisch op te
+// halen — en volgens CLAUDE.md mogen we ze NIET van een andere website halen.
+// Wel beschikbaar: de og:image en de recept-naam (uit de slug of het gedeelde
+// bericht). We geven daarom een net skelet terug dat de gebruiker aanvult,
+// i.p.v. tijd te verspillen aan een kansloze web-search.
+const APP_ONLY_HOSTS = ["picnic.app"];
+
+function isAppOnlyHost(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, "");
+    return APP_ONLY_HOSTS.some((h) => host === h || host.endsWith("." + h));
+  } catch {
+    return false;
+  }
+}
+
+/** Leid een leesbare titel af uit de URL-slug (sentence-case). Geeft null als
+ *  er geen betekenisvolle slug is (bijv. korte deelcodes als /go/bnvmhlj). */
+function slugToTitle(url: string): string | null {
+  try {
+    const segs = new URL(url).pathname.split("/").filter(Boolean);
+    for (let i = segs.length - 1; i >= 0; i--) {
+      const s = decodeURIComponent(segs[i]);
+      if (/^[0-9a-f]{16,}$/i.test(s)) continue; // hex-id
+      if (/^\d+$/.test(s)) continue; // numerieke id
+      if (!s.includes("-") && s.length <= 12) continue; // korte code (bnvmhlj, go, nl)
+      const t = s.replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
+      if (t.length < 3) continue;
+      return t.charAt(0).toUpperCase() + t.slice(1);
+    }
+  } catch {}
+  return null;
+}
+
+async function buildAppOnlySkeleton(url: string, titleHint: string | null) {
+  // Probeer nog wél de og:image op te halen (die serveren deze sites vaak
+  // server-side voor link-previews); faalt dat, dan gewoon zonder foto.
+  let ogImage: string | null = null;
+  try {
+    const scraped = await scrapePage(url);
+    ogImage = scraped.ogImage || null;
+  } catch {
+    /* SPA-shell of geblokkeerd — geen probleem, we vullen alsnog een skelet */
+  }
+  return {
+    title: titleHint || slugToTitle(url) || null,
+    subtitle: null,
+    image_url: ogImage,
+    tijd: null,
+    moeilijkheid: null,
+    bron: detectBronFromUrl(url),
+    basis_porties: null,
+    categorie: null,
+    temperatuur: null,
+    kerntemperatuur: null,
+    ingredients: [],
+    steps: [],
+    nutrition: null,
+    tags: null,
+    weetje: null,
+    allergenen: null,
+    benodigdheden: null,
+    _incomplete: true,
+    _appOnly: true,
+  };
+}
+
 /**
  * Heuristic: does the extracted recipe title share any meaningful word with
  * the URL slug? Used to detect bot-stub pages where the site serves
@@ -218,6 +287,12 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     url = body.url;
+    // Optionele titel-hint uit een geplakt deelbericht (bijv. Picnic-share),
+    // gebruikt wanneer de bron zelf geen titel prijsgeeft.
+    const titleHint =
+      typeof body.title === "string" && body.title.trim()
+        ? body.title.trim()
+        : null;
 
     if (!url || typeof url !== "string") {
       return NextResponse.json(
@@ -240,6 +315,17 @@ export async function POST(request: NextRequest) {
     if (cached) {
       console.log("[URL Extract] Cache hit for:", url);
       return NextResponse.json(cached);
+    }
+
+    // App-only bron (Picnic e.d.): recept staat alleen in de app en is niet
+    // publiek te scrapen/zoeken. Geef direct een net skelet terug (titel +
+    // og:image + bron) zodat de gebruiker aanvult, i.p.v. een kansloze
+    // web-search van ~30s die tóch niets oplevert.
+    if (isAppOnlyHost(url)) {
+      console.log("[URL Extract] App-only source detected, returning skeleton:", url);
+      const recipe = await buildAppOnlySkeleton(url, titleHint);
+      setCachedRecipe(url, recipe);
+      return respondWithValidation(recipe);
     }
 
     // Social media detection — skip scrape, go straight to web search

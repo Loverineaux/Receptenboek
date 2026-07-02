@@ -509,11 +509,32 @@ export default function NieuwReceptPage() {
     }, 3000);
 
     try {
-      console.log('[URL Import] 1. Starting extract for:', importUrl);
+      // Sta toe dat de gebruiker een heel deelbericht plakt (bijv. van Picnic:
+      // "... 'Flatbreads met vissticks en frisse salade' ... https://..."):
+      // haal de URL eruit, en gebruik een eventuele titel (tussen quotes, of
+      // de tekst vóór de link) als hint voor bronnen die zelf geen titel geven.
+      const raw = importUrl.trim();
+      const urlMatch = raw.match(/https?:\/\/[^\s]+/);
+      const url = urlMatch ? urlMatch[0] : raw;
+      let titleHint = '';
+      const quoted = raw.match(/[‘'"“]([^’'"”]{4,})[’'"”]/);
+      if (quoted) {
+        titleHint = quoted[1].trim();
+      } else if (urlMatch && urlMatch.index && urlMatch.index > 0) {
+        titleHint = raw
+          .slice(0, urlMatch.index)
+          .replace(/ik kwam een lekker recept tegen bij[^:]*:?/i, '')
+          .replace(/#\w+/g, '')
+          .replace(/[:\-–—]\s*$/, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+      }
+
+      console.log('[URL Import] 1. Starting extract for:', url);
       const res = await fetch('/api/extract/url', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: importUrl }),
+        body: JSON.stringify({ url, title: titleHint || undefined }),
       });
 
       clearInterval(interval);
@@ -1294,11 +1315,12 @@ export default function NieuwReceptPage() {
           {!bulkMode ? (
             <>
               <p className="text-sm text-text-secondary">
-                Plak de link naar een recept en wij halen de gegevens automatisch op en slaan het direct voor je op.
+                Plak de link naar een recept (of het hele deelbericht) en wij halen de gegevens automatisch op en slaan het direct voor je op.
               </p>
               <Input
                 label="Recept URL"
-                type="url"
+                type="text"
+                inputMode="url"
                 placeholder="https://www.hellofresh.nl/recipes/..."
                 value={importUrl}
                 onChange={(e) => setImportUrl(e.target.value)}
