@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 
 export const maxDuration = 120;
+
+// Tijdsbudget voor optionele "extra" stappen (zoals de afbeelding-rescue).
+// Ligt ruim onder maxDuration zodat er altijd tijd overblijft om een
+// (deels ingevuld) recept terug te geven i.p.v. de functie te laten timeouten.
+const IMAGE_RESCUE_DEADLINE_MS = 100000;
 import {
   EXTRACTION_SYSTEM_PROMPT,
   parseRecipeResponse,
@@ -359,7 +364,7 @@ export async function POST(request: NextRequest) {
               if (!pageTextRecipe.bron) pageTextRecipe.bron = detectBronFromUrl(url);
               // Only rescue an image if we still have time — fallback flow
               // already burned 25s+ on the pageText extraction.
-              if (!pageTextRecipe.image_url && elapsed() < 90000) {
+              if (!pageTextRecipe.image_url && elapsed() < IMAGE_RESCUE_DEADLINE_MS) {
                 const imageUrl = await findImageViaWebSearch(url, pageTextRecipe.title);
                 if (imageUrl) pageTextRecipe.image_url = imageUrl;
               }
@@ -382,7 +387,7 @@ export async function POST(request: NextRequest) {
         console.log("[URL Extract] Falling back to web search");
         const fallbackRecipe = await fallbackWebSearch(url);
         if (!fallbackRecipe.bron) fallbackRecipe.bron = detectBronFromUrl(url);
-        if (!fallbackRecipe.image_url && elapsed() < 90000) {
+        if (!fallbackRecipe.image_url && elapsed() < IMAGE_RESCUE_DEADLINE_MS) {
           const imageUrl = await findImageViaWebSearch(url, fallbackRecipe.title);
           if (imageUrl) fallbackRecipe.image_url = imageUrl;
         }
@@ -465,9 +470,15 @@ async function extractRecipeFromPageText(
     ? `\n\nDe afbeelding van dit recept is: ${ogImage} — gebruik dit als image_url.`
     : "";
   const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
+    model: "claude-sonnet-5",
     max_tokens: 4096,
-    system: EXTRACTION_SYSTEM_PROMPT,
+    // Extractie is gestructureerde output — geen thinking nodig. Op Sonnet 5
+    // staat adaptive thinking standaard AAN als je dit veld weglaat, wat
+    // latency toevoegt en de JSON-output kan afkappen. Expliciet uitzetten.
+    thinking: { type: "disabled" },
+    system: [
+      { type: "text", text: EXTRACTION_SYSTEM_PROMPT, cache_control: { type: "ephemeral" } },
+    ],
     messages: [
       {
         role: "user",
@@ -494,9 +505,12 @@ async function extractWithClaude(
     : "";
 
   const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
+    model: "claude-sonnet-5",
     max_tokens: 4096,
-    system: EXTRACTION_SYSTEM_PROMPT,
+    thinking: { type: "disabled" },
+    system: [
+      { type: "text", text: EXTRACTION_SYSTEM_PROMPT, cache_control: { type: "ephemeral" } },
+    ],
     messages: [
       {
         role: "user",
@@ -560,15 +574,19 @@ async function fallbackWebSearch(url: string, quick = false): Promise<any> {
   const hostname = urlObj.hostname.replace("www.", "");
 
   const searchResponse = await client.messages.create({
-    model: "claude-sonnet-4-6",
+    model: "claude-sonnet-5",
     max_tokens: 4096,
+    thinking: { type: "disabled" },
     system:
       "Je bent een assistent die recepten opzoekt via het web. Zoek de volledige receptinformatie op. Het is CRUCIAAL dat je ALLE ingrediënten vindt met de EXACTE hoeveelheden en eenheden (bijv. '300 gram spitskool', '1 ui', '2 eieren', '30 ml ketjap manis'). Doe MEERDERE zoekopdrachten als de eerste niet alle ingrediënten met hoeveelheden geeft.",
     tools: [
       {
         type: "web_search_20250305",
         name: "web_search",
-        max_uses: quick ? 3 : 8,
+        // Verlaagd van 8 → 4: acht zoekrondes waren de grootste tijdvreter in
+        // het fallback-pad. Vier is ruim genoeg voor de meeste recepten; bij
+        // een enkel ontbrekend gegeven vult de gebruiker het handmatig aan.
+        max_uses: quick ? 3 : 4,
       },
     ],
     messages: [
@@ -609,38 +627,19 @@ Als het recept in het Engels is, vertaal dan alles naar het Nederlands.`,
     .map((block) => (block.type === "text" ? block.text : ""))
     .join("\n");
 
-  // If no quantities found in first search, do a targeted ingredient search (skip in quick mode)
-  const hasQuantities = /\d+\s*(gram|g|ml|el|tl|eetlepel|theelepel|stuk|stuks|ui|eieren?|teen)/i.test(searchText);
-  let extraIngredientText = "";
-  if (!hasQuantities && !quick) {
-    console.log("[URL Extract] No quantities found, doing targeted ingredient search");
-    try {
-      const ingSearch = await client.messages.create({
-        model: "claude-sonnet-4-6",
-        max_tokens: 2048,
-        system: `Zoek specifiek de ingrediëntenlijst met hoeveelheden van dit recept op ${hostname}. Geef ALLE ingrediënten met exacte hoeveelheden. Gebruik ALLEEN informatie van ${hostname}.`,
-        tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }],
-        messages: [{
-          role: "user",
-          content: `Zoek de VOLLEDIGE ingrediëntenlijst met exacte hoeveelheden voor het recept "${slug}". Ik heb ALLE ingrediënten nodig met hoeveelheden zoals "300 gram spitskool", "1 ui", "2 eieren", "30 ml ketjap manis" etc.`,
-        }],
-      });
-      extraIngredientText = ingSearch.content
-        .filter((b) => b.type === "text")
-        .map((b) => (b.type === "text" ? b.text : ""))
-        .join("\n");
-      console.log("[URL Extract] Extra ingredient search done, length:", extraIngredientText.length);
-    } catch {}
-  }
-
-  const fullText = extraIngredientText
-    ? `${searchText}\n\nEXTRA INGREDIËNTEN INFO:\n${extraIngredientText}`
-    : searchText;
+  // De eerdere tweede "gerichte ingrediënten-zoekronde" (nog een Sonnet-call
+  // met eigen web-searches) is verwijderd: hij verdubbelde de latency van het
+  // fallback-pad voor marginale winst. De eerste zoekronde levert doorgaans
+  // genoeg op; ontbrekende hoeveelheden vult de gebruiker handmatig aan.
+  const fullText = searchText;
 
   const structureResponse = await client.messages.create({
-    model: "claude-sonnet-4-6",
+    model: "claude-sonnet-5",
     max_tokens: 4096,
-    system: EXTRACTION_SYSTEM_PROMPT,
+    thinking: { type: "disabled" },
+    system: [
+      { type: "text", text: EXTRACTION_SYSTEM_PROMPT, cache_control: { type: "ephemeral" } },
+    ],
     messages: [
       {
         role: "user",
@@ -652,11 +651,13 @@ Als het recept in het Engels is, vertaal dan alles naar het Nederlands.`,
   const textBlocks = structureResponse.content.filter(
     (block) => block.type === "text"
   );
+  // Gooi i.p.v. een NextResponse terug te geven: fallbackWebSearch hoort ALTIJD
+  // een recept-object op te leveren. De vorige code retourneerde hier een
+  // NextResponse, die de aanroepers vervolgens als recept behandelden
+  // (recipe.bron = ..., respondWithValidation(recipe)) → kapotte, lege output.
+  // Een throw wordt door de outer try/catch in POST() netjes afgehandeld.
   if (textBlocks.length === 0) {
-    return NextResponse.json(
-      { error: "No text response received from AI" },
-      { status: 422 }
-    );
+    throw new Error("Geen bruikbaar resultaat van web search");
   }
 
   const responseText = textBlocks

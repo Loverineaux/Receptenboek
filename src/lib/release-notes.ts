@@ -6,6 +6,16 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '1.18.26',
+    date: '2 juli 2026',
+    highlights: [
+      'Recepten importeren via een link gaat nu sneller en verloopt betrouwbaarder',
+      'De receptherkenning gebruikt een nieuwer, slimmer AI-model voor tekst, foto’s en PDF’s',
+      'Moeilijke websites worden sneller afgehandeld in plaats van eindeloos te blijven laden',
+      'Een zeldzame fout waarbij een import een leeg recept opleverde is verholpen',
+    ],
+  },
+  {
     version: '1.18.25',
     date: '2 juli 2026',
     highlights: [
@@ -22,15 +32,6 @@ export const releaseNotes: ReleaseNote[] = [
     highlights: [
       'De melding "Mogelijk duplicaat" verschijnt nu alleen nog als een recept écht al bestaat — niet meer onterecht bij elk recept van dezelfde website',
       'De controle kijkt voortaan naar een vrijwel identieke titel of dezelfde foto, in plaats van enkel naar de website waar het recept vandaan komt',
-    ],
-  },
-  {
-    version: '1.18.23',
-    date: '22 juni 2026',
-    highlights: [
-      'Je wordt niet langer zomaar tussendoor uitgelogd — je blijft ingelogd zoals het hoort',
-      'Recepten die soms eindeloos bleven laden met een draaiend cirkeltje openen nu gewoon weer netjes',
-      'Het snelle inloggen en openen van de vorige versies blijft volledig behouden',
     ],
   },
 ];

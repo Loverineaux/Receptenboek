@@ -141,8 +141,9 @@ Alleen JSON.`,
     });
 
     const response = await client.messages.create({
-      model: "claude-sonnet-4-6",
+      model: "claude-sonnet-5",
       max_tokens: 2048,
+      thinking: { type: "disabled" },
       messages: [{ role: "user", content: contentBlocks }],
     });
 
@@ -317,8 +318,9 @@ export async function POST(request: NextRequest) {
                       });
 
                       const response = await client.messages.create({
-                        model: "claude-sonnet-4-6",
+                        model: "claude-sonnet-5",
                         max_tokens: 16384,
+                        thinking: { type: "disabled" },
                         system: buildAiPrompt(bron),
                         messages: [{ role: "user", content: contentBlocks }],
                       });
@@ -484,8 +486,9 @@ export async function POST(request: NextRequest) {
                     });
 
                     const response = await client.messages.create({
-                      model: "claude-sonnet-4-6",
+                      model: "claude-sonnet-5",
                       max_tokens: 16384,
+                      thinking: { type: "disabled" },
                       system: buildAiPrompt(bron),
                       messages: [{ role: "user", content: contentBlocks }],
                     });
