@@ -6,6 +6,16 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '1.21.0',
+    date: '19 oktober 2026',
+    highlights: [
+      'De knop naast het linkveld heet nu "Importeren" en haalt het recept meteen op',
+      'Is het veld nog leeg, dan plakt de knop wat je net gekopieerd hebt en importeert hij direct: één tik is genoeg',
+      'Je kunt ook een heel deelbericht plakken, bijvoorbeeld uit de Picnic-app; de link wordt er vanzelf uitgehaald',
+      'Achter de schermen is een overbodige taak opgeruimd, zodat de app zuiniger draait',
+    ],
+  },
+  {
     version: '1.20.0',
     date: '19 oktober 2026',
     highlights: [
@@ -25,16 +35,6 @@ export const releaseNotes: ReleaseNote[] = [
       'Het receptenoverzicht verschijnt direct na het inloggen, je profielgegevens laden op de achtergrond',
       'De app reageert ook sneller als hij een tijdje niet gebruikt is',
       'Achter de schermen worden je recepten en inloggegevens klaargehouden, zodat het eerste openen vlotter gaat',
-    ],
-  },
-  {
-    version: '1.19.1',
-    date: '19 oktober 2026',
-    highlights: [
-      'Inloggen gaat een stuk sneller, ook met je Google-account',
-      'Na het inloggen verschijnen je recepten veel vlotter in beeld',
-      'Achter de schermen staat de app niet meer onnodig te werken, waardoor alles soepeler reageert',
-      'Het receptenoverzicht laadt bij het openen niet meer dubbel',
     ],
   },
 ];
