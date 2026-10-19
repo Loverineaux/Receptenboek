@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import IngredientTile from '@/components/ingredients/IngredientTile';
+import { bypassImageOptimizer } from '@/lib/images';
 import type { GenericIngredient } from '@/types';
 
 /** 104px-tegel voor de "In het seizoen"-carrousel: foto of initiaal in categoriekleur. */
@@ -12,7 +13,14 @@ export default function SeasonTile({ ingredient }: { ingredient: GenericIngredie
     >
       <div className="relative h-[104px] w-[104px] overflow-hidden rounded-card bg-placeholder">
         {ingredient.image_url ? (
-          <Image src={ingredient.image_url} alt={ingredient.name} fill sizes="104px" className="object-cover" />
+          <Image
+            src={ingredient.image_url}
+            alt={ingredient.name}
+            fill
+            sizes="104px"
+            className="object-cover"
+            unoptimized={bypassImageOptimizer(ingredient.image_url)}
+          />
         ) : (
           <IngredientTile
             name={ingredient.name}

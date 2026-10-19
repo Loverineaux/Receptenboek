@@ -12,6 +12,7 @@ import RecipeMiniCard, { type RecipeMini } from '@/components/ingredients/Recipe
 import Modal from '@/components/ui/Modal';
 import Tag from '@/components/ui/Tag';
 import IconButton from '@/components/ui/IconButton';
+import { bypassImageOptimizer } from '@/lib/images';
 import SectionHeader from '@/components/ui/SectionHeader';
 import Button from '@/components/ui/Button';
 import { useAuth } from '@/hooks/useAuth';
@@ -370,6 +371,7 @@ export default function IngredientDetailPage() {
               sizes="(max-width: 672px) 100vw, 672px"
               className="object-cover"
               priority
+              unoptimized={bypassImageOptimizer(ingredient.image_url)}
             />
           ) : (
             <div

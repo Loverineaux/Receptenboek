@@ -15,6 +15,7 @@ import RecipeCard from '@/components/recipes/RecipeCard';
 import HeroRecipeCard from '@/components/recipes/HeroRecipeCard';
 import IconButton from '@/components/ui/IconButton';
 import SectionHeader from '@/components/ui/SectionHeader';
+import ProfileButton from '@/components/layout/ProfileButton';
 import dynamic from 'next/dynamic';
 import PullToRefresh from '@/components/ui/PullToRefresh';
 
@@ -55,7 +56,7 @@ export default function ReceptenPageWrapper() {
 }
 
 function ReceptenPage() {
-  const { user, profile, loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const collectionRecipeIds = useCollectionRecipeIds();
   const supabase = createClient();
   const router = useRouter();
@@ -621,7 +622,6 @@ function ReceptenPage() {
     return { recipe: pool[day % pool.length], label: 'Uitgelicht' };
   }, [recipes, isDefaultView, statsReady]);
 
-  const initial = (profile?.display_name || user?.email || '?').trim().charAt(0).toUpperCase();
   const countLabel = `${visibleRecipes.length}${quick && hasMore ? '+' : ''} ${visibleRecipes.length === 1 && !(quick && hasMore) ? 'recept' : 'recepten'}`;
   const resetAll = () => {
     setSearch('');
@@ -663,18 +663,7 @@ function ReceptenPage() {
         >
           <SlidersHorizontal className="h-[19px] w-[19px]" strokeWidth={1.9} />
         </IconButton>
-        <Link
-          href="/profiel"
-          aria-label="Profiel"
-          className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-placeholder-3 font-display text-lg font-semibold text-ink-2 md:hidden"
-        >
-          {profile?.avatar_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={profile.avatar_url} alt="" className="h-full w-full object-cover" />
-          ) : (
-            initial
-          )}
-        </Link>
+        <ProfileButton />
       </div>
 
       <div className="mt-[18px]">

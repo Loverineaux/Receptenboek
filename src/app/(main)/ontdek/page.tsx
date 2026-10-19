@@ -6,6 +6,7 @@ import { Clock } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import RecipeCard from '@/components/recipes/RecipeCard';
+import ProfileButton from '@/components/layout/ProfileButton';
 import type { RecipeWithRelations } from '@/types';
 
 export default function NieuwsteReceptenPage() {
@@ -100,7 +101,8 @@ export default function NieuwsteReceptenPage() {
     <div className="space-y-6">
       <div className="flex items-center gap-3">
         <Clock className="h-6 w-6 text-primary" />
-        <h1 className="text-2xl font-bold text-text-primary">Nieuwste recepten</h1>
+        <h1 className="flex-1 font-display text-2xl font-semibold text-ink">Nieuwste recepten</h1>
+        <ProfileButton />
       </div>
       <p className="text-sm text-text-secondary">
         De 5 meest recent toegevoegde recepten.

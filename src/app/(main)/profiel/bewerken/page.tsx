@@ -135,7 +135,7 @@ export default function ProfielBewerkenPage() {
         </IconButton>
       </div>
 
-      <ScreenHeader title="Profiel bewerken" subtitle="Naam, foto en bio" />
+      <ScreenHeader title="Profiel bewerken" subtitle="Naam, foto en bio" profileButton={false} />
 
       <div className="mt-5 space-y-4">
         {error && (

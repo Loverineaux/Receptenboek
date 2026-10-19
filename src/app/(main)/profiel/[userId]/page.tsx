@@ -7,6 +7,7 @@ import { User, ChefHat, Star, CalendarDays, Clock } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useRealtimeRefresh } from '@/hooks/useRealtimeSubscription';
 import RecipeCard from '@/components/recipes/RecipeCard';
+import ProfileButton from '@/components/layout/ProfileButton';
 import type { RecipeWithRelations } from '@/types';
 
 interface ProfileStats {
@@ -163,6 +164,11 @@ export default function PublicProfilePage() {
 
   return (
     <div className="space-y-8">
+      {/* Eigen profiel/instellingen bereikbaar (mobiel) */}
+      <div className="flex justify-end md:hidden">
+        <ProfileButton />
+      </div>
+
       {/* Profile header */}
       <div className="flex flex-col items-center gap-3 pt-4 text-center">
         <div className="relative flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-gray-100">
