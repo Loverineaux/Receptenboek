@@ -6,6 +6,16 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '1.19.1',
+    date: '19 oktober 2026',
+    highlights: [
+      'Inloggen gaat een stuk sneller, ook met je Google-account',
+      'Na het inloggen verschijnen je recepten veel vlotter in beeld',
+      'Achter de schermen staat de app niet meer onnodig te werken, waardoor alles soepeler reageert',
+      'Het receptenoverzicht laadt bij het openen niet meer dubbel',
+    ],
+  },
+  {
     version: '1.19.0',
     date: '19 oktober 2026',
     highlights: [
@@ -23,16 +33,6 @@ export const releaseNotes: ReleaseNote[] = [
       'Picnic-recepten die eerder correct werden opgehaald werken gewoon weer — de automatische import blijft behouden',
       'Lukt een import toch niet, dan krijg je nu tenminste de titel terug om zelf aan te vullen, in plaats van een leeg recept',
       'Je kunt een heel gedeeld bericht plakken (met de link erin) — de titel wordt er automatisch uitgehaald',
-    ],
-  },
-  {
-    version: '1.18.26',
-    date: '2 juli 2026',
-    highlights: [
-      'Recepten importeren via een link gaat nu sneller en verloopt betrouwbaarder',
-      'De receptherkenning gebruikt een nieuwer, slimmer AI-model voor tekst, foto’s en PDF’s',
-      'Moeilijke websites worden sneller afgehandeld in plaats van eindeloos te blijven laden',
-      'Een zeldzame fout waarbij een import een leeg recept opleverde is verholpen',
     ],
   },
 ];
