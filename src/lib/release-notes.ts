@@ -6,6 +6,17 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '1.19.0',
+    date: '19 oktober 2026',
+    highlights: [
+      'Recepten van Picnic worden nu compleet geïmporteerd: met alle ingrediënten, hoeveelheden, bereidingsstappen en foto',
+      'Picnic-recepten staan meteen goed op 2 porties, zodat je ze direct kunt omrekenen naar meer of minder personen',
+      'Een Picnic-recept importeren duurt nu ongeveer een seconde in plaats van tientallen seconden',
+      'De receptherkenning voor links, foto’s, PDF’s en geplakte tekst gebruikt de nieuwste AI-modellen',
+      'De receptchat, het omrekenen van porties en het automatisch indelen in categorieën werken sneller',
+    ],
+  },
+  {
     version: '1.18.28',
     date: '2 juli 2026',
     highlights: [
@@ -22,17 +33,6 @@ export const releaseNotes: ReleaseNote[] = [
       'De receptherkenning gebruikt een nieuwer, slimmer AI-model voor tekst, foto’s en PDF’s',
       'Moeilijke websites worden sneller afgehandeld in plaats van eindeloos te blijven laden',
       'Een zeldzame fout waarbij een import een leeg recept opleverde is verholpen',
-    ],
-  },
-  {
-    version: '1.18.25',
-    date: '2 juli 2026',
-    highlights: [
-      'Privé-recepten van andere gebruikers zijn nu écht privé — ze kunnen niet langer door anderen worden opgevraagd',
-      'Beheerfuncties zoals opschoon- en migratieacties zijn nu alleen nog voor beheerders toegankelijk',
-      'Recepten importeren en producten scannen kan voortaan alleen wanneer je bent ingelogd, wat misbruik voorkomt',
-      'Het inladen van recepten en afbeeldingen via een link is beter beveiligd tegen misbruik van onze servers',
-      'Na het inloggen kom je altijd op een pagina binnen de app terecht, nooit op een onbekende externe website',
     ],
   },
 ];
