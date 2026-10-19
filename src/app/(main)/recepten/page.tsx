@@ -82,7 +82,11 @@ function ReceptenPage() {
     if (sort !== 'newest') params.set('sort', sort);
     if (searchIngredients) params.set('ing', '1');
     const qs = params.toString();
-    router.replace(`/recepten${qs ? `?${qs}` : ''}`, { scroll: false });
+    const target = `/recepten${qs ? `?${qs}` : ''}`;
+    // Niet navigeren als de URL al klopt: elke router.replace is een RSC-request
+    // (middleware + root layout met sessie- en profielquery), ook op de eerste mount.
+    if (`${window.location.pathname}${window.location.search}` === target) return;
+    router.replace(target, { scroll: false });
   }, [search, category, source, includedSources, excludedSources, sort, searchIngredients, router]);
 
   // Fetch unique sources from DB (select only bron, limit to 500 to avoid huge payload)

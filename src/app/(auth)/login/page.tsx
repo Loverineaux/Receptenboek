@@ -66,8 +66,10 @@ function LoginPage() {
       } else {
         // Redirect to the original page (e.g. shared recipe link) or default to /recepten
         const destination = redirectTo && redirectTo.startsWith('/') ? redirectTo : '/recepten'
+        // Eén navigatie: de bestemming is dynamisch en wordt dus met de nieuwe
+        // sessiecookie server-side gerenderd. Een extra router.refresh() deed de
+        // root layout (sessie + profielquery) nog een keer.
         router.push(destination)
-        router.refresh()
       }
     } catch (err: any) {
       setError(err.message || 'Er ging iets mis bij het inloggen')
