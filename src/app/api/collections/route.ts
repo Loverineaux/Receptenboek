@@ -14,6 +14,7 @@ export async function GET() {
         recipe:recipes(id, image_url)
       ),
       collection_ratings(sterren),
+      collection_follows(user_id),
       collection_collaborators(
         user:profiles!collection_collaborators_user_id_fkey(id, display_name, avatar_url)
       )
@@ -65,6 +66,7 @@ export async function GET() {
       collaborators: (c.collection_collaborators ?? []).map((cc: any) => cc.user).filter(Boolean),
       average_rating: avgRating,
       rating_count: ratings.length,
+      follower_count: (c.collection_follows ?? []).length,
     };
   });
 

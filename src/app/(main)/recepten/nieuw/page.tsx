@@ -2,10 +2,13 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Link as LinkIcon, Camera, FileUp, PenLine, Loader2, Check, X, AlertTriangle, List } from 'lucide-react';
+import { Link as LinkIcon, Camera, FileUp, PenLine, Loader2, Check, X, AlertTriangle, List, ArrowLeft } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import Button from '@/components/ui/Button';
-import Input from '@/components/ui/Input';
+import IconButton from '@/components/ui/IconButton';
+import ScreenHeader from '@/components/ui/ScreenHeader';
+import MethodCard from '@/components/new-recipe/MethodCard';
+import StickyCta from '@/components/new-recipe/StickyCta';
 import BronInput from '@/components/ui/BronInput';
 import Image from 'next/image';
 import dynamic from 'next/dynamic';
@@ -17,13 +20,6 @@ const DonationCard = dynamic(() => import('@/components/ui/DonationCard'));
 import type { Source, Difficulty } from '@/types';
 
 type ImportTab = 'url' | 'foto' | 'pdf' | 'handmatig' | 'preview';
-
-const tabs: { key: ImportTab; label: string; icon: React.ReactNode }[] = [
-  { key: 'url', label: 'URL', icon: <LinkIcon className="h-4 w-4" /> },
-  { key: 'foto', label: 'Foto', icon: <Camera className="h-4 w-4" /> },
-  { key: 'pdf', label: 'PDF', icon: <FileUp className="h-4 w-4" /> },
-  { key: 'handmatig', label: 'Handmatig', icon: <PenLine className="h-4 w-4" /> },
-];
 
 // Normalize source names so synonyms map to the same bron
 const BRON_SYNONYMS: Record<string, string> = {
@@ -228,6 +224,18 @@ export default function NieuwReceptPage() {
   const { user, loading: authLoading } = useAuth();
 
   const [activeTab, setActiveTab] = useState<ImportTab>('url');
+  // 'Zelf schrijven': eerst de uitleg + CTA, daarna pas het formulier
+  const [writeStarted, setWriteStarted] = useState(false);
+  const [pasteHint, setPasteHint] = useState<string | null>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+
+  // Deep-link vanuit andere schermen: /recepten/nieuw?methode=link|foto|schrijven
+  useEffect(() => {
+    const m = new URLSearchParams(window.location.search).get('methode');
+    if (m === 'foto') setActiveTab('foto');
+    else if (m === 'schrijven') setActiveTab('handmatig');
+    else if (m === 'link') setActiveTab('url');
+  }, []);
   const [extractedData, setExtractedData] = useState<any>(null);
   const [extractedPreview, setExtractedPreview] = useState<any>(null);
   const [extracting, setExtracting] = useState(false);
@@ -1024,6 +1032,29 @@ export default function NieuwReceptPage() {
     if (recipe) router.push(`/recepten/${recipe.id}`);
   };
 
+  const methodLocked = extracting || bulkImporting || saving;
+  const showMethods = (activeTab === 'url' || activeTab === 'foto' || activeTab === 'handmatig') && !(activeTab === 'handmatig' && writeStarted);
+  const ctaVisible = showMethods && ((activeTab === 'url' && !bulkMode) || activeTab === 'foto' || activeTab === 'handmatig');
+
+  const selectMethod = (tab: ImportTab) => {
+    setActiveTab(tab);
+    setExtractError(null);
+    setWriteStarted(false);
+    setPasteHint(null);
+    if (tab !== 'url') setBulkMode(false);
+  };
+
+  const handlePasteClick = async () => {
+    setPasteHint(null);
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text.trim()) setImportUrl(text.trim());
+      else setPasteHint('Het klembord is leeg.');
+    } catch {
+      setPasteHint('Plakken lukt niet automatisch. Houd het veld ingedrukt om te plakken.');
+    }
+  };
+
   if (authLoading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -1038,39 +1069,68 @@ export default function NieuwReceptPage() {
   }
 
   return (
-    <div data-tour="new-recipe-page" className="mx-auto max-w-3xl space-y-6">
-      <h1 className="text-2xl font-bold text-text-primary">Nieuw recept</h1>
+    <div data-tour="new-recipe-page" className="mx-auto max-w-[640px]">
+      {/* Sluiten */}
+      <div className="flex items-center justify-between pt-1">
+        <IconButton variant="sunk" label="Sluiten" className="!h-11 !w-11" onClick={() => router.back()}>
+          <X className="h-[18px] w-[18px]" strokeWidth={2.2} />
+        </IconButton>
+      </div>
 
+      <ScreenHeader
+        title={activeTab === 'preview' ? 'Recept controleren' : 'Nieuw recept'}
+        subtitle={
+          activeTab === 'preview'
+            ? 'Kijk of alles klopt voor je opslaat'
+            : activeTab === 'pdf'
+              ? 'Importeer recepten uit een PDF'
+              : writeStarted
+                ? 'Vul je recept in'
+                : 'Hoe wil je beginnen?'
+        }
+      />
+
+      <div className="mt-5 flex flex-col gap-5">
       {/* Busy banner */}
       {isBusy && (
-        <div className="flex items-center gap-3 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
+        <div className="flex items-center gap-3 rounded-card border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           <Loader2 className="h-4 w-4 animate-spin" />
-          <span>Recept wordt verwerkt — navigeer niet weg van deze pagina.</span>
+          <span>Recept wordt verwerkt, navigeer niet weg van deze pagina.</span>
         </div>
       )}
 
-      {/* Tab selector — hidden during preview */}
-      {activeTab !== 'preview' && (
-      <div data-tour="new-recipe-tabs" className="flex flex-wrap gap-2 border-b pb-3">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setActiveTab(t.key)}
-            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-              activeTab === t.key
-                ? 'bg-primary text-white'
-                : 'bg-gray-100 text-text-secondary hover:bg-gray-200'
-            }`}
-          >
-            {t.icon}
-            {t.label}
-          </button>
-        ))}
-      </div>
+      {/* Methode kiezen: verborgen tijdens preview, PDF-import en het invulformulier */}
+      {showMethods && (
+        <div data-tour="new-recipe-tabs" role="radiogroup" aria-label="Hoe wil je beginnen?" className="flex flex-col gap-2.5">
+          <MethodCard
+            icon={<LinkIcon className="h-[21px] w-[21px]" strokeWidth={2} />}
+            title="Plak een link"
+            description="Van elke receptensite of Instagram"
+            selected={activeTab === 'url'}
+            disabled={methodLocked}
+            onSelect={() => selectMethod('url')}
+          />
+          <MethodCard
+            icon={<Camera className="h-[21px] w-[21px]" strokeWidth={2} />}
+            title="Scan een foto"
+            description="Kookboek, tijdschrift of handgeschreven"
+            selected={activeTab === 'foto'}
+            disabled={methodLocked}
+            onSelect={() => selectMethod('foto')}
+          />
+          <MethodCard
+            icon={<PenLine className="h-[21px] w-[21px]" strokeWidth={2} />}
+            title="Zelf schrijven"
+            description="Begin met een leeg recept"
+            selected={activeTab === 'handmatig'}
+            disabled={methodLocked}
+            onSelect={() => selectMethod('handmatig')}
+          />
+        </div>
       )}
 
       {extractError && (
-        <div className="rounded-lg bg-error/10 px-4 py-3 text-sm text-error">
+        <div role="alert" className="rounded-card bg-error/10 px-4 py-3 text-sm text-error">
           {extractError}
         </div>
       )}
@@ -1084,8 +1144,7 @@ export default function NieuwReceptPage() {
 
       {/* ── Preview na extractie ───────────────────── */}
       {activeTab === 'preview' && extractedPreview && (
-        <div className="space-y-5 rounded-xl border bg-surface p-6">
-          <h2 className="text-lg font-semibold text-text-primary">Recept controleren</h2>
+        <div className="space-y-5 rounded-card-lg border border-line bg-surface p-5">
 
           {/* Hash-SPA warning */}
           {extractedPreview._hashSPA && (
@@ -1123,7 +1182,7 @@ export default function NieuwReceptPage() {
                   extractedPreview._validation.score >= 80 ? 'bg-green-500' :
                   extractedPreview._validation.score >= 50 ? 'bg-amber-500' : 'bg-red-500'
                 }`} />
-                <span className="text-sm font-medium text-text-primary">
+                <span className="text-sm font-medium text-ink">
                   Kwaliteit: {extractedPreview._validation.score}/100
                 </span>
               </div>
@@ -1133,7 +1192,7 @@ export default function NieuwReceptPage() {
                   className={`rounded-lg px-3 py-2 text-xs ${
                     issue.severity === 'error' ? 'bg-red-50 text-red-700' :
                     issue.severity === 'warning' ? 'bg-amber-50 text-amber-700' :
-                    'bg-gray-50 text-text-muted'
+                    'bg-gray-50 text-ink-3'
                   }`}
                 >
                   {issue.severity === 'error' ? '!' : issue.severity === 'warning' ? '!' : 'i'} {issue.message}
@@ -1165,7 +1224,7 @@ export default function NieuwReceptPage() {
                   type="button"
                   onClick={() => previewImageInputRef.current?.click()}
                   disabled={uploadingPreviewImage}
-                  className="absolute bottom-2 right-2 flex items-center gap-1 rounded-lg bg-white/90 px-3 py-1.5 text-xs font-medium text-text-primary shadow-sm backdrop-blur-sm hover:bg-white disabled:opacity-60"
+                  className="absolute bottom-2 right-2 flex items-center gap-1 rounded-lg bg-white/90 px-3 py-1.5 text-xs font-medium text-ink shadow-sm backdrop-blur-sm hover:bg-white disabled:opacity-60"
                 >
                   {uploadingPreviewImage ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -1180,7 +1239,7 @@ export default function NieuwReceptPage() {
                 type="button"
                 onClick={() => previewImageInputRef.current?.click()}
                 disabled={uploadingPreviewImage}
-                className="flex h-48 w-full flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 text-sm text-text-muted transition hover:border-primary hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60"
+                className="flex h-48 w-full flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 text-sm text-ink-3 transition hover:border-primary hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {uploadingPreviewImage ? (
                   <>
@@ -1190,7 +1249,7 @@ export default function NieuwReceptPage() {
                 ) : (
                   <>
                     <Camera className="h-6 w-6" />
-                    <span className="font-medium text-text-primary">Foto toevoegen</span>
+                    <span className="font-medium text-ink">Foto toevoegen</span>
                     <span className="text-xs">Klik of tik om een foto te kiezen</span>
                   </>
                 )}
@@ -1201,11 +1260,11 @@ export default function NieuwReceptPage() {
             )}
 
             <div>
-              <h3 className="text-xl font-bold text-text-primary">{extractedPreview.title}</h3>
+              <h3 className="font-display text-[26px] font-semibold leading-tight text-ink">{extractedPreview.title}</h3>
               {extractedPreview.subtitle && (
-                <p className="mt-1 text-sm italic text-text-secondary">{extractedPreview.subtitle}</p>
+                <p className="mt-1 text-sm italic text-ink-3">{extractedPreview.subtitle}</p>
               )}
-              <div className="mt-2 flex flex-wrap gap-2 text-xs text-text-muted">
+              <div className="mt-2 flex flex-wrap gap-2 text-xs text-ink-3">
                 {extractedPreview.bron && <span>Bron: {extractedPreview.bron}</span>}
                 {extractedPreview.tijd && <span>Tijd: {extractedPreview.tijd}</span>}
                 {extractedPreview.basis_porties && <span>Porties: {extractedPreview.basis_porties}</span>}
@@ -1215,17 +1274,17 @@ export default function NieuwReceptPage() {
 
             {/* Ingredients */}
             <div>
-              <h4 className="mb-2 text-sm font-semibold text-text-primary">
+              <h4 className="mb-2 text-sm font-semibold text-ink">
                 Ingrediënten ({extractedPreview.ingredients?.length || 0})
               </h4>
               <div className="space-y-1">
                 {(extractedPreview.ingredients || []).map((ing: any, idx: number) => (
                   <div key={idx} className="flex gap-2 text-sm">
-                    <span className="min-w-[4rem] font-medium text-text-primary">
+                    <span className="min-w-[4rem] font-medium text-ink">
                       {ing.hoeveelheid || ''}
                     </span>
-                    <span className="min-w-[4rem] text-text-secondary">{ing.eenheid || ''}</span>
-                    <span className="text-text-primary">{ing.naam}</span>
+                    <span className="min-w-[4rem] text-ink-3">{ing.eenheid || ''}</span>
+                    <span className="text-ink">{ing.naam}</span>
                   </div>
                 ))}
               </div>
@@ -1233,14 +1292,14 @@ export default function NieuwReceptPage() {
 
             {/* Steps */}
             <div>
-              <h4 className="mb-2 text-sm font-semibold text-text-primary">
+              <h4 className="mb-2 text-sm font-semibold text-ink">
                 Bereiding ({extractedPreview.steps?.length || 0} stappen)
               </h4>
               <ol className="space-y-2">
                 {(extractedPreview.steps || []).map((step: any, idx: number) => (
                   <li key={idx} className="flex gap-2 text-sm">
                     <span className="shrink-0 font-medium text-primary">{idx + 1}.</span>
-                    <span className="text-text-secondary">{step.beschrijving}</span>
+                    <span className="text-ink-3">{step.beschrijving}</span>
                   </li>
                 ))}
               </ol>
@@ -1249,8 +1308,8 @@ export default function NieuwReceptPage() {
             {/* Nutrition */}
             {extractedPreview.nutrition && Object.values(extractedPreview.nutrition).some(Boolean) && (
               <div>
-                <h4 className="mb-1 text-sm font-semibold text-text-primary">Voedingswaarden</h4>
-                <div className="flex flex-wrap gap-3 text-xs text-text-muted">
+                <h4 className="mb-1 text-sm font-semibold text-ink">Voedingswaarden</h4>
+                <div className="flex flex-wrap gap-3 text-xs text-ink-3">
                   {extractedPreview.nutrition.energie_kcal && <span>{extractedPreview.nutrition.energie_kcal} kcal</span>}
                   {extractedPreview.nutrition.eiwitten && <span>{extractedPreview.nutrition.eiwitten}g eiwit</span>}
                   {extractedPreview.nutrition.koolhydraten && <span>{extractedPreview.nutrition.koolhydraten}g koolh.</span>}
@@ -1261,9 +1320,11 @@ export default function NieuwReceptPage() {
           </div>
 
           {/* Actions */}
-          <div className="flex gap-3 border-t pt-4">
+          <div className="flex gap-3 border-t border-line-soft pt-4">
             <Button
               variant="primary"
+              size="lg"
+              className="flex-1"
               loading={saving}
               onClick={handleSavePreview}
             >
@@ -1271,6 +1332,7 @@ export default function NieuwReceptPage() {
             </Button>
             <Button
               variant="secondary"
+              size="lg"
               onClick={() => {
                 setExtractedPreview(null);
                 setActiveTab('url');
@@ -1283,53 +1345,79 @@ export default function NieuwReceptPage() {
       )}
 
       {/* ── Handmatig ──────────────────────────────── */}
-      {activeTab === 'handmatig' && (
-        <RecipeForm
-          initialData={extractedData}
-          onSubmit={handleSubmit}
-        />
+      {activeTab === 'handmatig' && !writeStarted && (
+        <p className="text-sm leading-relaxed text-ink-3">
+          Je krijgt een leeg recept met titel, ingrediënten en stappen. Controleer alles voor je het opslaat.
+        </p>
+      )}
+      {activeTab === 'handmatig' && writeStarted && (
+        <div className="space-y-4">
+          <button
+            type="button"
+            onClick={() => setWriteStarted(false)}
+            className="inline-flex min-h-[44px] items-center gap-1.5 text-sm font-semibold text-primary"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Andere methode
+          </button>
+          <RecipeForm
+            initialData={extractedData}
+            onSubmit={handleSubmit}
+          />
+        </div>
       )}
 
       {/* ── URL import ─────────────────────────────── */}
       {activeTab === 'url' && (
-        <div data-tour="url-import-section" className="space-y-4 rounded-xl border bg-surface p-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-text-primary">
-              Importeer van URL
-            </h2>
+        <div data-tour="url-import-section" className="space-y-4">
+          {bulkMode && (
             <button
               type="button"
-              onClick={() => { setBulkMode(!bulkMode); setExtractError(null); }}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                bulkMode
-                  ? 'bg-primary text-white'
-                  : 'bg-gray-100 text-text-secondary hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700'
-              }`}
-              disabled={extracting || bulkImporting}
+              onClick={() => { setBulkMode(false); setExtractError(null); }}
+              disabled={bulkImporting}
+              className="inline-flex min-h-[44px] items-center gap-1.5 text-sm font-semibold text-primary disabled:opacity-50"
             >
-              <List className="h-3.5 w-3.5" />
-              Bulk import
+              <ArrowLeft className="h-4 w-4" />
+              Eén link importeren
             </button>
-          </div>
+          )}
 
           {!bulkMode ? (
             <>
-              <p className="text-sm text-text-secondary">
-                Plak de link naar een recept (of het hele deelbericht) en wij halen de gegevens automatisch op en slaan het direct voor je op.
-              </p>
-              <Input
-                label="Recept URL"
-                type="text"
-                inputMode="url"
-                placeholder="https://www.hellofresh.nl/recipes/..."
-                value={importUrl}
-                onChange={(e) => setImportUrl(e.target.value)}
-                disabled={extracting}
-              />
+              <div>
+                <div className="flex h-[52px] items-center gap-2.5 rounded-input border-[1.5px] border-primary bg-surface pl-3.5 pr-2">
+                  <LinkIcon className="h-[17px] w-[17px] shrink-0 text-ink-3" strokeWidth={2} />
+                  <input
+                    type="text"
+                    inputMode="url"
+                    aria-label="Recept URL"
+                    placeholder="https://www.allerhande.nl/recept/..."
+                    value={importUrl}
+                    onChange={(e) => setImportUrl(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && importUrl.trim() && !extracting) handleExtractAndSave();
+                    }}
+                    disabled={extracting}
+                    className="min-w-0 flex-1 bg-transparent text-[15px] text-ink placeholder:text-ink-4 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={handlePasteClick}
+                    disabled={extracting}
+                    className="h-9 shrink-0 rounded-[11px] bg-sunk px-3 text-[13px] font-semibold text-ink hover:bg-line disabled:opacity-50"
+                  >
+                    Plakken
+                  </button>
+                </div>
+                {pasteHint && <p className="mt-2 text-[13px] text-ink-3">{pasteHint}</p>}
+                <p className="mt-2.5 text-[13px] leading-relaxed text-ink-3">
+                  De chef haalt ingrediënten, stappen en foto eruit. Jij controleert voor het opslaan. Je mag ook een heel deelbericht plakken.
+                </p>
+              </div>
 
               {/* Progress indicator */}
               {extracting && (
-                <div className="space-y-3 rounded-lg bg-primary/5 p-4">
+                <div className="space-y-3 rounded-card bg-primary-tint p-4">
                   {PROGRESS_STEPS.map((step, idx) => (
                     <div
                       key={idx}
@@ -1338,43 +1426,34 @@ export default function NieuwReceptPage() {
                       }`}
                     >
                       {idx < progressStep ? (
-                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-white text-xs">
+                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-xs text-on-primary">
                           ✓
                         </span>
                       ) : idx === progressStep ? (
                         <Loader2 className="h-5 w-5 animate-spin text-primary" />
                       ) : (
-                        <span className="flex h-5 w-5 items-center justify-center rounded-full border border-gray-300 text-xs text-gray-400">
+                        <span className="flex h-5 w-5 items-center justify-center rounded-full border border-line-strong text-xs text-ink-4">
                           {idx + 1}
                         </span>
                       )}
-                      <span className={idx <= progressStep ? 'text-text-primary font-medium' : 'text-text-muted'}>
+                      <span className={idx <= progressStep ? 'font-medium text-ink' : 'text-ink-3'}>
                         {step}
                       </span>
                     </div>
                   ))}
                 </div>
               )}
-
-              <Button
-                variant="primary"
-                loading={extracting}
-                onClick={handleExtractAndSave}
-                disabled={!importUrl.trim() || extracting}
-              >
-                {extracting ? 'Bezig...' : 'Importeer & opslaan'}
-              </Button>
             </>
           ) : (
             /* ── Bulk URL import ─────────────────────────── */
             <div className="space-y-4">
               {bulkItems.length === 0 ? (
                 <>
-                  <p className="text-sm text-text-secondary">
+                  <p className="text-sm text-ink-3">
                     Plak meerdere URLs hieronder (een per regel, of tekst met URLs erin). De URLs worden automatisch herkend.
                   </p>
                   <textarea
-                    className="w-full rounded-lg border border-border bg-surface p-3 text-sm text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="w-full rounded-lg border border-line bg-surface p-3 text-sm text-ink placeholder:text-ink-3 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                     rows={10}
                     placeholder={"https://www.ah.nl/r/660056\nhttps://www.ah.nl/r/1200299\nhttps://www.hellofresh.nl/recipes/..."}
                     value={bulkText}
@@ -1389,10 +1468,10 @@ export default function NieuwReceptPage() {
                   {/* Progress bar */}
                   <div className="rounded-lg bg-primary/5 p-3">
                     <div className="mb-2 flex items-center justify-between text-sm">
-                      <span className="text-text-secondary">
+                      <span className="text-ink-3">
                         {bulkImporting ? 'Importeren...' : bulkDone ? 'Import voltooid' : `${bulkCounts.total} recepten gevonden`}
                       </span>
-                      <span className="font-medium text-text-primary">
+                      <span className="font-medium text-ink">
                         {bulkCounts.done}/{bulkCounts.total}
                         {bulkCounts.error > 0 && <span className="ml-2 text-red-500">({bulkCounts.error} mislukt)</span>}
                       </span>
@@ -1439,7 +1518,7 @@ export default function NieuwReceptPage() {
                           item.status === 'duplicate' ? 'border-yellow-200 bg-yellow-50 dark:border-yellow-900 dark:bg-yellow-950' :
                           item.status === 'error' ? 'border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950' :
                           item.status === 'extracting' || item.status === 'saving' ? 'border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950' :
-                          'border-border bg-surface'
+                          'border-line bg-surface'
                         }`}
                       >
                         <div className="flex-shrink-0">
@@ -1454,7 +1533,7 @@ export default function NieuwReceptPage() {
                           )}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <div className="truncate font-medium text-text-primary">
+                          <div className="truncate font-medium text-ink">
                             {item.title}
                           </div>
                           {item.status === 'extracting' && (
@@ -1491,12 +1570,55 @@ export default function NieuwReceptPage() {
 
       {/* ── Foto import ────────────────────────────── */}
       {activeTab === 'foto' && (
-        <div className="space-y-4 rounded-xl border bg-surface p-6">
-          <h2 className="text-lg font-semibold text-text-primary">
-            Importeer van foto
-          </h2>
-          <p className="text-sm text-text-secondary">
-            Upload foto&apos;s van een recept. Meerdere foto&apos;s mogen (bijv. ingrediënten + bereiding + resultaat). We combineren alles tot één recept.
+        <div className="space-y-4">
+          {/* Camera-vak (ook drag & drop op desktop) */}
+          <div
+            role="button"
+            tabIndex={0}
+            aria-label="Open camera of kies foto"
+            className="flex h-[120px] cursor-pointer flex-col items-center justify-center gap-2 rounded-[18px] border-[1.5px] border-dashed border-[#9FC2A8] text-[14.5px] font-semibold text-primary transition-colors hover:bg-primary-tint/50"
+            onClick={() => cameraInputRef.current?.click()}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cameraInputRef.current?.click(); } }}
+            onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('bg-primary-tint/50'); }}
+            onDragLeave={(e) => { e.currentTarget.classList.remove('bg-primary-tint/50'); }}
+            onDrop={(e) => { e.preventDefault(); e.currentTarget.classList.remove('bg-primary-tint/50'); handlePhotoSelect(e.dataTransfer.files); }}
+          >
+            <Camera className="h-[26px] w-[26px]" strokeWidth={1.9} />
+            Open camera of kies foto
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => { handlePhotoSelect(e.target.files); e.target.value = ''; }}
+              disabled={extracting}
+            />
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => { handlePhotoSelect(e.target.files); e.target.value = ''; }}
+              disabled={extracting}
+            />
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={() => photoInputRef.current?.click()}
+              disabled={extracting}
+              className="inline-flex min-h-[44px] items-center text-sm font-semibold text-primary disabled:opacity-50"
+            >
+              Kies uit galerij
+            </button>
+            <span className="text-xs text-ink-3">Max 10 foto&apos;s, meerdere mogen</span>
+          </div>
+          <p className="text-[13px] leading-relaxed text-ink-3">
+            Meerdere foto&apos;s mogen (bijv. ingrediënten + bereiding + resultaat). We combineren alles tot één recept.
           </p>
 
           <BronInput
@@ -1504,32 +1626,6 @@ export default function NieuwReceptPage() {
             onChange={setPhotoBron}
             disabled={extracting}
           />
-
-          {/* Drop zone */}
-          <div
-            className="relative flex min-h-[120px] cursor-pointer items-center justify-center rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 transition-colors hover:border-primary hover:bg-primary/5"
-            onClick={() => photoInputRef.current?.click()}
-            onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-primary', 'bg-primary/5'); }}
-            onDragLeave={(e) => { e.currentTarget.classList.remove('border-primary', 'bg-primary/5'); }}
-            onDrop={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-primary', 'bg-primary/5'); handlePhotoSelect(e.dataTransfer.files); }}
-          >
-            <div className="text-center">
-              <Camera className="mx-auto h-8 w-8 text-text-muted" />
-              <p className="mt-2 text-sm text-text-secondary">
-                Klik of sleep foto&apos;s hierheen
-              </p>
-              <p className="text-xs text-text-muted">Max 10 foto&apos;s, JPEG/PNG/WebP</p>
-            </div>
-            <input
-              ref={photoInputRef}
-              type="file"
-              accept="image/*"
-              multiple
-              className="hidden"
-              onChange={(e) => handlePhotoSelect(e.target.files)}
-              disabled={extracting}
-            />
-          </div>
 
           {/* Photo previews */}
           {photoPreviews.length > 0 && (
@@ -1554,10 +1650,10 @@ export default function NieuwReceptPage() {
 
           {/* Separate dish photo */}
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-text-primary">
+            <label className="mb-1.5 block text-sm font-medium text-ink">
               Foto van het gerecht (optioneel)
             </label>
-            <p className="mb-2 text-xs text-text-muted">
+            <p className="mb-2 text-xs text-ink-3">
               Upload een aparte foto van het eindresultaat. Deze wordt als afbeelding bij het recept gebruikt.
             </p>
             <div className="flex items-center gap-3">
@@ -1580,7 +1676,7 @@ export default function NieuwReceptPage() {
                 <button
                   type="button"
                   onClick={() => dishPhotoInputRef.current?.click()}
-                  className="flex h-20 w-20 items-center justify-center rounded-lg border-2 border-dashed border-gray-300 text-text-muted transition-colors hover:border-primary hover:text-primary"
+                  className="flex h-20 w-20 items-center justify-center rounded-lg border-2 border-dashed border-gray-300 text-ink-3 transition-colors hover:border-primary hover:text-primary"
                   disabled={extracting}
                 >
                   <Camera className="h-6 w-6" />
@@ -1608,7 +1704,7 @@ export default function NieuwReceptPage() {
             <div className="space-y-2 rounded-lg bg-primary/5 p-4">
               <div className="flex items-center gap-3 text-sm">
                 <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                <span className="font-medium text-text-primary">
+                <span className="font-medium text-ink">
                   {photoProgress || 'Bezig...'}
                 </span>
               </div>
@@ -1621,24 +1717,48 @@ export default function NieuwReceptPage() {
             </div>
           )}
 
-          <Button
-            variant="primary"
-            loading={extracting}
-            onClick={handleExtractPhotos}
-            disabled={photoFiles.length === 0 || extracting}
+        </div>
+      )}
+
+      {/* ── Secundaire opties: PDF en bulk-import ───── */}
+      {showMethods && !(activeTab === 'url' && bulkMode) && (
+        <div className="flex flex-wrap gap-x-5 gap-y-1">
+          {activeTab === 'url' && (
+            <button
+              type="button"
+              onClick={() => { setBulkMode(true); setExtractError(null); }}
+              disabled={extracting}
+              className="inline-flex min-h-[44px] items-center gap-1.5 text-sm font-semibold text-primary disabled:opacity-50"
+            >
+              <List className="h-4 w-4" />
+              Meerdere links tegelijk
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => selectMethod('pdf')}
+            disabled={methodLocked}
+            className="inline-flex min-h-[44px] items-center gap-1.5 text-sm font-semibold text-primary disabled:opacity-50"
           >
-            {extracting ? 'Bezig...' : `Recept extraheren${photoFiles.length > 0 ? ` (${photoFiles.length} foto${photoFiles.length > 1 ? "'s" : ''})` : ''}`}
-          </Button>
+            <FileUp className="h-4 w-4" />
+            Of importeer een PDF
+          </button>
         </div>
       )}
 
       {/* ── PDF import ─────────────────────────────── */}
       {activeTab === 'pdf' && (
-        <div className="space-y-4 rounded-xl border bg-surface p-6">
-          <h2 className="text-lg font-semibold text-text-primary">
-            Importeer van PDF
-          </h2>
-          <p className="text-sm text-text-secondary">
+        <div className="space-y-4 rounded-card-lg border border-line bg-surface p-5">
+          <button
+            type="button"
+            onClick={() => selectMethod('url')}
+            disabled={extracting}
+            className="inline-flex min-h-[44px] items-center gap-1.5 text-sm font-semibold text-primary disabled:opacity-50"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Andere methode
+          </button>
+          <p className="text-sm text-ink-3">
             Upload een PDF met recepten. We herkennen automatisch alle recepten in het bestand.
           </p>
 
@@ -1657,23 +1777,23 @@ export default function NieuwReceptPage() {
               setPdfRecipes([]);
               setPdfSaved(new Set());
             }}
-            className="block w-full text-sm text-text-secondary file:mr-4 file:rounded-lg file:border-0 file:bg-primary/10 file:px-4 file:py-2 file:text-sm file:font-medium file:text-primary hover:file:bg-primary/20"
+            className="block w-full text-sm text-ink-3 file:mr-4 file:rounded-lg file:border-0 file:bg-primary/10 file:px-4 file:py-2 file:text-sm file:font-medium file:text-primary hover:file:bg-primary/20"
             disabled={extracting}
           />
 
           {pdfFile && (
-            <p className="text-xs text-text-muted">
+            <p className="text-xs text-ink-3">
               {pdfFile.name} ({(pdfFile.size / 1024 / 1024).toFixed(1)} MB)
             </p>
           )}
 
           {/* Progress logs */}
           {(extracting || pdfLogs.length > 0) && (
-            <div className="rounded-xl border bg-surface p-4 space-y-3">
+            <div className="rounded-card-lg border border-line bg-surface p-4 space-y-3">
               {extracting && (
                 <div className="flex items-center gap-3">
                   <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                  <span className="text-sm font-medium text-text-primary">{pdfProgress || 'Bezig...'}</span>
+                  <span className="text-sm font-medium text-ink">{pdfProgress || 'Bezig...'}</span>
                 </div>
               )}
 
@@ -1694,7 +1814,7 @@ export default function NieuwReceptPage() {
                         ) : (
                           <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-gray-200 text-[10px] text-gray-500">✓</span>
                         )}
-                        <span className={i === pdfLogs.length - 1 && extracting ? 'text-text-primary font-medium' : 'text-text-muted'}>
+                        <span className={i === pdfLogs.length - 1 && extracting ? 'text-ink font-medium' : 'text-ink-3'}>
                           {msg}
                         </span>
                       </div>
@@ -1720,11 +1840,11 @@ export default function NieuwReceptPage() {
           {pdfRecipes.length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-text-primary">
+                <h3 className="text-sm font-semibold text-ink">
                   {pdfRecipes.length} recepten gevonden
                 </h3>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-text-muted">
+                  <span className="text-xs text-ink-3">
                     {pdfSaved.size}/{pdfRecipes.length} opgeslagen
                   </span>
                   {pdfSaved.size < pdfRecipes.length && (
@@ -1747,10 +1867,10 @@ export default function NieuwReceptPage() {
                     className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-4 py-3"
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-text-primary">
+                      <p className="truncate text-sm font-medium text-ink">
                         {recipe.title}
                       </p>
-                      <p className="text-xs text-text-muted">
+                      <p className="text-xs text-ink-3">
                         {recipe.ingredients?.length ?? 0} ingrediënten · {recipe.steps?.length ?? 0} stappen
                         {recipe.tijd && ` · ${recipe.tijd}`}
                       </p>
@@ -1777,6 +1897,55 @@ export default function NieuwReceptPage() {
           )}
         </div>
       )}
+      </div>
+
+      {/* Sticky CTA */}
+      {ctaVisible && (
+        <StickyCta>
+          {activeTab === 'url' && (
+            <Button
+              variant="primary"
+              size="lg"
+              className="w-full"
+              loading={extracting}
+              onClick={handleExtractAndSave}
+              disabled={!importUrl.trim() || extracting}
+            >
+              {extracting ? 'Bezig...' : 'Importeren'}
+            </Button>
+          )}
+          {activeTab === 'foto' && (
+            photoFiles.length === 0 ? (
+              <Button
+                variant="primary"
+                size="lg"
+                className="w-full"
+                onClick={() => photoInputRef.current?.click()}
+                disabled={extracting}
+              >
+                Foto kiezen
+              </Button>
+            ) : (
+              <Button
+                variant="primary"
+                size="lg"
+                className="w-full"
+                loading={extracting}
+                onClick={handleExtractPhotos}
+                disabled={extracting}
+              >
+                {extracting ? 'Bezig...' : `Recept extraheren (${photoFiles.length} foto${photoFiles.length > 1 ? "'s" : ''})`}
+              </Button>
+            )
+          )}
+          {activeTab === 'handmatig' && (
+            <Button variant="primary" size="lg" className="w-full" onClick={() => setWriteStarted(true)}>
+              Leeg recept starten
+            </Button>
+          )}
+        </StickyCta>
+      )}
+
       {/* Confirm dialog */}
       <ConfirmDialog
         open={!!confirmDialog}
@@ -1792,8 +1961,8 @@ export default function NieuwReceptPage() {
       {duplicateCheck && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-md rounded-xl bg-surface p-5 shadow-lg">
-            <h3 className="text-lg font-semibold text-text-primary">Mogelijk duplicaat</h3>
-            <p className="mt-1 text-sm text-text-secondary">
+            <h3 className="text-lg font-semibold text-ink">Mogelijk duplicaat</h3>
+            <p className="mt-1 text-sm text-ink-3">
               {duplicateCheck.existing.length === 1
                 ? 'Er bestaat al een vergelijkbaar recept:'
                 : `Er bestaan al ${duplicateCheck.existing.length} vergelijkbare recepten:`}
@@ -1813,8 +1982,8 @@ export default function NieuwReceptPage() {
                     <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-2xl">🍽️</div>
                   )}
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-text-primary">{r.title}</p>
-                    {r.bron && <p className="truncate text-xs text-text-muted">{r.bron}</p>}
+                    <p className="truncate text-sm font-medium text-ink">{r.title}</p>
+                    {r.bron && <p className="truncate text-xs text-ink-3">{r.bron}</p>}
                     <span className="mt-0.5 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
                       {r.match_reason}
                     </span>
@@ -1825,7 +1994,7 @@ export default function NieuwReceptPage() {
             <div className="mt-4 flex gap-2">
               <button
                 onClick={() => { duplicateCheck.resolve(false); setDuplicateCheck(null); }}
-                className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-text-primary hover:bg-gray-50"
+                className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-ink hover:bg-gray-50"
               >
                 Annuleren
               </button>

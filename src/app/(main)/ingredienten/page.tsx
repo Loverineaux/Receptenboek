@@ -1,181 +1,204 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Apple, ScanLine } from 'lucide-react';
+import { ScanLine } from 'lucide-react';
+import ScreenHeader from '@/components/ui/ScreenHeader';
+import SectionHeader from '@/components/ui/SectionHeader';
+import IconButton from '@/components/ui/IconButton';
+import Chip from '@/components/ui/Chip';
+import Button from '@/components/ui/Button';
 import SearchBar from '@/components/ui/SearchBar';
-import IngredientCard from '@/components/ingredients/IngredientCard';
+import IngredientRow from '@/components/ingredients/IngredientRow';
+import SeasonTile from '@/components/ingredients/SeasonTile';
+import { CATEGORY_FILTERS } from '@/lib/ingredients/category';
+import { currentMonth, monthName } from '@/lib/ingredients/season';
 import type { GenericIngredient } from '@/types';
 
-const CATEGORIES = [
-  'vlees',
-  'groente',
-  'fruit',
-  'zuivel',
-  'kruiden',
-  'granen',
-  'vis',
-  'overig',
-] as const;
+type ListIngredient = GenericIngredient & { recipe_count?: number };
+
+const PAGE_SIZE = 50;
 
 export default function IngrediëntenPage() {
   const router = useRouter();
 
-  const [ingredients, setIngredients] = useState<GenericIngredient[]>([]);
+  const [ingredients, setIngredients] = useState<ListIngredient[]>([]);
+  const [total, setTotal] = useState(0);
+  const [libraryTotal, setLibraryTotal] = useState<number | null>(null);
+  const [seasonal, setSeasonal] = useState<GenericIngredient[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [search, setSearch] = useState('');
-  const [category, setCategory] = useState<string | null>(null);
+  // Index in CATEGORY_FILTERS, null = Alles
+  const [categoryIdx, setCategoryIdx] = useState<number | null>(null);
 
-  const PAGE_SIZE = 50;
+  const month = useMemo(() => currentMonth(), []);
+  const categoryParam = categoryIdx === null ? '' : CATEGORY_FILTERS[categoryIdx].values.join(',');
 
-  const fetchIngredients = useCallback(async (loadMore = false) => {
-    if (loadMore) {
-      setLoadingMore(true);
-    } else {
-      setLoading(true);
-    }
-    try {
-      const params = new URLSearchParams();
-      if (search) params.set('search', search);
-      if (category) params.set('category', category);
-      params.set('limit', String(PAGE_SIZE));
-      if (loadMore) params.set('offset', String(ingredients.length));
-      const qs = params.toString();
-      const res = await fetch(`/api/ingredients?${qs}`);
-      if (res.ok) {
-        const data = await res.json();
-        const items = data.ingredients ?? data;
-        if (loadMore) {
-          setIngredients((prev) => [...prev, ...items]);
-        } else {
-          setIngredients(items);
+  const fetchIngredients = useCallback(
+    async (loadMore = false) => {
+      if (loadMore) setLoadingMore(true);
+      else setLoading(true);
+      try {
+        const params = new URLSearchParams();
+        if (search) params.set('search', search);
+        if (categoryParam) params.set('category', categoryParam);
+        params.set('limit', String(PAGE_SIZE));
+        if (loadMore) params.set('offset', String(ingredients.length));
+        const res = await fetch(`/api/ingredients?${params.toString()}`);
+        if (res.ok) {
+          const data = await res.json();
+          const items: ListIngredient[] = data.ingredients ?? data;
+          setIngredients((prev) => (loadMore ? [...prev, ...items] : items));
+          if (typeof data.total === 'number') {
+            setTotal(data.total);
+            if (!search && !categoryParam) setLibraryTotal(data.total);
+          }
+          setHasMore(items.length >= PAGE_SIZE);
         }
-        setHasMore(items.length >= PAGE_SIZE);
+      } finally {
+        setLoading(false);
+        setLoadingMore(false);
       }
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-    }
-  }, [search, category, ingredients.length]);
+    },
+    [search, categoryParam, ingredients.length]
+  );
 
   useEffect(() => {
     setHasMore(true);
     fetchIngredients(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, category]);
+  }, [search, categoryParam]);
+
+  // Totaal van de hele bibliotheek (voor de ondertitel) als de eerste lijst gefilterd is
+  useEffect(() => {
+    if (libraryTotal !== null) return;
+    fetch('/api/ingredients?limit=1')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d && typeof d.total === 'number') setLibraryTotal(d.total);
+      })
+      .catch(() => {});
+  }, [libraryTotal]);
+
+  // Seizoensingrediënten van deze maand (niet jaarrond)
+  useEffect(() => {
+    const params = new URLSearchParams({ season_month: String(month), limit: '20' });
+    if (categoryParam) params.set('category', categoryParam);
+    let cancelled = false;
+    fetch(`/api/ingredients?${params.toString()}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled) setSeasonal(d?.ingredients ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setSeasonal([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [month, categoryParam]);
+
+  const isFiltered = !!search || categoryIdx !== null;
+  const listTitle = categoryIdx !== null ? CATEGORY_FILTERS[categoryIdx].label : 'Alle ingrediënten';
 
   return (
-    <div data-tour="ingredienten-page" className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="flex items-center gap-2 text-2xl font-bold text-text-primary">
-          <Apple className="h-6 w-6" />
-          Ingredi&euml;nten
-        </h1>
-
-        <button
-          type="button"
-          onClick={() => router.push('/ingredienten/scan')}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary/90"
-        >
-          <ScanLine className="h-4 w-4" />
-          <span className="hidden sm:inline">Scan product</span>
-        </button>
-      </div>
-
-      {/* Search */}
-      <SearchBar
-        value={search}
-        onChange={setSearch}
-        placeholder="Zoek ingredi&euml;nten..."
+    <div data-tour="ingredienten-page" className="md:mx-auto md:max-w-3xl">
+      <ScreenHeader
+        title="Ingrediënten"
+        subtitle={
+          libraryTotal !== null ? `${libraryTotal.toLocaleString('nl-NL')} in de bibliotheek` : undefined
+        }
+        actions={
+          <IconButton variant="primary" label="Product scannen" onClick={() => router.push('/ingredienten/scan')}>
+            <ScanLine className="h-[19px] w-[19px]" strokeWidth={1.9} />
+          </IconButton>
+        }
       />
 
-      {/* Category filter chips */}
-      <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 scrollbar-hide">
-        <button
-          type="button"
-          onClick={() => setCategory(null)}
-          className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
-            category === null
-              ? 'bg-primary text-white'
-              : 'bg-gray-100 text-text-secondary hover:bg-gray-200'
-          }`}
-        >
+      <div className="mt-[18px]">
+        <SearchBar value={search} onChange={setSearch} placeholder="Zoek een ingrediënt" />
+      </div>
+
+      {/* Categorie-chips */}
+      <div className="-mx-gutter mt-3.5 flex gap-2 overflow-x-auto px-gutter scrollbar-none md:mx-0 md:px-0">
+        <Chip active={categoryIdx === null} onClick={() => setCategoryIdx(null)}>
           Alles
-        </button>
-        {CATEGORIES.map((cat) => (
-          <button
-            key={cat}
-            type="button"
-            onClick={() => setCategory(category === cat ? null : cat)}
-            className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-medium capitalize transition-colors ${
-              category === cat
-                ? 'bg-primary text-white'
-                : 'bg-gray-100 text-text-secondary hover:bg-gray-200'
-            }`}
-          >
-            {cat}
-          </button>
+        </Chip>
+        {CATEGORY_FILTERS.map((c, i) => (
+          <Chip key={c.label} active={categoryIdx === i} onClick={() => setCategoryIdx(categoryIdx === i ? null : i)}>
+            {c.label}
+          </Chip>
         ))}
       </div>
 
-      {/* Loading skeleton */}
+      {/* In het seizoen */}
+      {!search && seasonal.length > 0 && (
+        <section aria-label="In het seizoen">
+          <SectionHeader title="In het seizoen" action={monthName(month)} />
+          <div className="-mx-gutter flex gap-3 overflow-x-auto px-gutter scrollbar-none md:mx-0 md:px-0">
+            {seasonal.map((ing) => (
+              <SeasonTile key={ing.id} ingredient={ing} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Lijst */}
+      <SectionHeader
+        title={listTitle}
+        action={isFiltered && !loading ? `${total.toLocaleString('nl-NL')} gevonden` : undefined}
+      />
+
       {loading && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {Array.from({ length: 10 }).map((_, i) => (
-            <div
-              key={i}
-              className="aspect-[4/5] animate-pulse rounded-xl bg-gray-200"
-            />
+        <div className="rounded-card-lg border border-line bg-surface px-3.5">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="flex min-h-[62px] items-center gap-3 border-b border-line-soft last:border-b-0">
+              <div className="h-10 w-10 animate-pulse rounded-icon-btn bg-sunk" />
+              <div className="flex-1 space-y-2">
+                <div className="h-3.5 w-1/2 animate-pulse rounded bg-sunk" />
+                <div className="h-3 w-1/3 animate-pulse rounded bg-sunk" />
+              </div>
+            </div>
           ))}
         </div>
       )}
 
-      {/* Ingredient grid */}
       {!loading && ingredients.length > 0 && (
         <>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          <div className="rounded-card-lg border border-line bg-surface px-3.5">
             {ingredients.map((ingredient) => (
-              <IngredientCard key={ingredient.id} ingredient={ingredient} />
+              <IngredientRow key={ingredient.id} ingredient={ingredient} />
             ))}
           </div>
 
           {hasMore && (
-            <div className="flex justify-center pt-2">
-              <button
-                type="button"
-                onClick={() => fetchIngredients(true)}
-                disabled={loadingMore}
-                className="rounded-lg bg-gray-100 px-6 py-2.5 text-sm font-medium text-text-secondary transition-colors hover:bg-gray-200 disabled:opacity-50"
-              >
+            <div className="flex justify-center pt-4">
+              <Button variant="secondary" onClick={() => fetchIngredients(true)} disabled={loadingMore}>
                 {loadingMore ? 'Laden...' : 'Laad meer'}
-              </button>
+              </Button>
             </div>
           )}
         </>
       )}
 
-      {/* Empty state */}
       {!loading && ingredients.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-20 text-center">
-          <span className="text-5xl">🫙</span>
-          <h2 className="mt-4 text-lg font-semibold text-text-primary">
-            Nog geen ingredi&euml;nten gevonden.
-          </h2>
-          <p className="mt-1 text-sm text-text-secondary">
-            Scan een product om ingredi&euml;nten toe te voegen aan je
-            bibliotheek.
+        <div className="rounded-card-lg border border-dashed border-line-strong px-6 py-12 text-center">
+          <h2 className="font-display text-section font-semibold text-ink">Geen ingrediënten gevonden</h2>
+          <p className="mt-1.5 text-[15px] text-ink-3">
+            {isFiltered
+              ? 'Probeer een andere zoekterm of categorie.'
+              : 'Scan een product om ingrediënten toe te voegen aan je bibliotheek.'}
           </p>
-          <button
-            type="button"
-            onClick={() => router.push('/ingredienten/scan')}
-            className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary/90"
-          >
-            <ScanLine className="h-4 w-4" />
-            Scan product
-          </button>
+          {!isFiltered && (
+            <div className="mt-5 flex justify-center">
+              <Button onClick={() => router.push('/ingredienten/scan')}>
+                <ScanLine className="h-4 w-4" />
+                Product scannen
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </div>

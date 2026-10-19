@@ -342,15 +342,16 @@ export default function RecipeForm({ initialData, onSubmit }: RecipeFormProps) {
 
   // ---------- render ----------
 
-  const labelClass = 'mb-1.5 block text-sm font-medium text-text-primary';
+  const cardClass = 'rounded-card-lg border border-line bg-surface p-5';
+  const labelClass = 'mb-1.5 block text-[13px] font-semibold text-ink-3';
   const selectClass =
-    'w-full rounded-lg border border-gray-300 bg-surface px-3 py-2 text-sm text-text-primary transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20';
+    'w-full rounded-input border border-line bg-surface px-3.5 py-2.5 text-[15px] text-ink placeholder:text-ink-4 transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/15';
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-8">
+    <form onSubmit={handleSubmit} className="space-y-4">
       {/* ── Basic info ────────────────────────────────── */}
-      <section className="space-y-4">
-        <h2 className="text-lg font-semibold text-text-primary">Basisgegevens</h2>
+      <section className={`space-y-4 ${cardClass}`}>
+        <h2 className="font-display text-section font-semibold text-ink">Basisgegevens</h2>
 
         <Input
           label="Titel *"
@@ -388,7 +389,7 @@ export default function RecipeForm({ initialData, onSubmit }: RecipeFormProps) {
                   type="button"
                   onClick={() => imageInputRef.current?.click()}
                   disabled={uploadingImage}
-                  className="flex items-center gap-1.5 rounded-lg border border-gray-300 bg-surface px-3 py-2 text-sm font-medium text-text-secondary transition-colors hover:bg-gray-50 disabled:opacity-50"
+                  className="flex items-center gap-1.5 h-11 rounded-input border border-line bg-surface px-3.5 text-sm font-semibold text-ink-2 transition-colors hover:bg-gray-50 disabled:opacity-50"
                 >
                   {uploadingImage ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -411,7 +412,7 @@ export default function RecipeForm({ initialData, onSubmit }: RecipeFormProps) {
               </div>
             </div>
             {imageUrl && (
-              <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border">
+              <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-input border border-line">
                 <img src={imageUrl} alt="Preview" className="h-full w-full object-cover" />
                 <button
                   type="button"
@@ -518,8 +519,8 @@ export default function RecipeForm({ initialData, onSubmit }: RecipeFormProps) {
       </section>
 
       {/* ── Ingredients ───────────────────────────────── */}
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold text-text-primary">Ingredienten</h2>
+      <section className={`space-y-3 ${cardClass}`}>
+        <h2 className="font-display text-section font-semibold text-ink">Ingredienten</h2>
 
         {ingredients.map((ing, idx) => (
           <div key={idx} className="flex items-start gap-2">
@@ -548,7 +549,7 @@ export default function RecipeForm({ initialData, onSubmit }: RecipeFormProps) {
               <button
                 type="button"
                 onClick={() => removeIngredient(idx)}
-                className="mt-2 text-text-muted hover:text-error"
+                aria-label="Ingrediënt verwijderen" className="flex h-11 w-9 shrink-0 items-center justify-center text-ink-3 hover:text-error"
               >
                 <Trash2 className="h-4 w-4" />
               </button>
@@ -568,23 +569,24 @@ export default function RecipeForm({ initialData, onSubmit }: RecipeFormProps) {
       </section>
 
       {/* ── Steps ─────────────────────────────────────── */}
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold text-text-primary">Bereidingsstappen</h2>
+      <section className={`space-y-3 ${cardClass}`}>
+        <h2 className="font-display text-section font-semibold text-ink">Bereidingsstappen</h2>
 
         {steps.map((step, idx) => (
           <div
             key={idx}
-            className="rounded-lg border border-gray-200 p-4 space-y-2"
+            className="space-y-2 rounded-card border border-line-soft bg-background p-4"
           >
             <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-text-secondary">
+              <span className="text-sm font-medium text-ink-3">
                 Stap {idx + 1}
               </span>
               {steps.length > 1 && (
                 <button
                   type="button"
                   onClick={() => removeStep(idx)}
-                  className="text-text-muted hover:text-error"
+                  aria-label="Stap verwijderen"
+                  className="flex h-9 w-9 items-center justify-center text-ink-3 hover:text-error"
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
@@ -622,11 +624,11 @@ export default function RecipeForm({ initialData, onSubmit }: RecipeFormProps) {
       </section>
 
       {/* ── Nutrition (collapsible) ───────────────────── */}
-      <section>
+      <section className={cardClass}>
         <button
           type="button"
           onClick={() => setNutritionOpen((v) => !v)}
-          className="flex w-full items-center justify-between text-lg font-semibold text-text-primary"
+          className="flex min-h-[44px] w-full items-center justify-between font-display text-section font-semibold text-ink"
         >
           Voedingswaarden
           {nutritionOpen ? (
@@ -688,8 +690,8 @@ export default function RecipeForm({ initialData, onSubmit }: RecipeFormProps) {
       </section>
 
       {/* ── Benodigdheden ─────────────────────────────── */}
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold text-text-primary">Benodigdheden</h2>
+      <section className={`space-y-3 ${cardClass}`}>
+        <h2 className="font-display text-section font-semibold text-ink">Benodigdheden</h2>
 
         {benodigdheden.map((b, idx) => (
           <div key={idx} className="flex items-center gap-2">
@@ -704,7 +706,8 @@ export default function RecipeForm({ initialData, onSubmit }: RecipeFormProps) {
               <button
                 type="button"
                 onClick={() => removeBenodigdheid(idx)}
-                className="text-text-muted hover:text-error"
+                aria-label="Benodigdheid verwijderen"
+                className="flex h-9 w-9 items-center justify-center text-ink-3 hover:text-error"
               >
                 <Trash2 className="h-4 w-4" />
               </button>
@@ -724,14 +727,14 @@ export default function RecipeForm({ initialData, onSubmit }: RecipeFormProps) {
       </section>
 
       {/* ── Tags ──────────────────────────────────────── */}
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold text-text-primary">Tags</h2>
+      <section className={`space-y-3 ${cardClass}`}>
+        <h2 className="font-display text-section font-semibold text-ink">Tags</h2>
 
         <div className="flex flex-wrap gap-2">
           {tags.map((tag) => (
             <span
               key={tag}
-              className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary"
+              className="inline-flex items-center gap-1 rounded-full bg-primary-tint px-3 py-1.5 text-[13px] font-semibold text-primary"
             >
               {tag}
               <button type="button" onClick={() => removeTag(tag)}>
@@ -762,8 +765,8 @@ export default function RecipeForm({ initialData, onSubmit }: RecipeFormProps) {
       </section>
 
       {/* ── Submit ────────────────────────────────────── */}
-      <div className="flex justify-end gap-3 border-t pt-6">
-        <Button type="submit" variant="primary" size="lg" loading={submitting}>
+      <div className="pt-2">
+        <Button type="submit" variant="primary" size="lg" loading={submitting} className="w-full">
           {initialData && 'id' in initialData ? 'Recept bijwerken' : 'Recept opslaan'}
         </Button>
       </div>

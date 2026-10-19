@@ -26,7 +26,7 @@ export const tourSteps: TourStep[] = [
     page: '/recepten',
     targetSelector: '__responsive_nav__',
     title: 'Navigatie',
-    description: 'Het menu waarmee je snel wisselt tussen alle onderdelen van de app: Recepten, Suggesties, Collecties, Favorieten en Ingrediënten.',
+    description: 'Hiermee wissel je snel tussen Recepten, Wat koken?, Favorieten (met je collecties) en Ingrediënten.',
     position: 'bottom',
   },
   {
@@ -34,7 +34,7 @@ export const tourSteps: TourStep[] = [
     page: '/recepten',
     targetSelector: '[data-tour="search-bar"]',
     title: 'Recepten zoeken',
-    description: 'Zoek op titel, of vink "Zoek ook in ingrediënten" aan om te zoeken op recepten met specifieke ingrediënten.',
+    description: 'Zoek op titel. Via de filterknop kun je ook in ingrediënten zoeken, sorteren en op bron filteren.',
     position: 'bottom',
   },
   {
@@ -42,7 +42,7 @@ export const tourSteps: TourStep[] = [
     page: '/recepten',
     targetSelector: '[data-tour="category-filter"]',
     title: 'Categoriefilters',
-    description: 'Filter snel op kip, vis, vegetarisch en meer. Tik op een categorie om te filteren.',
+    description: 'Filter snel op Snel, Vega, Pasta, Soep of Zoet. Alle andere categorieën vind je onder de filterknop.',
     position: 'bottom',
   },
   {
@@ -58,7 +58,7 @@ export const tourSteps: TourStep[] = [
     page: '/recepten',
     targetSelector: '[data-tour="star-rating"]',
     title: 'Beoordeling',
-    description: 'De sterren tonen het gemiddelde van alle beoordelingen. Klik om zelf een score te geven!',
+    description: 'Het groene sterretje toont de gemiddelde beoordeling. Zelf een score geven doe je op de receptpagina.',
     position: 'top',
   },
   {
@@ -66,7 +66,7 @@ export const tourSteps: TourStep[] = [
     page: '/recepten',
     targetSelector: '[data-tour="favorite-button"]',
     title: 'Favorieten',
-    description: 'Het hartje met het getal toont hoeveel mensen dit recept als favoriet hebben opgeslagen. Tik om het zelf op te slaan!',
+    description: 'Tik op het hartje om een recept bij je favorieten te bewaren.',
     position: 'left',
   },
   {
@@ -82,7 +82,7 @@ export const tourSteps: TourStep[] = [
     page: '/recepten',
     targetSelector: '[data-tour="card-actions"]',
     title: 'Collecties en delen',
-    description: 'Voeg recepten toe aan een collectie of deel ze met andere gebruikers via deze knoppen.',
+    description: 'Bewaar een recept, zet het in een collectie of deel het met anderen via de knoppen op de kaart.',
     position: 'left',
   },
   {
@@ -90,8 +90,8 @@ export const tourSteps: TourStep[] = [
     page: '/recepten',
     targetSelector: '[data-tour="fab-button"]',
     title: 'Nieuw recept toevoegen',
-    description: 'Tik op de groene + knop om een recept toe te voegen. Laten we even kijken hoe dat werkt!',
-    position: 'left',
+    description: 'Tik op de groene + om een recept toe te voegen. Laten we even kijken hoe dat werkt!',
+    position: 'top',
   },
 
   // ── Pagina: /recepten/nieuw ──
@@ -100,7 +100,7 @@ export const tourSteps: TourStep[] = [
     page: '/recepten/nieuw',
     targetSelector: '[data-tour="new-recipe-tabs"]',
     title: 'Recept aanmaken',
-    description: 'Je kunt een recept op vier manieren toevoegen: plak een URL van een receptenwebsite, maak een foto van een recept, upload een PDF (bijv. een kookboek), of vul het handmatig in.',
+    description: 'Kies hoe je wilt beginnen: plak een link van een receptenwebsite, scan een foto of schrijf het zelf. Een PDF of meerdere links tegelijk importeren kan ook.',
     position: 'bottom',
     padding: 12,
   },

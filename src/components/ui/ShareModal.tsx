@@ -118,7 +118,7 @@ export default function ShareModal({ open, onClose, title, url, shareType, itemI
         <div className="flex gap-2">
           <button
             onClick={handleCopyLink}
-            className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm font-medium text-text-primary transition-colors hover:bg-gray-100"
+            className="flex flex-1 items-center justify-center gap-2 h-11 rounded-input border border-line bg-surface px-3 text-sm font-semibold text-ink transition-colors hover:bg-sunk"
           >
             {copied ? <Check className="h-4 w-4 text-primary" /> : <Link2 className="h-4 w-4" />}
             {copied ? 'Gekopieerd!' : 'Kopieer link'}
@@ -126,7 +126,7 @@ export default function ShareModal({ open, onClose, title, url, shareType, itemI
           {typeof navigator !== 'undefined' && 'share' in navigator && (
             <button
               onClick={handleNativeShare}
-              className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm font-medium text-text-primary transition-colors hover:bg-gray-100"
+              className="flex flex-1 items-center justify-center gap-2 h-11 rounded-input border border-line bg-surface px-3 text-sm font-semibold text-ink transition-colors hover:bg-sunk"
             >
               <Send className="h-4 w-4" />
               Deel extern
@@ -136,20 +136,20 @@ export default function ShareModal({ open, onClose, title, url, shareType, itemI
 
         {/* Divider */}
         <div className="flex items-center gap-3">
-          <div className="h-px flex-1 bg-gray-200" />
-          <span className="text-xs text-text-muted">of deel met een gebruiker</span>
-          <div className="h-px flex-1 bg-gray-200" />
+          <div className="h-px flex-1 bg-line" />
+          <span className="text-xs text-ink-3">of deel met een gebruiker</span>
+          <div className="h-px flex-1 bg-line" />
         </div>
 
         {/* User search */}
         <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-3" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Zoek op naam..."
-            className="w-full rounded-xl border border-gray-200 bg-surface py-2.5 pl-10 pr-4 text-sm text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+            className="w-full h-11 rounded-input border border-line bg-surface pl-10 pr-4 text-[15px] text-ink placeholder:text-ink-4 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
             autoFocus
           />
         </div>
@@ -162,7 +162,7 @@ export default function ShareModal({ open, onClose, title, url, shareType, itemI
             </div>
           )}
           {!searching && search.length > 0 && users.length === 0 && (
-            <p className="py-4 text-center text-sm text-text-muted">Geen gebruikers gevonden</p>
+            <p className="py-4 text-center text-sm text-ink-3">Geen gebruikers gevonden</p>
           )}
           {users.map((u) => {
             const isSent = sentTo.has(u.id);
@@ -171,16 +171,16 @@ export default function ShareModal({ open, onClose, title, url, shareType, itemI
                 key={u.id}
                 onClick={() => !isSent && handleShareWithUser(u)}
                 disabled={isSent}
-                className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-gray-50 disabled:opacity-60"
+                className="flex w-full items-center gap-3 rounded-input px-2 py-2 text-left transition-colors min-h-[44px] hover:bg-sunk disabled:opacity-60"
               >
-                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-light">
+                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-tint">
                   {u.avatar_url ? (
                     <img src={u.avatar_url} alt="" className="h-full w-full object-cover" />
                   ) : (
                     <User className="h-4 w-4 text-primary" />
                   )}
                 </div>
-                <span className="flex-1 text-sm font-medium text-text-primary">
+                <span className="flex-1 text-sm font-medium text-ink">
                   {u.display_name || 'Anoniem'}
                 </span>
                 {isSent ? (
@@ -189,7 +189,7 @@ export default function ShareModal({ open, onClose, title, url, shareType, itemI
                     Verstuurd
                   </span>
                 ) : (
-                  <Send className="h-4 w-4 text-text-muted" />
+                  <Send className="h-4 w-4 text-ink-3" />
                 )}
               </button>
             );
@@ -198,7 +198,7 @@ export default function ShareModal({ open, onClose, title, url, shareType, itemI
 
         {/* Toast inside modal */}
         {toast && (
-          <div className="rounded-lg bg-gray-800 px-3 py-2 text-center text-sm text-white">
+          <div className="rounded-input bg-ink px-3 py-2 text-center text-sm text-on-primary">
             {toast}
           </div>
         )}

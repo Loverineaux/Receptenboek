@@ -1,17 +1,38 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { ArrowLeft, Pencil, Share2, Trash2, User, Users, X as XIcon, Copy, UserPlus, Info } from 'lucide-react';
+import {
+  ArrowLeft,
+  Copy,
+  ExternalLink,
+  FolderPlus,
+  Heart,
+  Info,
+  MoreHorizontal,
+  Pencil,
+  Share,
+  Shuffle,
+  Trash2,
+  UserPlus,
+  UtensilsCrossed,
+  Eye,
+  EyeOff,
+} from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useAdmin } from '@/hooks/useAdmin';
 import { useRealtimeRefresh } from '@/hooks/useRealtimeSubscription';
 import { createClient } from '@/lib/supabase/client';
-import RecipeCard from '@/components/recipes/RecipeCard';
+import { formatRating } from '@/components/recipes/RecipeCard';
 import Button from '@/components/ui/Button';
+import Chip from '@/components/ui/Chip';
+import IconButton from '@/components/ui/IconButton';
+import BottomSheet from '@/components/ui/BottomSheet';
 import StarRating from '@/components/ui/StarRating';
+import Input from '@/components/ui/Input';
+import { joinNames, parseMinutes, recipeCountLabel } from '@/components/collections/utils';
 import dynamic from 'next/dynamic';
 
 const ConfirmDialog = dynamic(() => import('@/components/ui/ConfirmDialog'));
@@ -19,8 +40,42 @@ const ShareModal = dynamic(() => import('@/components/ui/ShareModal'));
 const AddToCollectionModal = dynamic(() => import('@/components/recipes/AddToCollectionModal'));
 const Modal = dynamic(() => import('@/components/ui/Modal'));
 const UserPicker = dynamic(() => import('@/components/ui/UserPicker'));
-import { useCollectionRecipeIds } from '@/hooks/useCollectionRecipeIds';
 import type { RecipeWithRelations, UserProfile } from '@/types';
+
+type SortKey = 'recent' | 'snel' | 'beste';
+
+const SORTS: { key: SortKey; label: string }[] = [
+  { key: 'recent', label: 'Recent toegevoegd' },
+  { key: 'snel', label: 'Snelste eerst' },
+  { key: 'beste', label: 'Best beoordeeld' },
+];
+
+type CollectionRecipe = RecipeWithRelations & { added_at?: string | null };
+
+function SheetAction({
+  icon,
+  children,
+  onClick,
+  danger = false,
+}: {
+  icon: React.ReactNode;
+  children: React.ReactNode;
+  onClick: () => void;
+  danger?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex min-h-[52px] w-full items-center gap-3.5 rounded-input px-2 text-left text-[15.5px] font-medium hover:bg-sunk ${
+        danger ? 'text-error' : 'text-ink'
+      }`}
+    >
+      <span className={danger ? 'text-error' : 'text-ink-3'}>{icon}</span>
+      {children}
+    </button>
+  );
+}
 
 export default function CollectionDetailPage() {
   const { user } = useAuth();
@@ -28,14 +83,13 @@ export default function CollectionDetailPage() {
   const params = useParams();
   const router = useRouter();
   const [collection, setCollection] = useState<any>(null);
-  const [recipes, setRecipes] = useState<RecipeWithRelations[]>([]);
+  const [recipes, setRecipes] = useState<CollectionRecipe[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [editDesc, setEditDesc] = useState('');
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [userRatings, setUserRatings] = useState<Record<string, number>>({});
-  const [initialUserRatings, setInitialUserRatings] = useState<Record<string, number>>({});
   const [isFollowing, setIsFollowing] = useState(false);
   const [isCollaborator, setIsCollaborator] = useState(false);
   const [collaborators, setCollaborators] = useState<UserProfile[]>([]);
@@ -50,10 +104,14 @@ export default function CollectionDetailPage() {
   const [duplicateError, setDuplicateError] = useState('');
   const [duplicating, setDuplicating] = useState(false);
   const [removeRecipeId, setRemoveRecipeId] = useState<string | null>(null);
+  const [sort, setSort] = useState<SortKey>('recent');
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [rowMenuRecipeId, setRowMenuRecipeId] = useState<string | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [dupInfoOpen, setDupInfoOpen] = useState(false);
 
-  const collectionRecipeIds = useCollectionRecipeIds();
   const { isAdmin: isAdminUser } = useAdmin();
-  const isOwner = user && collection?.user_id === user.id;
+  const isOwner = !!user && collection?.user_id === user.id;
   const canEdit = isOwner || isCollaborator || isAdminUser;
 
   const fetchCollection = useCallback(async () => {
@@ -64,7 +122,11 @@ export default function CollectionDetailPage() {
     }
     const data = await res.json();
     setCollection(data);
-    setRecipes(data.recipes ?? []);
+    setRecipes((prev) => {
+      // Bewaar favoriet-status over een refresh heen
+      const favs = new Map(prev.map((r) => [r.id, r.is_favorited]));
+      return (data.recipes ?? []).map((r: CollectionRecipe) => ({ ...r, is_favorited: favs.get(r.id) }));
+    });
     setEditTitle(data.title);
     setEditDesc(data.description || '');
     setIsFollowing(data.is_following ?? false);
@@ -111,12 +173,39 @@ export default function CollectionDetailPage() {
         const map: Record<string, number> = {};
         ratings.forEach((r: any) => { map[r.recipe_id] = r.sterren; });
         setUserRatings(map);
-        setInitialUserRatings(map);
       }
     };
     loadUserData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, recipes.length]);
+
+  // Realtime: collection changes
+  useRealtimeRefresh({ table: 'collection_recipes', filter: `collection_id=eq.${params.id}`, onAnyChange: fetchCollection });
+  useRealtimeRefresh({ table: 'collection_follows', filter: `collection_id=eq.${params.id}`, onAnyChange: fetchCollection });
+  useRealtimeRefresh({ table: 'collection_collaborators', filter: `collection_id=eq.${params.id}`, onAnyChange: fetchCollection });
+
+  const sortedRecipes = useMemo(() => {
+    const list = [...recipes];
+    if (sort === 'recent') {
+      list.sort((a, b) => {
+        const ta = new Date(a.added_at ?? a.created_at ?? 0).getTime();
+        const tb = new Date(b.added_at ?? b.created_at ?? 0).getTime();
+        return tb - ta;
+      });
+    } else if (sort === 'snel') {
+      list.sort((a, b) => {
+        const ma = parseMinutes(a.tijd);
+        const mb = parseMinutes(b.tijd);
+        if (ma === null && mb === null) return 0;
+        if (ma === null) return 1;
+        if (mb === null) return -1;
+        return ma - mb;
+      });
+    } else {
+      list.sort((a, b) => (b.average_rating ?? -1) - (a.average_rating ?? -1));
+    }
+    return list;
+  }, [recipes, sort]);
 
   const handleSaveEdit = async () => {
     await fetch(`/api/collections/${params.id}`, {
@@ -125,7 +214,7 @@ export default function CollectionDetailPage() {
       body: JSON.stringify({ title: editTitle, description: editDesc }),
     });
     setCollection((prev: any) => ({ ...prev, title: editTitle, description: editDesc || null }));
-    setEditing(false);
+    setEditOpen(false);
   };
 
   const handleDelete = async () => {
@@ -144,12 +233,8 @@ export default function CollectionDetailPage() {
 
   const handleFavoriteToggle = async (recipeId: string, isFavorited: boolean) => {
     if (!user) return;
-    if (isFavorited) {
-      await fetch(`/api/recipes/${recipeId}/favorite`, { method: 'POST' });
-    } else {
-      await fetch(`/api/recipes/${recipeId}/favorite`, { method: 'DELETE' });
-    }
-    setRecipes((prev) => prev.map((r) => r.id === recipeId ? { ...r, is_favorited: isFavorited } : r));
+    setRecipes((prev) => prev.map((r) => (r.id === recipeId ? { ...r, is_favorited: isFavorited } : r)));
+    await fetch(`/api/recipes/${recipeId}/favorite`, { method: isFavorited ? 'POST' : 'DELETE' });
   };
 
   const handleRate = async (recipeId: string, rating: number) => {
@@ -233,22 +318,24 @@ export default function CollectionDetailPage() {
     setFollowLoading(false);
   };
 
-  const [shareOpen, setShareOpen] = useState(false);
+  const handleShuffle = () => {
+    if (recipes.length === 0) return;
+    const pick = recipes[Math.floor(Math.random() * recipes.length)];
+    router.push(`/recepten/${pick.id}`);
+  };
 
-  // Realtime: collection changes
-  useRealtimeRefresh({ table: 'collection_recipes', filter: `collection_id=eq.${params.id}`, onAnyChange: fetchCollection });
-  useRealtimeRefresh({ table: 'collection_follows', filter: `collection_id=eq.${params.id}`, onAnyChange: fetchCollection });
-  useRealtimeRefresh({ table: 'collection_collaborators', filter: `collection_id=eq.${params.id}`, onAnyChange: fetchCollection });
-  const [dupInfoOpen, setDupInfoOpen] = useState(false);
+  const goBack = () => {
+    if (typeof window !== 'undefined' && window.history.length > 1) router.back();
+    else router.push('/collecties');
+  };
 
   if (loading) {
     return (
-      <div className="space-y-6">
-        <div className="h-8 w-48 animate-pulse rounded bg-gray-200" />
-        <div className="h-4 w-96 animate-pulse rounded bg-gray-200" />
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      <div className="-mx-gutter -mt-3 md:mx-0 md:mt-0">
+        <div className="h-[290px] animate-pulse bg-sunk md:rounded-card-lg" />
+        <div className="space-y-3 px-gutter pt-5 md:px-0">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-64 animate-pulse rounded-xl bg-gray-200" />
+            <div key={i} className="h-[92px] animate-pulse rounded-card bg-sunk" />
           ))}
         </div>
       </div>
@@ -258,8 +345,7 @@ export default function CollectionDetailPage() {
   if (!collection) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
-        <span className="text-5xl">🔍</span>
-        <h2 className="mt-4 text-lg font-semibold text-text-primary">Collectie niet gevonden</h2>
+        <h2 className="font-display text-section font-semibold text-ink">Collectie niet gevonden</h2>
         <Link href="/collecties">
           <Button variant="primary" className="mt-4">Terug naar collecties</Button>
         </Link>
@@ -267,197 +353,277 @@ export default function CollectionDetailPage() {
     );
   }
 
+  const cover: string | null =
+    collection.image_url || recipes.find((r) => r.image_url)?.image_url || null;
+
+  const others = [collection.user, ...collaborators].filter(
+    (p: UserProfile | null | undefined): p is UserProfile =>
+      !!p && p.id !== user?.id && !!p.display_name
+  );
+  const uniqueNames = Array.from(new Set(others.map((p) => p.display_name as string)));
+  const subtitle = `${recipeCountLabel(recipes.length)}${
+    collaborators.length > 0 && uniqueNames.length > 0
+      ? ` · gedeeld met ${joinNames(uniqueNames)}`
+      : !isOwner && collection.user?.display_name
+        ? ` · door ${collection.user.display_name}`
+        : ''
+  }`;
+
+  const rowMenuRecipe = recipes.find((r) => r.id === rowMenuRecipeId) ?? null;
+  const closeRowMenu = () => setRowMenuRecipeId(null);
+
   return (
-    <div className="space-y-6">
-      {/* Back link */}
-      <Link
-        href="/collecties"
-        className="inline-flex items-center gap-1 text-sm text-text-secondary hover:text-primary"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Collecties
-      </Link>
-
-      {/* Header */}
-      <div className="space-y-2">
-        {editing ? (
-          <div className="space-y-3">
-            <input
-              type="text"
-              value={editTitle}
-              onChange={(e) => setEditTitle(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-lg font-bold focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-              autoFocus
-            />
-            <textarea
-              value={editDesc}
-              onChange={(e) => setEditDesc(e.target.value)}
-              rows={2}
-              placeholder="Beschrijving..."
-              className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-            />
-            <div className="flex gap-2">
-              <Button variant="primary" size="sm" onClick={handleSaveEdit}>Opslaan</Button>
-              <Button variant="ghost" size="sm" onClick={() => setEditing(false)}>Annuleren</Button>
-            </div>
-          </div>
-        ) : (
-          <>
-            <h1 className="text-2xl font-bold text-text-primary">{collection.title}</h1>
-            {collection.description && (
-              <p className="text-sm text-text-secondary">{collection.description}</p>
-            )}
-
-            {/* Collection rating */}
-            <div className="flex items-center gap-3">
-              {user ? (
-                <StarRating
-                  value={collectionRating}
-                  onChange={handleCollectionRate}
-                />
-              ) : (
-                <StarRating
-                  value={avgCollectionRating ?? 0}
-                  readOnly
-                />
-              )}
-              <span className="text-xs text-text-muted">({collectionRatingCount})</span>
-            </div>
-
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-1.5 text-sm text-text-muted">
-                {collection.user?.avatar_url ? (
-                  <Image src={collection.user.avatar_url} alt="" width={20} height={20} className="h-5 w-5 rounded-full object-cover" />
-                ) : (
-                  <User className="h-4 w-4" />
-                )}
-                {collection.user?.display_name || 'Gebruiker'}
-              </div>
-              <span className="text-sm text-text-muted">
-                {recipes.length} recept{recipes.length !== 1 ? 'en' : ''}
-              </span>
-            </div>
-
-            {/* Collaborator avatars */}
-            {collaborators.length > 0 && (
-              <div className="flex items-center gap-2">
-                <Users className="h-4 w-4 text-text-muted" />
-                <div className="flex -space-x-2">
-                  {collaborators.slice(0, 5).map((c) => (
-                    c.avatar_url ? (
-                      <Image key={c.id} src={c.avatar_url} alt={c.display_name || ''} title={c.display_name || 'Sous-chef'} width={24} height={24} className="h-6 w-6 rounded-full border-2 border-white object-cover" />
-                    ) : (
-                      <div key={c.id} title={c.display_name || 'Sous-chef'} className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-gray-100">
-                        <User className="h-3 w-3 text-gray-400" />
-                      </div>
-                    )
-                  ))}
-                  {collaborators.length > 5 && (
-                    <div className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-gray-200 text-xs font-medium text-text-secondary">
-                      +{collaborators.length - 5}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </>
+    <div className="-mt-3 md:mt-0">
+      {/* Omslag (full-bleed) */}
+      <div className="relative -mx-gutter h-[290px] overflow-hidden bg-placeholder-2 md:mx-0 md:rounded-card-lg">
+        {cover && (
+          <Image
+            src={cover}
+            alt=""
+            fill
+            priority
+            sizes="(max-width: 1152px) 100vw, 1152px"
+            className="object-cover"
+          />
         )}
+        <div className="photo-fade pointer-events-none absolute inset-0" />
+        <div className="photo-fade-top pointer-events-none absolute inset-x-0 top-0 h-28" />
 
-        {/* Actions */}
-        {!editing && (
-          <div className="flex flex-wrap gap-2 pt-1">
-            {/* Follow + duplicate buttons — only for non-owners, hide follow for collaborators */}
-            {user && !isOwner && (
-              <>
-                {!isCollaborator && (
-                  <Button
-                    variant={isFollowing ? 'ghost' : 'primary'}
-                    size="sm"
-                    onClick={handleFollowToggle}
-                    disabled={followLoading}
-                  >
-                    {isFollowing ? 'Volgend' : 'Volgen'}
-                  </Button>
-                )}
-                <div className="flex items-center">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => { setDuplicateOpen(true); setDuplicateTitle(''); setDuplicateError(''); }}
-                  >
-                    <Copy className="h-4 w-4" />
-                    Kopieer collectie
-                  </Button>
-                  <button
-                    onClick={() => setDupInfoOpen(true)}
-                    className="ml--1 rounded-full p-1 text-text-muted transition-colors hover:bg-gray-100 hover:text-text-primary"
-                    title="Wat doet dit?"
-                  >
-                    <Info className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </>
-            )}
-            <Button variant="ghost" size="sm" onClick={() => setShareOpen(true)}>
-              <Share2 className="h-4 w-4" />
-              Delen
-            </Button>
-            {(isOwner || isAdminUser) && (
-              <>
-                <Button variant="ghost" size="sm" onClick={() => setCollabModalOpen(true)}>
-                  <UserPlus className="h-4 w-4" />
-                  Sous-chefs
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
-                  <Pencil className="h-4 w-4" />
-                  Bewerken
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => setDeleteOpen(true)} className="text-red-500 hover:text-red-600">
-                  <Trash2 className="h-4 w-4" />
-                  Verwijderen
-                </Button>
-              </>
-            )}
+        <div className="absolute inset-x-[18px] top-[calc(env(safe-area-inset-top)+14px)] flex items-start justify-between">
+          <IconButton variant="photo" label="Terug" onClick={goBack}>
+            <ArrowLeft className="h-[19px] w-[19px]" strokeWidth={2} />
+          </IconButton>
+          <div className="flex gap-2.5">
+            <IconButton variant="photo" label="Delen" onClick={() => setShareOpen(true)}>
+              <Share className="h-[19px] w-[19px]" strokeWidth={2} />
+            </IconButton>
+            <IconButton variant="photo" label="Meer acties" aria-haspopup="dialog" onClick={() => setMoreOpen(true)}>
+              <MoreHorizontal className="h-[19px] w-[19px]" strokeWidth={2} />
+            </IconButton>
           </div>
+        </div>
+
+        <div className="pointer-events-none absolute inset-x-5 bottom-[22px] text-white">
+          <h1 className="font-display text-[37px] font-semibold leading-none tracking-[-0.03em] text-pretty md:text-[44px]">
+            {collection.title}
+          </h1>
+          <p className="mt-2 text-sm font-medium">{subtitle}</p>
+        </div>
+      </div>
+
+      {/* Acties */}
+      <div className="flex gap-2.5 pt-[18px]">
+        <button
+          type="button"
+          onClick={handleShuffle}
+          disabled={recipes.length === 0}
+          className="flex h-[50px] flex-1 items-center justify-center gap-2 rounded-[16px] bg-primary text-[15px] font-semibold text-on-primary shadow-btn-primary transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50 md:max-w-xs"
+        >
+          <Shuffle className="h-[18px] w-[18px]" strokeWidth={2} />
+          Kies er één voor me
+        </button>
+        {(isOwner || isAdminUser) && (
+          <button
+            type="button"
+            onClick={() => setEditOpen(true)}
+            className="flex h-[50px] shrink-0 items-center rounded-[16px] border border-line bg-surface px-[18px] text-[15px] font-semibold text-ink hover:bg-gray-50"
+          >
+            Bewerken
+          </button>
         )}
       </div>
 
-      {/* Recipes */}
-      {recipes.length > 0 ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {recipes.map((recipe) => (
-            <div key={recipe.id} className="relative">
-              <RecipeCard
-                recipe={recipe}
-                onFavoriteToggle={handleFavoriteToggle}
-                onRate={user ? handleRate : undefined}
-                userRating={userRatings[recipe.id]}
-                initialUserRating={initialUserRatings[recipe.id] ?? 0}
-                onAddToCollection={user ? () => setAddToCollectionRecipeId(recipe.id) : undefined}
-                isInCollection={collectionRecipeIds.has(recipe.id)}
-              />
-              {canEdit && (
+      {collection.description && (
+        <p className="mt-4 text-[15px] leading-relaxed text-ink-2 text-pretty">{collection.description}</p>
+      )}
+
+      {/* Sorteren */}
+      <div className="scrollbar-none -mx-gutter mt-4 flex gap-2 overflow-x-auto px-gutter md:mx-0 md:px-0">
+        {SORTS.map((s) => (
+          <Chip key={s.key} active={sort === s.key} onClick={() => setSort(s.key)} className="h-9">
+            {s.label}
+          </Chip>
+        ))}
+      </div>
+
+      {/* Recepten */}
+      {sortedRecipes.length > 0 ? (
+        <ul className="mt-3.5 grid grid-cols-1 gap-2.5 md:grid-cols-2">
+          {sortedRecipes.map((recipe) => {
+            const count = recipe.rating_count ?? recipe.ratings?.length ?? 0;
+            const avg = recipe.average_rating ?? 0;
+            const author = recipe.user?.display_name;
+            return (
+              <li
+                key={recipe.id}
+                className="flex items-center gap-3.5 rounded-card border border-line-soft bg-surface p-2"
+              >
+                <Link href={`/recepten/${recipe.id}`} className="flex min-w-0 flex-1 items-center gap-3.5">
+                  <div className="relative h-[76px] w-[76px] shrink-0 overflow-hidden rounded-[15px] bg-placeholder">
+                    {recipe.image_url ? (
+                      <Image src={recipe.image_url} alt="" fill sizes="76px" className="object-cover" />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-ink-4">
+                        <UtensilsCrossed className="h-6 w-6" strokeWidth={1.8} />
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="line-clamp-2 text-[15.5px] font-semibold leading-[1.3] text-ink text-pretty">
+                      {recipe.title}
+                    </h3>
+                    <div className="mt-[5px] flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-meta text-ink-3">
+                      {recipe.tijd && <span>{recipe.tijd}</span>}
+                      {count > 0 && avg > 0 && (
+                        <span className="tabular font-semibold text-primary">★ {formatRating(avg)}</span>
+                      )}
+                      {author && <span>door {author}</span>}
+                    </div>
+                  </div>
+                </Link>
                 <button
                   type="button"
-                  onClick={() => setRemoveRecipeId(recipe.id)}
-                  className="absolute -right-2 -top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white shadow-sm transition-colors hover:bg-red-600"
-                  title="Verwijder uit collectie"
+                  onClick={() => setRowMenuRecipeId(recipe.id)}
+                  aria-label={`Meer acties voor ${recipe.title}`}
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-ink-3 hover:bg-sunk"
                 >
-                  <XIcon className="h-3.5 w-3.5" />
+                  <MoreHorizontal className="h-5 w-5" strokeWidth={2.2} />
                 </button>
-              )}
-            </div>
-          ))}
-        </div>
+              </li>
+            );
+          })}
+        </ul>
       ) : (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <span className="text-5xl">🍽️</span>
-          <h2 className="mt-4 text-lg font-semibold text-text-primary">Nog geen recepten</h2>
-          <p className="mt-1 text-sm text-text-secondary">
-            Voeg recepten toe vanuit de receptdetailpagina.
-          </p>
+        <div className="mt-4 rounded-card-lg border-[1.5px] border-dashed border-line-strong px-5 py-8 text-center text-[14.5px] text-ink-3">
+          Nog geen recepten. Voeg recepten toe vanuit de receptpagina.
         </div>
       )}
+
+      {/* Meer-menu collectie */}
+      <BottomSheet open={moreOpen} onClose={() => setMoreOpen(false)} title={collection.title}>
+        <div className="pb-2">
+          {/* Beoordeling */}
+          <div className="mb-2 rounded-card bg-surface px-4 py-3">
+            <p className="mb-1 text-meta font-semibold text-ink-3">
+              {user ? 'Jouw beoordeling van deze collectie' : 'Beoordeling'}
+            </p>
+            <div className="flex items-center gap-2">
+              {user ? (
+                <StarRating value={collectionRating} onChange={handleCollectionRate} />
+              ) : (
+                <StarRating value={avgCollectionRating ?? 0} readOnly />
+              )}
+              <span className="text-meta text-ink-3">
+                {avgCollectionRating ? `${formatRating(avgCollectionRating)} · ` : ''}
+                {collectionRatingCount} {collectionRatingCount === 1 ? 'stem' : 'stemmen'}
+              </span>
+            </div>
+          </div>
+
+          {user && !isOwner && !isCollaborator && (
+            <SheetAction
+              icon={isFollowing ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+              onClick={() => { handleFollowToggle(); }}
+            >
+              {isFollowing ? 'Niet meer volgen' : 'Collectie volgen'}
+            </SheetAction>
+          )}
+          {user && !isOwner && (
+            <div className="flex items-center">
+              <div className="flex-1">
+                <SheetAction
+                  icon={<Copy className="h-5 w-5" />}
+                  onClick={() => {
+                    setMoreOpen(false);
+                    setDuplicateOpen(true);
+                    setDuplicateTitle('');
+                    setDuplicateError('');
+                  }}
+                >
+                  Kopieer collectie
+                </SheetAction>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setMoreOpen(false); setDupInfoOpen(true); }}
+                aria-label="Wat doet kopiëren?"
+                className="flex h-11 w-11 items-center justify-center rounded-full text-ink-3 hover:bg-sunk"
+              >
+                <Info className="h-[18px] w-[18px]" />
+              </button>
+            </div>
+          )}
+          <SheetAction icon={<Share className="h-5 w-5" />} onClick={() => { setMoreOpen(false); setShareOpen(true); }}>
+            Delen
+          </SheetAction>
+          {(isOwner || isAdminUser) && (
+            <>
+              <SheetAction icon={<UserPlus className="h-5 w-5" />} onClick={() => { setMoreOpen(false); setCollabModalOpen(true); }}>
+                Sous-chefs beheren
+              </SheetAction>
+              <SheetAction icon={<Pencil className="h-5 w-5" />} onClick={() => { setMoreOpen(false); setEditOpen(true); }}>
+                Titel en beschrijving bewerken
+              </SheetAction>
+              <SheetAction icon={<Trash2 className="h-5 w-5" />} danger onClick={() => { setMoreOpen(false); setDeleteOpen(true); }}>
+                Collectie verwijderen
+              </SheetAction>
+            </>
+          )}
+        </div>
+      </BottomSheet>
+
+      {/* Meer-menu recept */}
+      <BottomSheet open={!!rowMenuRecipe} onClose={closeRowMenu} title={rowMenuRecipe?.title}>
+        {rowMenuRecipe && (
+          <div className="pb-2">
+            <SheetAction
+              icon={<ExternalLink className="h-5 w-5" />}
+              onClick={() => { closeRowMenu(); router.push(`/recepten/${rowMenuRecipe.id}`); }}
+            >
+              Recept openen
+            </SheetAction>
+            {user && (
+              <>
+                <SheetAction
+                  icon={
+                    <Heart
+                      className={`h-5 w-5 ${rowMenuRecipe.is_favorited ? 'fill-primary text-primary' : ''}`}
+                    />
+                  }
+                  onClick={() => {
+                    handleFavoriteToggle(rowMenuRecipe.id, !rowMenuRecipe.is_favorited);
+                    closeRowMenu();
+                  }}
+                >
+                  {rowMenuRecipe.is_favorited ? 'Verwijderen uit favorieten' : 'Toevoegen aan favorieten'}
+                </SheetAction>
+                <SheetAction
+                  icon={<FolderPlus className="h-5 w-5" />}
+                  onClick={() => { setAddToCollectionRecipeId(rowMenuRecipe.id); closeRowMenu(); }}
+                >
+                  Toevoegen aan collectie
+                </SheetAction>
+                <div className="px-2 py-3">
+                  <p className="mb-1 text-meta font-semibold text-ink-3">Jouw beoordeling</p>
+                  <StarRating
+                    value={userRatings[rowMenuRecipe.id] ?? 0}
+                    onChange={(rating) => handleRate(rowMenuRecipe.id, rating)}
+                  />
+                </div>
+              </>
+            )}
+            {canEdit && (
+              <SheetAction
+                icon={<Trash2 className="h-5 w-5" />}
+                danger
+                onClick={() => { setRemoveRecipeId(rowMenuRecipe.id); closeRowMenu(); }}
+              >
+                Verwijderen uit collectie
+              </SheetAction>
+            )}
+          </div>
+        )}
+      </BottomSheet>
 
       {/* Add to collection modal */}
       {addToCollectionRecipeId && (
@@ -467,6 +633,36 @@ export default function CollectionDetailPage() {
           onClose={() => setAddToCollectionRecipeId(null)}
         />
       )}
+
+      {/* Bewerken */}
+      <Modal
+        open={editOpen}
+        onClose={() => setEditOpen(false)}
+        title="Collectie bewerken"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setEditOpen(false)}>Annuleren</Button>
+            <Button variant="primary" onClick={handleSaveEdit} disabled={!editTitle.trim()}>Opslaan</Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Input label="Titel" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} autoFocus />
+          <div>
+            <label htmlFor="edit-collection-desc" className="mb-1.5 block text-[13px] font-semibold text-ink-3">
+              Beschrijving
+            </label>
+            <textarea
+              id="edit-collection-desc"
+              value={editDesc}
+              onChange={(e) => setEditDesc(e.target.value)}
+              rows={3}
+              placeholder="Beschrijving..."
+              className="w-full resize-none rounded-input border border-line bg-surface px-3.5 py-2.5 text-[15px] text-ink placeholder:text-ink-4 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/15"
+            />
+          </div>
+        </div>
+      </Modal>
 
       {/* Duplicate modal */}
       <Modal
@@ -478,33 +674,25 @@ export default function CollectionDetailPage() {
             <Button variant="ghost" onClick={() => setDuplicateOpen(false)}>
               Annuleren
             </Button>
-            <Button variant="primary" onClick={handleDuplicate} disabled={!duplicateTitle.trim() || duplicating}>
-              {duplicating ? 'Dupliceren...' : 'Dupliceren'}
+            <Button variant="primary" onClick={handleDuplicate} disabled={!duplicateTitle.trim()} loading={duplicating}>
+              Dupliceren
             </Button>
           </>
         }
       >
         <div className="space-y-3">
-          <p className="text-sm text-text-secondary">
+          <p className="text-sm text-ink-3">
             Alle recepten worden gekopieerd naar een nieuwe collectie van jou. Kies een unieke naam.
           </p>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-text-primary">
-              Titel *
-            </label>
-            <input
-              type="text"
-              value={duplicateTitle}
-              onChange={(e) => { setDuplicateTitle(e.target.value); setDuplicateError(''); }}
-              onKeyDown={(e) => e.key === 'Enter' && handleDuplicate()}
-              placeholder="Naam van je nieuwe collectie..."
-              autoFocus
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-            />
-          </div>
-          {duplicateError && (
-            <p className="text-sm text-red-500">{duplicateError}</p>
-          )}
+          <Input
+            label="Titel *"
+            value={duplicateTitle}
+            onChange={(e) => { setDuplicateTitle(e.target.value); setDuplicateError(''); }}
+            onKeyDown={(e) => e.key === 'Enter' && handleDuplicate()}
+            placeholder="Naam van je nieuwe collectie..."
+            error={duplicateError || undefined}
+            autoFocus
+          />
         </div>
       </Modal>
 
@@ -515,7 +703,7 @@ export default function CollectionDetailPage() {
         title="Sous-chefs beheren"
       >
         <div className="space-y-4">
-          <p className="text-sm text-text-secondary">
+          <p className="text-sm text-ink-3">
             Sous-chefs kunnen recepten toevoegen aan en verwijderen uit deze collectie. Maximum 10 sous-chefs.
           </p>
           <UserPicker

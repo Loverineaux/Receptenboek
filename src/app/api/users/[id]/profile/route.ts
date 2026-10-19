@@ -46,11 +46,25 @@ export async function GET(
     : null;
   const lastRecipeAt = recipes?.[0]?.created_at ?? null;
 
+  // Alleen voor de gebruiker zelf: aantal eigen collecties en keer gekookt.
+  let collectionCount: number | null = null;
+  let cookedCount: number | null = null;
+  if (auth.userId === id) {
+    const [collectionsRes, cookedRes] = await Promise.all([
+      supabaseAdmin.from('collections').select('id', { count: 'exact', head: true }).eq('user_id', id),
+      supabaseAdmin.from('cooked_recipes').select('id', { count: 'exact', head: true }).eq('user_id', id),
+    ]);
+    collectionCount = collectionsRes.count ?? 0;
+    cookedCount = cookedRes.count ?? 0;
+  }
+
   return NextResponse.json({
     profile,
     recipes: recipes ?? [],
     stats: {
       recipe_count: recipeCount,
+      collection_count: collectionCount,
+      cooked_count: cookedCount,
       avg_rating: avgRating,
       last_recipe_at: lastRecipeAt,
       last_seen: profile.last_seen,

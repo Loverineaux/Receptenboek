@@ -23,7 +23,8 @@ export async function GET(
           ingredients(naam),
           tags:recipe_tags(tag:tags(id, name)),
           ratings(sterren, user_id),
-          comments(id)
+          comments(id),
+          user:profiles!recipes_user_id_fkey(id, display_name, avatar_url)
         )
       )
     `)
@@ -46,6 +47,7 @@ export async function GET(
         : null;
       return {
         ...r,
+        added_at: cr.added_at ?? null,
         tags: (r.tags ?? []).map((rt: any) => rt.tag).filter(Boolean),
         average_rating: avg,
         nutrition: null,

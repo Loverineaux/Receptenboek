@@ -6,9 +6,9 @@ import Link from 'next/link';
 import Image from 'next/image';
 import {
   ArrowLeft,
-  Clock,
+  Check,
   Heart,
-  Share2,
+  Share,
   Pencil,
   Trash2,
   ChefHat,
@@ -16,10 +16,13 @@ import {
   Lightbulb,
   User,
   FolderPlus,
-  Calculator,
   Loader2,
   ChevronDown,
   ChevronUp,
+  Flame,
+  Thermometer,
+  MessageCircle,
+  Play,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -32,6 +35,10 @@ import PortieSelector from '@/components/ui/PortieSelector';
 import StarRating from '@/components/ui/StarRating';
 import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
+import Chip from '@/components/ui/Chip';
+import IconButton from '@/components/ui/IconButton';
+import SegmentedControl from '@/components/ui/SegmentedControl';
+import Tag from '@/components/ui/Tag';
 import dynamic from 'next/dynamic';
 import type { ChatMessage } from '@/components/recipes/RecipeChat';
 
@@ -200,6 +207,63 @@ function toFraction(val: number): string {
   return `${whole}${fracStr}`;
 }
 
+/**
+ * Format a scaled amount: amounts >= 20 g/ml are rounded to 10 when the
+ * portions changed; otherwise common fractions / one decimal. Comma decimals.
+ */
+function formatScaledAmount(parsed: number, ratio: number, eenheid?: string | null): string {
+  let scaled = parsed * ratio;
+  const unit = (eenheid ?? '').trim().toLowerCase();
+  if (ratio !== 1 && ['g', 'gram', 'ml'].includes(unit) && scaled >= 20) {
+    scaled = Math.round(scaled / 10) * 10;
+  }
+  return toFraction(scaled).replace('.', ',');
+}
+
+const IMPLIED_ONE_UNITS: Record<string, string> = {
+  handje: 'handje', handjes: 'handje',
+  snufje: 'snufje', snufjes: 'snufje',
+  scheutje: 'scheutje', scheutjes: 'scheutje',
+  bosje: 'bosje', bosjes: 'bosje',
+  takje: 'takje', takjes: 'takje',
+  teentje: 'teentje', teentjes: 'teentje',
+  plakje: 'plakje', plakjes: 'plakje',
+  blaadjes: 'blaadjes',
+};
+
+/** Parse an ingredient row into a display amount (scaled, incl. unit) and name. */
+function describeIngredient(
+  ing: { hoeveelheid: string | null; eenheid: string | null; naam: string | null },
+  ratio: number,
+): { amountText: string; naam: string } {
+  let parsed = parseAmount(ing.hoeveelheid);
+  let eenheid = ing.eenheid ?? '';
+  let naam = ing.naam ?? '';
+
+  // No amount in hoeveelheid: try the name, e.g. "Rucola Handje" or "Avocado Halve"
+  if (parsed === null && naam) {
+    const parts = naam.trim().split(/\s+/);
+    const lastWord = parts[parts.length - 1]?.toLowerCase();
+    if (IMPLIED_ONE_UNITS[lastWord]) {
+      parsed = 1;
+      eenheid = IMPLIED_ONE_UNITS[lastWord];
+      naam = parts.slice(0, -1).join(' ');
+    } else if (DUTCH_AMOUNTS[lastWord] !== undefined) {
+      parsed = DUTCH_AMOUNTS[lastWord];
+      naam = parts.slice(0, -1).join(' ');
+    }
+  }
+
+  const scaled = parsed !== null ? parsed * ratio : null;
+  const amount = parsed !== null ? formatScaledAmount(parsed, ratio, eenheid) : (ing.hoeveelheid ?? '');
+  const displayEenheid = scaled !== null && scaled > 1 && eenheid ? smartUnit(eenheid, scaled) : eenheid;
+
+  return { amountText: [amount, displayEenheid].filter(Boolean).join(' '), naam };
+}
+
+const textareaClass =
+  'min-h-[44px] flex-1 rounded-input border border-line bg-surface px-3.5 py-2.5 text-[15px] text-ink placeholder:text-ink-4 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/15';
+
 // ── tabs ──────────────────────────────────────────
 
 type Tab = 'ingredienten' | 'bereiding' | 'voeding';
@@ -281,6 +345,7 @@ function RecipeDetailPage({
   const [commentLikes, setCommentLikes] = useState<Set<string>>(new Set());
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [collectionModalOpen, setCollectionModalOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [deleting, setDeleting] = useState(false);
   const [scaledSteps, setScaledSteps] = useState<any[] | null>(null);
@@ -500,18 +565,18 @@ function RecipeDetailPage({
   };
 
   const renderComment = (c: any, isReply = false) => (
-    <div key={c.id} className="flex gap-3 rounded-lg border p-3">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-100">
+    <div key={c.id} className="flex gap-3 rounded-card border border-line bg-surface p-3.5">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-sunk">
         {c.user?.avatar_url ? (
           <Image src={c.user.avatar_url} alt="" width={32} height={32} className="h-8 w-8 rounded-full object-cover" />
         ) : (
-          <User className="h-4 w-4 text-text-muted" />
+          <User className="h-4 w-4 text-ink-3" />
         )}
       </div>
       <div className="flex-1">
-        <p className="text-xs font-medium text-text-primary">
+        <p className="text-xs font-semibold text-ink">
           {c.user?.display_name ?? 'Anoniem'}
-          <span className="ml-2 font-normal text-text-muted">
+          <span className="ml-2 font-normal text-ink-3">
             {new Date(c.created_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' })}
             {' '}
             {new Date(c.created_at).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}
@@ -523,7 +588,7 @@ function RecipeDetailPage({
               value={editCommentText}
               onChange={(e) => setEditCommentText(e.target.value)}
               rows={2}
-              className="flex-1 rounded-lg border border-gray-300 bg-surface px-3 py-1.5 text-sm text-text-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              className="flex-1 rounded-input border border-line bg-surface px-3 py-1.5 text-sm text-ink focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/15"
             />
             <div className="flex flex-col gap-1">
               <Button
@@ -544,7 +609,7 @@ function RecipeDetailPage({
             </div>
           </div>
         ) : (
-          <p className="mt-0.5 text-sm text-text-secondary">{c.tekst}</p>
+          <p className="mt-0.5 text-[15px] text-ink-2">{c.tekst}</p>
         )}
         <div className="mt-1.5 flex items-center gap-3">
           {user && (
@@ -552,7 +617,7 @@ function RecipeDetailPage({
               type="button"
               onClick={() => handleLikeComment(c.id)}
               className={`flex items-center gap-1 text-xs transition-colors ${
-                commentLikes.has(c.id) ? 'text-primary font-medium' : 'text-text-muted hover:text-primary'
+                commentLikes.has(c.id) ? 'text-primary font-medium' : 'text-ink-3 hover:text-primary'
               }`}
             >
               <Heart className={`h-3 w-3 ${commentLikes.has(c.id) ? 'fill-primary' : ''}`} />
@@ -563,7 +628,7 @@ function RecipeDetailPage({
             <button
               type="button"
               onClick={() => { setReplyTo(c.id); setCommentText(''); }}
-              className="text-xs text-text-muted hover:text-primary"
+              className="text-xs text-ink-3 hover:text-primary"
             >
               Reageer
             </button>
@@ -576,7 +641,7 @@ function RecipeDetailPage({
                   setEditingComment(c.id);
                   setEditCommentText(c.tekst);
                 }}
-                className="text-xs text-text-muted hover:text-primary"
+                className="text-xs text-ink-3 hover:text-primary"
               >
                 Bewerk
               </button>
@@ -593,7 +658,7 @@ function RecipeDetailPage({
                     },
                   });
                 }}
-                className="text-xs text-text-muted hover:text-red-500"
+                className="text-xs text-ink-3 hover:text-error"
               >
                 Verwijder
               </button>
@@ -699,7 +764,7 @@ function RecipeDetailPage({
   if (!recipe) {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center text-center">
-        <h2 className="text-xl font-semibold text-text-primary">
+        <h2 className="text-xl font-semibold text-ink">
           Recept niet gevonden
         </h2>
         <Link href="/recepten">
@@ -716,681 +781,651 @@ function RecipeDetailPage({
   const isOwner = user?.id === recipe.user_id;
   const canEdit = isOwner || isAdminUser;
   const ratio = portions / recipe.basis_porties;
+  const authorName: string | null = (recipe as any).user?.display_name ?? null;
+  const visibleSteps = scaledSteps || recipe.steps;
+  const checkedCount = recipe.ingredients.filter((i) => checkedIngredients.has(i.id)).length;
+  const averageText =
+    recipe.average_rating !== null ? recipe.average_rating.toFixed(1).replace('.', ',') : null;
 
-  const tabs: { key: Tab; label: string }[] = [
-    { key: 'ingredienten', label: 'Ingredienten' },
-    { key: 'bereiding', label: 'Bereiding' },
-    { key: 'voeding', label: 'Voeding' },
+  const tabOptions: { value: Tab; label: string }[] = [
+    { value: 'ingredienten', label: 'Ingrediënten' },
+    { value: 'bereiding', label: 'Bereiding' },
+    { value: 'voeding', label: 'Voeding' },
   ];
 
+  const temperatuur = (recipe as any).temperatuur as string | null | undefined;
+  const kerntemperatuur = (recipe as any).kerntemperatuur as string | null | undefined;
+  const benodigdheden = ((recipe as any).benodigdheden ?? []) as { id: string; naam: string }[];
+
+  // Nutrition cards (bron of berekend)
+  const nutritionCards: { label: string; value: string; unit: string }[] | null = recipe.nutrition
+    ? [
+        { label: 'Energie', value: String(recipe.nutrition.energie_kcal ?? '–'), unit: 'kcal' },
+        { label: 'Eiwit', value: String(recipe.nutrition.eiwitten ?? '–'), unit: 'g' },
+        { label: 'Koolhydraten', value: String(recipe.nutrition.koolhydraten ?? '–'), unit: 'g' },
+        { label: 'Vet', value: String(recipe.nutrition.vetten ?? '–'), unit: 'g' },
+      ]
+    : calculation
+      ? [
+          { label: 'Energie', value: String(Math.round(calculation.per_portion_kcal)), unit: 'kcal' },
+          { label: 'Eiwit', value: String(Math.round(calculation.per_portion_protein)), unit: 'g' },
+          { label: 'Koolhydraten', value: String(Math.round(calculation.per_portion_carbs)), unit: 'g' },
+          { label: 'Vet', value: String(Math.round(calculation.per_portion_fat)), unit: 'g' },
+        ]
+      : null;
+
+  const sectionTitle = 'font-display text-section font-semibold text-ink';
+  const infoCard = 'rounded-card border border-line bg-surface p-4';
+
   return (
-    <div className="space-y-6 pb-12">
-      {/* ── Hero image ─────────────────────────────── */}
-      <div className="relative -mx-4 -mt-6 overflow-hidden sm:-mx-6 sm:rounded-b-2xl">
-        <div className="relative aspect-[16/7] w-full">
-          {recipe.image_url ? (
-            <Image
-              src={recipe.image_url}
-              alt={recipe.title}
-              fill
-              className="object-cover"
-              priority
-              sizes="100vw"
-            />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary/30 to-primary/60">
-              <span className="text-7xl">🍽️</span>
-            </div>
-          )}
-        </div>
-
-        {/* Gradient overlay */}
-        <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/60 to-transparent" />
-
-        {/* Back button + BronBadge */}
-        <div className="absolute left-4 top-4 flex items-center gap-2">
-          <button
-            onClick={() => router.back()}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-white/80 backdrop-blur-sm transition-colors hover:bg-white"
-          >
-            <ArrowLeft className="h-5 w-5 text-gray-600" />
-          </button>
-          <BronBadge bron={recipe.bron} />
-        </div>
-
-        {/* Actions overlay */}
-        <div className="absolute right-4 top-4 flex gap-2">
-          <button
-            onClick={toggleFavorite}
-            className="flex items-center gap-1 rounded-full bg-white/80 px-2.5 py-2 backdrop-blur-sm transition-colors hover:bg-white"
-          >
-            <Heart
-              className={`h-5 w-5 ${
-                isFavorited
-                  ? 'fill-red-500 text-red-500'
-                  : 'text-gray-600'
-              }`}
-            />
-            {favoriteCount > 0 && (
-              <span className="text-xs font-medium text-gray-600">
-                {favoriteCount}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => setShareOpen(true)}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-white/80 backdrop-blur-sm transition-colors hover:bg-white"
-          >
-            <Share2 className="h-5 w-5 text-gray-600" />
-          </button>
-          {user && (
-            <button
-              onClick={() => setCollectionModalOpen(true)}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-white/80 backdrop-blur-sm transition-colors hover:bg-white"
-              title="Toevoegen aan collectie"
-            >
-              <FolderPlus className="h-5 w-5 text-gray-600" />
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* ── Title area ─────────────────────────────── */}
-      <div>
-        <h1 className="text-2xl font-bold text-text-primary">{recipe.title}</h1>
-
-        {/* Intro/subtitle in styled block */}
-        {recipe.subtitle && (
-          <div className="mt-3 rounded-lg border-l-4 border-primary/40 bg-primary/5 px-4 py-3">
-            <p className="text-sm italic leading-relaxed text-text-secondary">
-              {recipe.subtitle}
-            </p>
-          </div>
-        )}
-
-        <div className="mt-3 flex flex-wrap items-center gap-4">
-          {recipe.tijd && (
-            <div className="flex items-center gap-1 text-sm text-text-secondary">
-              <Clock className="h-4 w-4" />
-              <span>{recipe.tijd}</span>
-            </div>
-          )}
-
-          {recipe.moeilijkheid && (
-            <span className="rounded-full bg-gray-100 px-3 py-0.5 text-xs font-medium text-text-secondary">
-              {recipe.moeilijkheid}
-            </span>
-          )}
-
-          {recipe.average_rating !== null && (
-            <StarRating
-              value={recipe.average_rating}
-              readOnly
-              count={recipe.ratings.length}
-            />
-          )}
-        </div>
-
-        {/* Temperature badges */}
-        {((recipe as any).temperatuur || (recipe as any).kerntemperatuur) && (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {(recipe as any).temperatuur && (() => {
-              const temp = ((recipe as any).temperatuur as string).toLowerCase();
-              const allSteps = (recipe.steps || []).map((s: any) => (s.beschrijving || '').toLowerCase()).join(' ');
-              const isBBQ = temp.includes('bbq') || temp.includes('barbecue') || temp.includes('grill')
-                || allSteps.includes('bbq') || allSteps.includes('barbecue') || allSteps.includes('grillen');
-              const label = isBBQ ? 'BBQ / Grill' : 'Oven';
-              return (
-                <div className="inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-                  <span className="text-lg">🔥</span>
-                  <div>
-                    <span className="text-xs text-amber-600">{label}</span>
-                    <p className="text-sm font-medium text-amber-800">{(recipe as any).temperatuur}</p>
-                  </div>
-                </div>
-              );
-            })()}
-            {(recipe as any).kerntemperatuur && (
-              <div className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
-                <span className="text-lg">🌡️</span>
-                <div>
-                  <span className="text-xs text-red-600">Kerntemperatuur</span>
-                  <p className="text-sm font-medium text-red-800">{(recipe as any).kerntemperatuur}</p>
-                </div>
+    <div className="pb-28 md:pb-24">
+      <div className="-mx-gutter -mt-3 md:mx-0 md:mt-0 md:grid md:grid-cols-[5fr_6fr] md:items-start md:gap-10">
+        {/* ── Foto ───────────────────────────────────── */}
+        <div className="md:sticky md:top-24">
+          <div className="relative h-[340px] overflow-hidden bg-placeholder md:h-[520px] md:rounded-card-lg">
+            {recipe.image_url ? (
+              <Image
+                src={recipe.image_url}
+                alt={recipe.title}
+                fill
+                className="object-cover"
+                priority
+                sizes="(min-width: 768px) 45vw, 100vw"
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center bg-placeholder">
+                <ChefHat className="h-16 w-16 text-placeholder-2" strokeWidth={1.5} />
               </div>
             )}
-          </div>
-        )}
+            <div className="photo-fade-top pointer-events-none absolute inset-x-0 top-0 h-[120px]" />
 
-        {/* Tags — owner can edit category tags */}
-        <div className="mt-3 flex flex-wrap gap-2">
-          {canEdit ? (
-            <>
-              {CATEGORY_LIST.map((cat) => {
-                const hasTag = recipe.tags.some((t) => t.name.toLowerCase() === cat.toLowerCase());
+            <div className="absolute inset-x-[18px] top-[calc(env(safe-area-inset-top)+12px)] flex justify-between md:top-4">
+              <IconButton variant="photo" label="Terug" onClick={() => router.back()}>
+                <ArrowLeft className="h-5 w-5" strokeWidth={2} />
+              </IconButton>
+              <div className="flex gap-2.5">
+                <IconButton variant="photo" label="Recept delen" onClick={() => setShareOpen(true)}>
+                  <Share className="h-[19px] w-[19px]" strokeWidth={2} />
+                </IconButton>
+                <IconButton
+                  variant="photo"
+                  label={isFavorited ? 'Verwijder uit favorieten' : 'Zet in favorieten'}
+                  aria-pressed={isFavorited}
+                  onClick={toggleFavorite}
+                >
+                  <Heart
+                    className={`h-[19px] w-[19px] ${isFavorited ? 'fill-primary text-primary' : ''}`}
+                    strokeWidth={2}
+                  />
+                </IconButton>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Inhoud ─────────────────────────────────── */}
+        <div className="relative -mt-[30px] min-w-0 rounded-t-sheet bg-background px-gutter pt-6 md:mt-0 md:rounded-none md:bg-transparent md:p-0">
+          {/* Bron + auteur */}
+          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-meta text-ink-3">
+            <BronBadge bron={recipe.bron} />
+            {authorName && <span>door {authorName}</span>}
+            {favoriteCount > 0 && (
+              <span className="tabular">
+                {authorName || recipe.bron ? '· ' : ''}
+                {favoriteCount} {favoriteCount === 1 ? 'favoriet' : 'favorieten'}
+              </span>
+            )}
+          </div>
+
+          <h1 className="text-pretty mt-3 font-display text-detail-title font-semibold text-ink">
+            {recipe.title}
+          </h1>
+
+          {/* Receptkaart */}
+          <div className="mt-5 grid grid-cols-[1fr_1fr_1.25fr] rounded-card border border-line bg-surface">
+            <div className="border-r border-line-soft px-3.5 py-[13px]">
+              <div className="text-xs text-ink-3">Tijd</div>
+              <div className="mt-[3px] text-[17px] font-semibold text-ink">{recipe.tijd || '–'}</div>
+            </div>
+            <div className="border-r border-line-soft px-3.5 py-[13px]">
+              <div className="text-xs text-ink-3">Beoordeling</div>
+              <div className="mt-[3px] text-[17px] font-semibold text-ink">
+                {averageText ? (
+                  <>
+                    <span className="text-primary">★</span> {averageText}
+                  </>
+                ) : (
+                  '–'
+                )}
+              </div>
+            </div>
+            <div className="py-2.5 pl-3.5 pr-2.5">
+              <div className="text-xs text-ink-3">Personen</div>
+              <PortieSelector value={portions} onChange={handlePortionChange} />
+            </div>
+          </div>
+
+          {/* Intro */}
+          {recipe.subtitle && (
+            <p className="text-body text-pretty mt-[18px] text-ink-2">{recipe.subtitle}</p>
+          )}
+
+          {/* Tags (alleen lezen; bewerken staat onderaan bij "Beheer") */}
+          {(recipe.tags.length > 0 || recipe.moeilijkheid) && (
+            <div className="mt-3.5 flex flex-wrap gap-2">
+              {recipe.moeilijkheid && <Tag variant="outline">{recipe.moeilijkheid}</Tag>}
+              {recipe.tags.map((tag) => (
+                <Tag key={tag.id} variant="outline">
+                  {tag.name}
+                </Tag>
+              ))}
+            </div>
+          )}
+
+          {/* Tabs */}
+          <div data-tour="recipe-tabs" className="mt-6">
+            <SegmentedControl options={tabOptions} value={tab} onChange={setTab} />
+          </div>
+
+          {/* ── Ingrediënten ───────────────────────── */}
+          {tab === 'ingredienten' && (
+            <div data-tour="recipe-ingredients" className="mt-2">
+              {recipe.ingredients.map((ing) => {
+                const { amountText, naam } = describeIngredient(ing, ratio);
+                const isChecked = checkedIngredients.has(ing.id);
                 return (
                   <button
-                    key={cat}
+                    key={ing.id}
                     type="button"
-                    onClick={async () => {
-                      // Toggle tag via API (handles RLS for admin)
-                      const currentTags = recipe.tags.map((t) => t.name);
-                      const newTags = hasTag
-                        ? currentTags.filter((t) => t.toLowerCase() !== cat.toLowerCase())
-                        : [...currentTags, cat];
-
-                      await fetch(`/api/recipes/${recipe.id}`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ tags: newTags }),
-                      });
-                      fetchRecipe();
-                    }}
-                    className={`rounded-full px-3 py-0.5 text-xs font-medium transition-colors ${
-                      hasTag
-                        ? 'bg-primary text-white'
-                        : 'bg-gray-100 text-text-muted hover:bg-gray-200'
-                    }`}
+                    role="checkbox"
+                    aria-checked={isChecked}
+                    onClick={() => toggleIngredientChecked(ing.id)}
+                    className="flex min-h-[52px] w-full items-center gap-3.5 border-b border-line py-2 text-left"
                   >
-                    {hasTag ? '✓ ' : ''}{cat}
+                    <span
+                      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border-[1.5px] transition-colors ${
+                        isChecked ? 'border-primary bg-primary' : 'border-line-strong bg-transparent'
+                      }`}
+                    >
+                      {isChecked && <Check className="h-3.5 w-3.5 text-on-primary" strokeWidth={3} />}
+                    </span>
+                    <span
+                      className={`tabular w-[78px] shrink-0 text-[15px] font-semibold ${
+                        isChecked ? 'text-ink-4' : 'text-ink'
+                      }`}
+                    >
+                      {amountText}
+                    </span>
+                    <span
+                      className={`min-w-0 flex-1 text-[15px] ${
+                        isChecked ? 'text-ink-4 line-through' : 'text-ink'
+                      }`}
+                    >
+                      {naam}
+                    </span>
                   </button>
                 );
               })}
-              {/* Non-category tags (read-only) */}
-              {recipe.tags
-                .filter((t) => !CATEGORY_LIST.some((c) => c.toLowerCase() === t.name.toLowerCase()))
-                .map((tag) => (
-                  <span
-                    key={tag.id}
-                    className="rounded-full bg-primary/10 px-3 py-0.5 text-xs font-medium text-primary"
-                  >
-                    {tag.name}
-                  </span>
-                ))}
-            </>
-          ) : (
-            recipe.tags.map((tag) => (
-              <span
-                key={tag.id}
-                className="rounded-full bg-primary/10 px-3 py-0.5 text-xs font-medium text-primary"
-              >
-                {tag.name}
-              </span>
-            ))
-          )}
-        </div>
-
-        {/* Owner actions */}
-        {canEdit && (
-          <div className="mt-4 flex gap-2">
-            <Link href={`/recepten/${recipe.id}/bewerk`}>
-              <Button variant="secondary" size="sm">
-                <Pencil className="h-4 w-4" />
-                Bewerken
-              </Button>
-            </Link>
-            <Button
-              variant="danger"
-              size="sm"
-              onClick={() => setDeleteModalOpen(true)}
-            >
-              <Trash2 className="h-4 w-4" />
-              Verwijderen
-            </Button>
-          </div>
-        )}
-      </div>
-
-      {/* ── Portie selector + Kookmodus ────────────── */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span className="text-sm font-medium text-text-primary">Porties:</span>
-          <PortieSelector value={portions} onChange={handlePortionChange} />
-        </div>
-        <Button
-          data-tour="recipe-cook-mode"
-          variant="primary"
-          size="sm"
-          onClick={() => setCookMode(true)}
-        >
-          <ChefHat className="h-4 w-4" />
-          Kookmodus
-        </Button>
-      </div>
-
-      {/* ── Rate (interactive for logged-in users) ── */}
-      {user && (
-        <div className="flex items-center gap-3">
-          <span className="text-sm font-medium text-text-primary">
-            Jouw beoordeling:
-          </span>
-          <StarRating value={userRating} onChange={handleRate} />
-          {userRating > 0 && (
-            <button
-              onClick={() => handleRate(userRating)}
-              className="flex items-center gap-0.5 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary hover:bg-primary/20"
-              title="Beoordeling verwijderen"
-            >
-              Jij: {userRating}★ ✕
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* ── Tabs ───────────────────────────────────── */}
-      <div data-tour="recipe-tabs" className="flex border-b">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`px-4 py-2 text-sm font-medium transition-colors ${
-              tab === t.key
-                ? 'border-b-2 border-primary text-primary'
-                : 'text-text-secondary hover:text-text-primary'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {/* ── Tab content ────────────────────────────── */}
-      {tab === 'ingredienten' && (
-        <div data-tour="recipe-ingredients" className="space-y-1">
-          {recipe.ingredients.map((ing) => {
-            // Try to parse amount from hoeveelheid field first
-            let parsed = parseAmount(ing.hoeveelheid);
-            let eenheid = ing.eenheid ?? '';
-            let naam = ing.naam ?? '';
-
-            // If no amount in hoeveelheid, try to extract from naam
-            // e.g. "Rucola Handje" → amount=1, eenheid=handje, naam=Rucola
-            // e.g. "Avocado Halve" → amount=0.5, naam=Avocado
-            if (parsed === null && naam) {
-              const parts = naam.trim().split(/\s+/);
-              const lastWord = parts[parts.length - 1]?.toLowerCase();
-
-              // Check if last word is a unit implying quantity 1
-              const impliedOneUnits: Record<string, string> = {
-                'handje': 'handje', 'handjes': 'handje',
-                'snufje': 'snufje', 'snufjes': 'snufje',
-                'scheutje': 'scheutje', 'scheutjes': 'scheutje',
-                'bosje': 'bosje', 'bosjes': 'bosje',
-                'takje': 'takje', 'takjes': 'takje',
-                'teentje': 'teentje', 'teentjes': 'teentje',
-                'plakje': 'plakje', 'plakjes': 'plakje',
-                'blaadjes': 'blaadjes',
-              };
-
-              if (impliedOneUnits[lastWord]) {
-                parsed = 1;
-                eenheid = impliedOneUnits[lastWord];
-                naam = parts.slice(0, -1).join(' ');
-              } else {
-                // Check for Dutch word amounts: "Avocado Halve"
-                const wordAmount = DUTCH_AMOUNTS[lastWord];
-                if (wordAmount !== undefined) {
-                  parsed = typeof wordAmount === 'number' ? wordAmount : parseAmount(wordAmount);
-                  naam = parts.slice(0, -1).join(' ');
-                }
-              }
-            }
-
-            const scaled = parsed !== null ? parsed * ratio : null;
-            const amount = scaled !== null ? toFraction(scaled) : (ing.hoeveelheid ?? '');
-            // Pluralize unit if scaled > 1
-            const displayEenheid = scaled !== null && scaled > 1 && eenheid
-              ? smartUnit(eenheid, scaled)
-              : eenheid;
-
-            const isChecked = checkedIngredients.has(ing.id);
-            return (
-              <label
-                key={ing.id}
-                className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-gray-50"
-              >
-                <input
-                  type="checkbox"
-                  checked={isChecked}
-                  onChange={() => toggleIngredientChecked(ing.id)}
-                  className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary/20"
-                />
-                <span
-                  className={`flex-1 text-sm ${
-                    isChecked ? 'text-text-muted line-through' : 'text-text-primary'
-                  }`}
-                >
-                  {amount && (
-                    <span className="font-semibold">{amount}</span>
-                  )}{' '}
-                  {displayEenheid && (
-                    <span className="text-text-secondary">{displayEenheid}</span>
-                  )}{' '}
-                  {naam}
-                </span>
-              </label>
-            );
-          })}
-        </div>
-      )}
-
-      {tab === 'bereiding' && (
-        <div data-tour="recipe-steps" className="space-y-6">
-          {scalingSteps && (
-            <div className="flex items-center gap-2 rounded-lg bg-primary/5 px-4 py-2 text-sm text-primary">
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-              Bereiding aanpassen voor {portions} porties...
+              {recipe.ingredients.length > 0 && (
+                <div className="tabular mt-3 text-meta text-ink-3">
+                  {checkedCount} van {recipe.ingredients.length} klaargezet
+                </div>
+              )}
             </div>
           )}
-          <ol className="space-y-6">
-            {(scaledSteps || recipe.steps).map((step, idx) => (
-              <li key={step.id || idx} className="flex gap-4">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-white">
-                  {idx + 1}
+
+          {/* ── Bereiding ──────────────────────────── */}
+          {tab === 'bereiding' && (
+            <div data-tour="recipe-steps" className="mt-5">
+              {scalingSteps && (
+                <div className="mb-4 flex items-center gap-2 rounded-input bg-primary-tint px-4 py-2.5 text-sm text-primary">
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                  Bereiding aanpassen voor {portions} porties...
                 </div>
-                <div className="flex-1 space-y-2">
-                  {step.titel && (
-                    <h4 className="font-semibold text-text-primary">
-                      {step.titel}
-                    </h4>
-                  )}
-                  <p className="text-sm text-text-secondary whitespace-pre-line">
-                    {scaledSteps ? step.beschrijving : scaleStepText(step.beschrijving, ratio)}
-                  </p>
-                  {step.afbeelding_url && (
-                    <div className="relative mt-2 h-48 w-full">
-                      <Image
-                        src={step.afbeelding_url}
-                        alt={`Stap ${idx + 1}`}
-                        fill
-                        className="rounded-lg object-cover"
-                        sizes="(max-width: 768px) 100vw, 50vw"
-                      />
-                    </div>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ol>
-        </div>
-      )}
-
-      {tab === 'voeding' && (() => {
-        const hasSourceNutrition = !!recipe.nutrition;
-
-        return (
-          <div data-tour="recipe-nutrition" className="space-y-4">
-            {/* Source nutrition from recipe (AH, HelloFresh, etc.) */}
-            {hasSourceNutrition && (
-              <div className="overflow-hidden rounded-lg border">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-2 text-left font-medium text-text-secondary">Voedingswaarde</th>
-                      <th className="px-4 py-2 text-right font-medium text-text-secondary">Per portie</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {[
-                      ['Energie', recipe.nutrition!.energie_kcal, 'kcal'],
-                      ['Energie', recipe.nutrition!.energie_kj, 'kJ'],
-                      ['Vetten', recipe.nutrition!.vetten, 'g'],
-                      ['  waarvan verzadigd', recipe.nutrition!.verzadigd, 'g'],
-                      ['Koolhydraten', recipe.nutrition!.koolhydraten, 'g'],
-                      ['  waarvan suikers', recipe.nutrition!.suikers, 'g'],
-                      ['Vezels', recipe.nutrition!.vezels, 'g'],
-                      ['Eiwitten', recipe.nutrition!.eiwitten, 'g'],
-                      ['Zout', recipe.nutrition!.zout, 'g'],
-                    ].map(([label, value, unit], idx) =>
-                      value != null && value !== '' ? (
-                        <tr key={`${label}-${idx}`}>
-                          <td className="px-4 py-1.5 text-text-primary">{label as string}</td>
-                          <td className="px-4 py-1.5 text-right text-text-secondary">{value as string} {unit as string}</td>
-                        </tr>
-                      ) : null
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {/* Calculated nutrition — only when no source nutrition */}
-            {!hasSourceNutrition && calculating && (
-              <div className="flex items-center justify-center gap-2 py-8 text-sm text-text-muted">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Voedingswaarden berekenen...
-              </div>
-            )}
-
-            {!hasSourceNutrition && calculation && (
-              <>
-                <div className="rounded-lg border bg-surface p-4">
-                  <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-text-muted">Berekend uit ingrediënten</div>
-                  <div className="mb-3 text-center">
-                    <div className="text-3xl font-bold text-text-primary">{Math.round(calculation.per_portion_kcal)} kcal</div>
-                    <div className="text-xs text-text-muted">per portie</div>
-                  </div>
-                  <div className="space-y-2">
-                    {[
-                      { label: 'Eiwitten', value: calculation.per_portion_protein, color: 'bg-blue-500' },
-                      { label: 'Vetten', value: calculation.per_portion_fat, color: 'bg-yellow-500' },
-                      { label: 'Koolhydraten', value: calculation.per_portion_carbs, color: 'bg-green-500' },
-                    ].map(({ label, value, color }) => {
-                      const total = calculation.per_portion_protein + calculation.per_portion_fat + calculation.per_portion_carbs;
-                      const pct = total > 0 ? (value / total) * 100 : 0;
-                      return (
-                        <div key={label} className="flex items-center gap-3 text-sm">
-                          <span className="w-24 text-text-secondary">{label}</span>
-                          <div className="flex-1">
-                            <div className="h-2 overflow-hidden rounded-full bg-gray-200">
-                              <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
-                            </div>
-                          </div>
-                          <span className="w-12 text-right text-text-primary">{value.toFixed(1)}g</span>
+              )}
+              <ol className="flex flex-col gap-[18px]">
+                {visibleSteps.map((step, idx) => (
+                  <li key={step.id || idx} className="flex gap-3.5">
+                    <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-primary-tint text-[13px] font-bold text-primary">
+                      {idx + 1}
+                    </span>
+                    <div className="min-w-0 flex-1 space-y-2 pt-1">
+                      {step.titel && <h4 className="text-[15.5px] font-semibold text-ink">{step.titel}</h4>}
+                      <p className="text-body text-pretty whitespace-pre-line text-ink-2">
+                        {scaledSteps ? step.beschrijving : scaleStepText(step.beschrijving, ratio)}
+                      </p>
+                      {step.afbeelding_url && (
+                        <div className="relative mt-2 h-48 w-full overflow-hidden rounded-card">
+                          <Image
+                            src={step.afbeelding_url}
+                            alt={`Stap ${idx + 1}`}
+                            fill
+                            className="object-cover"
+                            sizes="(max-width: 768px) 100vw, 50vw"
+                          />
                         </div>
-                      );
-                    })}
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+
+          {/* ── Voeding ────────────────────────────── */}
+          {tab === 'voeding' && (
+            <div data-tour="recipe-nutrition" className="mt-[18px]">
+              {!recipe.nutrition && calculating && (
+                <div className="flex items-center justify-center gap-2 py-8 text-sm text-ink-3">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Voedingswaarden berekenen...
+                </div>
+              )}
+
+              {nutritionCards && (
+                <div className="grid grid-cols-2 gap-2.5">
+                  {nutritionCards.map((n) => (
+                    <div key={n.label} className="rounded-[18px] border border-line bg-surface px-4 py-3.5">
+                      <div className="text-[12.5px] text-ink-3">{n.label}</div>
+                      <div className="mt-0.5 font-display text-[27px] font-semibold leading-[1.1] tracking-[-0.03em] text-ink">
+                        {n.value}
+                        <span className="ml-[3px] font-sans text-sm font-normal tracking-normal text-ink-3">
+                          {n.unit}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="col-span-2 text-meta text-ink-3">
+                    {recipe.nutrition
+                      ? 'Per portie · volgens de bron'
+                      : 'Per portie · schatting op basis van ingrediënten'}
                   </div>
                 </div>
+              )}
 
-                {/* Expandable ingredient coverage */}
-                <div className="space-y-1">
+              {/* Extra waarden uit de bron */}
+              {recipe.nutrition && (
+                <div className="mt-3 overflow-hidden rounded-card border border-line bg-surface">
+                  <table className="w-full text-sm">
+                    <tbody className="divide-y divide-line-soft">
+                      {[
+                        ['Energie', recipe.nutrition.energie_kj, 'kJ'],
+                        ['Waarvan verzadigd', recipe.nutrition.verzadigd, 'g'],
+                        ['Waarvan suikers', recipe.nutrition.suikers, 'g'],
+                        ['Vezels', recipe.nutrition.vezels, 'g'],
+                        ['Zout', recipe.nutrition.zout, 'g'],
+                      ].map(([label, value, unit]) =>
+                        value != null && value !== '' ? (
+                          <tr key={label as string}>
+                            <td className="px-4 py-2.5 text-ink-2">{label as string}</td>
+                            <td className="tabular px-4 py-2.5 text-right font-medium text-ink">
+                              {value as string} {unit as string}
+                            </td>
+                          </tr>
+                        ) : null
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Dekking van de berekening */}
+              {!recipe.nutrition && calculation && (
+                <div className="mt-4 space-y-2">
                   <button
                     type="button"
                     onClick={() => setNutritionOpen(!nutritionOpen)}
-                    className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-xs transition-colors hover:bg-gray-50"
+                    aria-expanded={nutritionOpen}
+                    className="flex min-h-[44px] w-full items-center justify-between rounded-input px-1 text-sm transition-colors hover:bg-sunk"
                   >
-                    <span className={`font-medium ${
-                      calculation.coverage > 0.8 ? 'text-green-600' : calculation.coverage > 0.5 ? 'text-orange-500' : 'text-red-500'
-                    }`}>
+                    <span className="font-medium text-ink-2">
                       {calculation.matched_count} van {calculation.total_count} ingrediënten berekend
                     </span>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-text-muted">{Math.round(calculation.coverage * 100)}%</span>
-                      {nutritionOpen ? <ChevronUp className="h-3.5 w-3.5 text-text-muted" /> : <ChevronDown className="h-3.5 w-3.5 text-text-muted" />}
-                    </div>
+                    <span className="flex items-center gap-1.5 text-ink-3">
+                      {Math.round(calculation.coverage * 100)}%
+                      {nutritionOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    </span>
                   </button>
-
-                  <div className="px-2">
-                    <div className="h-1.5 w-full rounded-full bg-gray-200">
-                      <div
-                        className={`h-full rounded-full transition-all ${
-                          calculation.coverage > 0.8 ? 'bg-green-500' : calculation.coverage > 0.5 ? 'bg-orange-400' : 'bg-red-400'
-                        }`}
-                        style={{ width: `${calculation.coverage * 100}%` }}
-                      />
-                    </div>
+                  <div className="h-1.5 w-full rounded-full bg-line-soft">
+                    <div
+                      className="h-full rounded-full bg-primary transition-all"
+                      style={{ width: `${Math.min(100, calculation.coverage * 100)}%` }}
+                    />
                   </div>
-
                   {nutritionOpen && (
-                    <div className="mx-1 rounded-lg border bg-surface p-3 shadow-sm">
+                    <div className="rounded-card border border-line bg-surface p-3">
                       <div className="flex flex-wrap gap-1.5">
                         {(calculation.matched || []).map((ing: string, i: number) => (
-                          <span key={`m-${i}`} className="rounded-full bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700">
+                          <span
+                            key={`m-${i}`}
+                            className="rounded-chip bg-primary-tint px-2.5 py-1 text-xs font-medium text-primary"
+                          >
                             {ing}
                           </span>
                         ))}
                         {(calculation.missing || []).map((ing: string, i: number) => (
-                          <span key={`x-${i}`} className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600">
-                            {ing}
+                          <span
+                            key={`x-${i}`}
+                            className="rounded-chip bg-sunk px-2.5 py-1 text-xs font-medium text-ink-3"
+                          >
+                            {ing} (ontbreekt)
                           </span>
                         ))}
                       </div>
                     </div>
                   )}
                 </div>
-              </>
-            )}
+              )}
 
-            {!hasSourceNutrition && !calculating && !calculation && (
-              <p className="py-8 text-center text-sm text-text-secondary">
-                Geen voedingswaarden beschikbaar.
-              </p>
-            )}
-          </div>
-        );
-      })()}
-
-      {/* ── Extra info cards (only show when data exists) ── */}
-      {(recipe.weetje || recipe.allergenen || (recipe as any).benodigdheden?.length > 0) && (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          {recipe.weetje && (
-            <div className="rounded-lg border bg-amber-50 p-4">
-              <div className="flex items-center gap-2 font-semibold text-amber-800">
-                <Lightbulb className="h-4 w-4" />
-                Weetje
-              </div>
-              <p className="mt-1 text-sm text-amber-700">{recipe.weetje}</p>
+              {!recipe.nutrition && !calculating && !calculation && (
+                <p className="py-8 text-center text-sm text-ink-3">Geen voedingswaarden beschikbaar.</p>
+              )}
             </div>
           )}
 
-          {recipe.allergenen && (
-            <div className="rounded-lg border bg-red-50 p-4">
-              <div className="flex items-center gap-2 font-semibold text-red-800">
-                <AlertTriangle className="h-4 w-4" />
-                Allergenen
-              </div>
-              <p className="mt-1 text-sm text-red-700">{recipe.allergenen}</p>
-            </div>
-          )}
-
-          {(recipe as any).benodigdheden?.length > 0 && (
-            <div className="rounded-lg border bg-blue-50 p-4">
-              <div className="flex items-center gap-2 font-semibold text-blue-800">
-                <ChefHat className="h-4 w-4" />
-                Benodigdheden
-              </div>
-              <ul className="mt-1 space-y-1">
-                {(recipe as any).benodigdheden.map((b: any) => (
-                  <li key={b.id} className="text-sm text-blue-700">
-                    • {b.naam}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── Comments with replies ────────────────── */}
-      <section data-tour="recipe-comments" className="space-y-4">
-        <h2 className="text-lg font-semibold text-text-primary">
-          Reacties {comments.length > 0 && <span className="text-text-muted font-normal">({comments.length})</span>}
-        </h2>
-
-        {/* Comment input */}
-        {user && !replyTo && (
-          <div className="flex gap-2">
-            <textarea
-              value={commentText}
-              onChange={(e) => setCommentText(e.target.value)}
-              placeholder="Schrijf een reactie..."
-              rows={2}
-              className="flex-1 rounded-lg border border-gray-300 bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-            />
-            <Button
-              variant="primary"
-              size="sm"
-              loading={submittingComment}
-              onClick={() => handleComment()}
-              className="self-end"
-            >
-              Plaatsen
-            </Button>
-          </div>
-        )}
-
-        {comments.length === 0 && (
-          <p className="text-sm text-text-secondary">
-            Nog geen reacties. Wees de eerste!
-          </p>
-        )}
-
-        {/* Threaded comments */}
-        <div className="space-y-3">
-          {comments
-            .filter((c: any) => !c.parent_id)
-            .map((c: any) => {
-              const replies = comments.filter((r: any) => r.parent_id === c.id);
-              return (
-                <div key={c.id}>
-                  {renderComment(c)}
-                  {/* Replies */}
-                  {replies.length > 0 && (
-                    <div className="ml-10 mt-2 space-y-2 border-l-2 border-gray-100 pl-4">
-                      {replies.map((r: any) => renderComment(r, true))}
-                    </div>
-                  )}
-                  {/* Reply input */}
-                  {replyTo === c.id && user && (
-                    <div className="ml-10 mt-2 flex gap-2">
-                      <textarea
-                        value={commentText}
-                        onChange={(e) => setCommentText(e.target.value)}
-                        placeholder={`Reageer op ${c.user?.display_name || 'Anoniem'}...`}
-                        rows={1}
-                        autoFocus
-                        className="flex-1 rounded-lg border border-gray-300 bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                      />
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        loading={submittingComment}
-                        onClick={() => handleComment(c.id)}
-                      >
-                        Reageer
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => { setReplyTo(null); setCommentText(''); }}
-                      >
-                        Annuleer
-                      </Button>
+          {/* ── Extra info ─────────────────────────── */}
+          {(recipe.weetje || recipe.allergenen || benodigdheden.length > 0 || temperatuur || kerntemperatuur) && (
+            <div className="mt-8 space-y-3">
+              {(temperatuur || kerntemperatuur) && (
+                <div className="grid grid-cols-2 gap-2.5">
+                  {temperatuur &&
+                    (() => {
+                      const temp = temperatuur.toLowerCase();
+                      const allSteps = (recipe.steps || [])
+                        .map((s: any) => (s.beschrijving || '').toLowerCase())
+                        .join(' ');
+                      const isBBQ =
+                        temp.includes('bbq') ||
+                        temp.includes('barbecue') ||
+                        temp.includes('grill') ||
+                        allSteps.includes('bbq') ||
+                        allSteps.includes('barbecue') ||
+                        allSteps.includes('grillen');
+                      return (
+                        <div className="rounded-[18px] border border-line bg-surface px-4 py-3">
+                          <div className="flex items-center gap-1.5 text-[12.5px] text-ink-3">
+                            <Flame className="h-3.5 w-3.5" strokeWidth={2} />
+                            {isBBQ ? 'BBQ / Grill' : 'Oven'}
+                          </div>
+                          <div className="mt-0.5 text-[17px] font-semibold text-ink">{temperatuur}</div>
+                        </div>
+                      );
+                    })()}
+                  {kerntemperatuur && (
+                    <div className="rounded-[18px] border border-line bg-surface px-4 py-3">
+                      <div className="flex items-center gap-1.5 text-[12.5px] text-ink-3">
+                        <Thermometer className="h-3.5 w-3.5" strokeWidth={2} />
+                        Kerntemperatuur
+                      </div>
+                      <div className="mt-0.5 text-[17px] font-semibold text-ink">{kerntemperatuur}</div>
                     </div>
                   )}
                 </div>
-              );
-            })}
+              )}
+
+              {recipe.weetje && (
+                <div className="rounded-card bg-sunk p-4">
+                  <div className="flex items-center gap-2 text-[15px] font-semibold text-ink">
+                    <Lightbulb className="h-4 w-4 text-primary" strokeWidth={2} />
+                    Weetje
+                  </div>
+                  <p className="text-pretty mt-1 text-[15px] leading-relaxed text-ink-2">{recipe.weetje}</p>
+                </div>
+              )}
+
+              {recipe.allergenen && (
+                <div className={infoCard}>
+                  <div className="flex items-center gap-2 text-[15px] font-semibold text-ink">
+                    <AlertTriangle className="h-4 w-4 text-error" strokeWidth={2} />
+                    Allergenen
+                  </div>
+                  <p className="mt-1 text-[15px] leading-relaxed text-ink-2">{recipe.allergenen}</p>
+                </div>
+              )}
+
+              {benodigdheden.length > 0 && (
+                <div className={infoCard}>
+                  <div className="flex items-center gap-2 text-[15px] font-semibold text-ink">
+                    <ChefHat className="h-4 w-4 text-primary" strokeWidth={2} />
+                    Benodigdheden
+                  </div>
+                  <ul className="mt-1.5 space-y-1">
+                    {benodigdheden.map((b) => (
+                      <li key={b.id} className="flex gap-2 text-[15px] text-ink-2">
+                        <span className="text-ink-4">•</span>
+                        {b.naam}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Jouw beoordeling ───────────────────── */}
+          {user && (
+            <div className={`${infoCard} mt-8 flex flex-wrap items-center justify-between gap-3`}>
+              <span className="text-[15px] font-semibold text-ink">Jouw beoordeling</span>
+              <div className="flex items-center gap-2">
+                <StarRating value={userRating} onChange={handleRate} />
+                {userRating > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => handleRate(userRating)}
+                    className="flex h-8 items-center rounded-chip bg-primary-tint px-2.5 text-xs font-semibold text-primary hover:bg-line"
+                    aria-label="Beoordeling verwijderen"
+                  >
+                    {userRating}★ ✕
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── Reacties ───────────────────────────── */}
+          <section data-tour="recipe-comments" className="mt-8 space-y-4">
+            <h2 className={sectionTitle}>
+              Reacties{' '}
+              {comments.length > 0 && <span className="font-sans text-base font-normal text-ink-3">({comments.length})</span>}
+            </h2>
+
+            {user && !replyTo && (
+              <div className="flex gap-2">
+                <textarea
+                  value={commentText}
+                  onChange={(e) => setCommentText(e.target.value)}
+                  placeholder="Schrijf een reactie..."
+                  aria-label="Schrijf een reactie"
+                  rows={2}
+                  className={textareaClass}
+                />
+                <Button
+                  variant="primary"
+                  size="md"
+                  loading={submittingComment}
+                  onClick={() => handleComment()}
+                  className="self-end"
+                >
+                  Plaatsen
+                </Button>
+              </div>
+            )}
+
+            {comments.length === 0 && (
+              <p className="text-sm text-ink-3">Nog geen reacties. Wees de eerste!</p>
+            )}
+
+            <div className="space-y-3">
+              {comments
+                .filter((c: any) => !c.parent_id)
+                .map((c: any) => {
+                  const replies = comments.filter((r: any) => r.parent_id === c.id);
+                  return (
+                    <div key={c.id}>
+                      {renderComment(c)}
+                      {replies.length > 0 && (
+                        <div className="ml-6 mt-2 space-y-2 border-l-2 border-line pl-4">
+                          {replies.map((r: any) => renderComment(r, true))}
+                        </div>
+                      )}
+                      {replyTo === c.id && user && (
+                        <div className="ml-6 mt-2 flex gap-2">
+                          <textarea
+                            value={commentText}
+                            onChange={(e) => setCommentText(e.target.value)}
+                            placeholder={`Reageer op ${c.user?.display_name || 'Anoniem'}...`}
+                            aria-label="Schrijf een antwoord"
+                            rows={1}
+                            autoFocus
+                            className={textareaClass}
+                          />
+                          <Button
+                            variant="primary"
+                            size="md"
+                            loading={submittingComment}
+                            onClick={() => handleComment(c.id)}
+                          >
+                            Reageer
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="md"
+                            onClick={() => {
+                              setReplyTo(null);
+                              setCommentText('');
+                            }}
+                          >
+                            Annuleer
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
+          </section>
+
+          {/* ── Beheer (eigenaar/admin) ────────────── */}
+          {canEdit && (
+            <section className="mt-8 space-y-4">
+              <h2 className={sectionTitle}>Beheer</h2>
+
+              <div>
+                <div className="mb-2 text-meta font-semibold text-ink-3">Categorieën</div>
+                <div className="flex flex-wrap gap-2">
+                  {CATEGORY_LIST.map((cat) => {
+                    const hasTag = recipe.tags.some((t) => t.name.toLowerCase() === cat.toLowerCase());
+                    return (
+                      <Chip
+                        key={cat}
+                        active={hasTag}
+                        aria-pressed={hasTag}
+                        onClick={async () => {
+                          // Toggle tag via API (handles RLS for admin)
+                          const currentTags = recipe.tags.map((t) => t.name);
+                          const newTags = hasTag
+                            ? currentTags.filter((t) => t.toLowerCase() !== cat.toLowerCase())
+                            : [...currentTags, cat];
+
+                          await fetch(`/api/recipes/${recipe.id}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ tags: newTags }),
+                          });
+                          fetchRecipe();
+                        }}
+                      >
+                        {cat}
+                      </Chip>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <Link href={`/recepten/${recipe.id}/bewerk`}>
+                  <Button variant="secondary" size="md">
+                    <Pencil className="h-4 w-4" />
+                    Bewerken
+                  </Button>
+                </Link>
+                <Button variant="danger" size="md" onClick={() => setDeleteModalOpen(true)}>
+                  <Trash2 className="h-4 w-4" />
+                  Verwijderen
+                </Button>
+              </div>
+            </section>
+          )}
         </div>
-      </section>
+      </div>
+
+      {/* ── Sticky actiebalk ─────────────────────────── */}
+      <div
+        className="bar-blur fixed inset-x-0 bottom-0 z-40 border-t border-line"
+        style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}
+      >
+        <div className="mx-auto flex max-w-6xl gap-2.5 px-[18px] pt-3 md:px-8">
+          {user && (
+            <button
+              type="button"
+              onClick={() => setCollectionModalOpen(true)}
+              aria-label="Bewaar in collectie"
+              title="Bewaar in collectie"
+              className="flex h-[54px] w-[54px] shrink-0 items-center justify-center rounded-btn border border-line bg-surface text-ink transition-colors hover:bg-sunk"
+            >
+              <FolderPlus className="h-[21px] w-[21px]" strokeWidth={1.9} />
+            </button>
+          )}
+          <button
+            type="button"
+            data-tour="recipe-cook-mode"
+            onClick={() => setCookMode(true)}
+            className="flex h-[54px] flex-1 items-center justify-center gap-2.5 rounded-btn bg-primary text-base font-semibold text-on-primary shadow-btn-primary transition-colors hover:bg-primary-dark"
+          >
+            <Play className="h-[17px] w-[17px] fill-current" strokeWidth={0} />
+            Start kookmodus
+          </button>
+          {user && (
+            <button
+              type="button"
+              data-tour="recipe-ai-chat"
+              onClick={() => setChatOpen(true)}
+              aria-label="Open kookassistent"
+              title="Kookassistent"
+              className="flex h-[54px] w-[54px] shrink-0 items-center justify-center rounded-btn border border-line bg-surface text-primary transition-colors hover:bg-sunk"
+            >
+              <MessageCircle className="h-[21px] w-[21px]" strokeWidth={1.9} />
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* ── AI Kookassistent ────────────────────── */}
-      {user && <RecipeChat recipe={recipe} messages={chatMessages} onMessagesChange={setChatMessages} />}
+      {user && (
+        <RecipeChat
+          recipe={recipe}
+          messages={chatMessages}
+          onMessagesChange={setChatMessages}
+          open={chatOpen}
+          onOpenChange={setChatOpen}
+        />
+      )}
 
       {/* ── Cook mode ────────────────────────────── */}
       {cookMode && (
         <CookMode
           title={recipe.title}
-          steps={(scaledSteps || recipe.steps).map((s) => ({
+          steps={visibleSteps.map((s) => ({
             titel: s.titel,
             beschrijving: s.beschrijving,
           }))}
           ingredients={recipe.ingredients.map((ing) => {
             const parsed = parseAmount(ing.hoeveelheid);
-            const scaled = parsed !== null ? parsed * ratio : null;
             return {
-              hoeveelheid: scaled !== null ? toFraction(scaled) : (ing.hoeveelheid ?? ''),
+              hoeveelheid:
+                parsed !== null
+                  ? formatScaledAmount(parsed, ratio, ing.eenheid)
+                  : (ing.hoeveelheid ?? ''),
               eenheid: ing.eenheid,
               naam: ing.naam,
             };
@@ -1420,9 +1455,8 @@ function RecipeDetailPage({
           </>
         }
       >
-        <p className="text-sm text-text-secondary">
-          Weet je zeker dat je dit recept wilt verwijderen? Dit kan niet ongedaan
-          worden gemaakt.
+        <p className="text-[15px] text-ink-2">
+          Weet je zeker dat je dit recept wilt verwijderen? Dit kan niet ongedaan worden gemaakt.
         </p>
       </Modal>
 
@@ -1435,12 +1469,13 @@ function RecipeDetailPage({
         onCancel={() => setConfirmAction(null)}
       />
 
-      {/* ── Add to collection modal ─────────────── */}
+      {/* ── Bewaar in collectie (sheet) ─────────── */}
       {user && (
         <AddToCollectionModal
           recipeId={recipe.id}
           open={collectionModalOpen}
           onClose={() => setCollectionModalOpen(false)}
+          recipe={{ title: recipe.title, image_url: recipe.image_url, tijd: recipe.tijd }}
         />
       )}
 
@@ -1456,7 +1491,7 @@ function RecipeDetailPage({
 
       {/* ── Toast ──────────────────────────────────── */}
       {toastMessage && (
-        <div className="fixed bottom-20 left-1/2 z-50 -translate-x-1/2 rounded-lg bg-gray-800 px-4 py-2 text-sm text-white shadow-lg">
+        <div className="fixed bottom-28 left-1/2 z-50 -translate-x-1/2 rounded-input bg-ink px-4 py-2 text-sm text-on-primary shadow-lg">
           {toastMessage}
         </div>
       )}

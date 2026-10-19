@@ -5,39 +5,43 @@ import { Minus, Plus } from 'lucide-react';
 interface PortieSelectorProps {
   value: number;
   onChange: (value: number) => void;
+  min?: number;
+  max?: number;
 }
 
-export default function PortieSelector({ value, onChange }: PortieSelectorProps) {
-  const decrement = () => {
-    if (value > 1) onChange(value - 1);
-  };
-
-  const increment = () => {
-    if (value < 20) onChange(value + 1);
-  };
-
+/**
+ * Portie-stepper (design v2): −/+ cirkels van 30px, + is bosgroen.
+ * De knoppen hebben een 44px hoge klikzone rond de zichtbare cirkel.
+ */
+export default function PortieSelector({ value, onChange, min = 1, max = 12 }: PortieSelectorProps) {
   return (
-    <div className="inline-flex items-center gap-3">
+    <div className="flex items-center justify-between">
       <button
         type="button"
-        onClick={decrement}
-        disabled={value <= 1}
-        className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-300 text-text-secondary transition-colors hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
+        onClick={() => value > min && onChange(value - 1)}
+        disabled={value <= min}
+        aria-label="Minder porties"
+        className="group flex h-11 w-9 items-center justify-center disabled:cursor-not-allowed disabled:opacity-40"
       >
-        <Minus className="h-4 w-4" />
+        <span className="flex h-[30px] w-[30px] items-center justify-center rounded-full border border-line text-ink transition-colors group-hover:bg-sunk">
+          <Minus className="h-3.5 w-3.5" strokeWidth={2.4} />
+        </span>
       </button>
 
-      <span className="min-w-[2ch] text-center text-lg font-semibold text-text-primary">
+      <span className="tabular text-[17px] font-semibold text-ink" aria-live="polite">
         {value}
       </span>
 
       <button
         type="button"
-        onClick={increment}
-        disabled={value >= 20}
-        className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-300 text-text-secondary transition-colors hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
+        onClick={() => value < max && onChange(value + 1)}
+        disabled={value >= max}
+        aria-label="Meer porties"
+        className="group flex h-11 w-9 items-center justify-center disabled:cursor-not-allowed disabled:opacity-40"
       >
-        <Plus className="h-4 w-4" />
+        <span className="flex h-[30px] w-[30px] items-center justify-center rounded-full bg-primary text-on-primary transition-colors group-hover:bg-primary-dark">
+          <Plus className="h-3.5 w-3.5" strokeWidth={2.4} />
+        </span>
       </button>
     </div>
   );

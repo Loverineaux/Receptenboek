@@ -52,7 +52,7 @@ export default function StarRating(props: StarRatingProps) {
             }`}
           >
             {/* Background (empty) star */}
-            <Star className={`${starSize} text-gray-300`} />
+            <Star className={`${starSize} text-line-strong`} />
 
             {/* Filled overlay */}
             {(filled || halfFilled) && (
@@ -68,7 +68,7 @@ export default function StarRating(props: StarRatingProps) {
       })}
 
       {readOnly && props.count !== undefined && (
-        <span className="ml-1 text-xs text-text-muted">
+        <span className="ml-1 text-xs text-ink-3">
           ({props.count})
         </span>
       )}

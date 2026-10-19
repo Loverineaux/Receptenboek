@@ -22,6 +22,8 @@ export interface GenericIngredient {
   usage_tips: string | null;
   storage_tips: string | null;
   season: string | null;
+  /** Maandnummers 1–12; null = onbekend; alle 12 = jaarrond */
+  season_months: number[] | null;
   variants: string[];
   fun_facts: string | null;
   image_url: string | null;

@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import Anthropic from '@anthropic-ai/sdk';
+import { normalizeMonths, parseSeasonText } from '@/lib/ingredients/season';
 
 export async function POST(
   request: NextRequest,
@@ -115,6 +116,7 @@ Geef alle informatie zo volledig en feitelijk mogelijk.`,
   "usage_tips": "gebruikstips in de keuken",
   "storage_tips": "bewaartips",
   "season": "seizoen of 'Jaarrond'",
+  "season_months": [lijst met maandnummers 1-12 waarin het ingrediënt in Nederland/België in seizoen is; alle 12 getallen als het jaarrond verkrijgbaar of niet seizoensgebonden is; null als onbekend],
   "variants": ["variant1", "variant2"],
   "fun_facts": "een leuk weetje",
   "gram_per_piece": null of een getal,
@@ -156,6 +158,7 @@ Antwoord ALLEEN met de JSON, geen markdown codeblocks of andere tekst.`,
           usage_tips: parsed.usage_tips ?? null,
           storage_tips: parsed.storage_tips ?? null,
           season: parsed.season ?? null,
+          season_months: normalizeMonths(parsed.season_months) ?? parseSeasonText(typeof parsed.season === 'string' ? parsed.season : null),
           variants: parsed.variants ?? [],
           fun_facts: parsed.fun_facts ?? null,
           gram_per_piece: parsed.gram_per_piece ?? null,

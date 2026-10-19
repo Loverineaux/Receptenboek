@@ -1,15 +1,24 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { Heart } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { Search, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import RecipeCard from '@/components/recipes/RecipeCard';
+import ScreenHeader from '@/components/ui/ScreenHeader';
+import SectionHeader from '@/components/ui/SectionHeader';
+import IconButton from '@/components/ui/IconButton';
+import NewCollectionModal from '@/components/collections/NewCollectionModal';
+import {
+  CollectionCarouselCard,
+  NewCollectionCarouselCard,
+} from '@/components/collections/CollectionCarouselCard';
 import dynamic from 'next/dynamic';
 
 const AddToCollectionModal = dynamic(() => import('@/components/recipes/AddToCollectionModal'));
 import { useCollectionRecipeIds } from '@/hooks/useCollectionRecipeIds';
-import type { RecipeWithRelations } from '@/types';
+import type { CollectionWithDetails, RecipeWithRelations } from '@/types';
 
 export default function FavorietenPage() {
   const { user } = useAuth();
@@ -19,14 +28,16 @@ export default function FavorietenPage() {
   const [recipes, setRecipes] = useState<RecipeWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
   const [collectionRecipeId, setCollectionRecipeId] = useState<string | null>(null);
+  const [collections, setCollections] = useState<CollectionWithDetails[]>([]);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [query, setQuery] = useState('');
 
   const fetchFavorites = useCallback(async () => {
     if (!user) {
       setLoading(false);
       return;
     }
-
-    setLoading(true);
 
     // Get favorite recipe IDs
     const { data: favs } = await supabase
@@ -77,10 +88,24 @@ export default function FavorietenPage() {
     setLoading(false);
   }, [supabase, user]);
 
+  const fetchCollections = useCallback(async () => {
+    try {
+      const res = await fetch('/api/collections');
+      const data = await res.json();
+      setCollections(Array.isArray(data) ? data : []);
+    } catch {
+      setCollections([]);
+    }
+  }, []);
+
   useEffect(() => {
     fetchFavorites();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
+
+  useEffect(() => {
+    if (user) fetchCollections();
+  }, [user?.id, fetchCollections]);
 
   // Realtime: favorites changes
   useEffect(() => {
@@ -96,38 +121,128 @@ export default function FavorietenPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
+  // Alleen eigen, gevolgde en gedeelde collecties in de carrousel
+  const myCollections = useMemo(
+    () =>
+      user
+        ? collections.filter((c) => c.user_id === user.id || c.is_following || c.is_collaborator)
+        : [],
+    [collections, user]
+  );
+
+  const filteredRecipes = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return recipes;
+    return recipes.filter(
+      (r) =>
+        r.title.toLowerCase().includes(q) ||
+        (r.ingredients ?? []).some((i) => i.naam?.toLowerCase().includes(q)) ||
+        (r.tags ?? []).some((t) => t.name?.toLowerCase().includes(q))
+    );
+  }, [recipes, query]);
+
+  // Optimistisch: hartje uit = direct weg uit de lijst; bij een fout herstellen
   const handleFavoriteToggle = async (recipeId: string, isFavorited: boolean) => {
     if (!user) return;
 
     if (isFavorited) {
       await fetch(`/api/recipes/${recipeId}/favorite`, { method: 'POST' });
-    } else {
-      await fetch(`/api/recipes/${recipeId}/favorite`, { method: 'DELETE' });
-      // Remove from list immediately
-      setRecipes((prev) => prev.filter((r) => r.id !== recipeId));
+      return;
+    }
+
+    setRecipes((prev) => prev.filter((r) => r.id !== recipeId));
+    try {
+      const res = await fetch(`/api/recipes/${recipeId}/favorite`, { method: 'DELETE' });
+      if (!res.ok) fetchFavorites();
+    } catch {
+      fetchFavorites();
     }
   };
 
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <h1 className="text-2xl font-bold text-text-primary">Favorieten</h1>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-64 animate-pulse rounded-xl bg-gray-200" />
-          ))}
-        </div>
-      </div>
-    );
-  }
+  const toggleSearch = () => {
+    setSearchOpen((open) => {
+      if (open) setQuery('');
+      return !open;
+    });
+  };
+
+  const subtitle = loading
+    ? ' '
+    : `${recipes.length} ${recipes.length === 1 ? 'recept' : 'recepten'} bewaard`;
+
+  const grid = 'grid grid-cols-2 gap-x-3.5 gap-y-[22px] md:grid-cols-3 lg:grid-cols-4';
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-text-primary">Favorieten</h1>
+    <div>
+      <ScreenHeader
+        title="Favorieten"
+        subtitle={subtitle}
+        actions={
+          <IconButton
+            label={searchOpen ? 'Zoeken sluiten' : 'Zoeken in favorieten'}
+            aria-expanded={searchOpen}
+            onClick={toggleSearch}
+          >
+            {searchOpen ? (
+              <X className="h-[19px] w-[19px]" strokeWidth={1.9} />
+            ) : (
+              <Search className="h-[19px] w-[19px]" strokeWidth={1.9} />
+            )}
+          </IconButton>
+        }
+      />
 
-      {recipes.length > 0 ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {recipes.map((recipe) => (
+      {searchOpen && (
+        <div className="relative mt-4">
+          <Search
+            className="pointer-events-none absolute left-3.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-ink-3"
+            strokeWidth={1.9}
+          />
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Zoek in je favorieten"
+            aria-label="Zoek in je favorieten"
+            autoFocus
+            className="h-11 w-full rounded-input border border-line bg-surface pl-10 pr-3.5 text-[15px] text-ink placeholder:text-ink-4 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/15"
+          />
+        </div>
+      )}
+
+      {/* Collecties */}
+      {user && (
+        <>
+          <SectionHeader title="Collecties" action={<Link href="/collecties">Beheer</Link>} />
+          <div className="scrollbar-none -mx-gutter flex gap-3 overflow-x-auto px-gutter md:mx-0 md:px-0">
+            {myCollections.map((c) => (
+              <CollectionCarouselCard key={c.id} collection={c} />
+            ))}
+            <NewCollectionCarouselCard onClick={() => setCreateOpen(true)} />
+          </div>
+        </>
+      )}
+
+      {/* Alle favorieten */}
+      <SectionHeader title="Alle favorieten" />
+
+      {loading ? (
+        <div className={grid}>
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-[200px] animate-pulse rounded-card bg-sunk" />
+          ))}
+        </div>
+      ) : recipes.length === 0 ? (
+        <div className="rounded-card-lg border-[1.5px] border-dashed border-line-strong px-5 py-7 text-center text-[14.5px] text-ink-3">
+          Tik op het hartje bij een recept om het hier te bewaren.
+        </div>
+      ) : filteredRecipes.length === 0 ? (
+        <div className="rounded-card-lg border-[1.5px] border-dashed border-line-strong px-5 py-7 text-center text-[14.5px] text-ink-3">
+          Geen favorieten gevonden voor &ldquo;{query.trim()}&rdquo;.
+        </div>
+      ) : (
+        <div className={grid}>
+          {filteredRecipes.map((recipe) => (
             <RecipeCard
               key={recipe.id}
               recipe={recipe}
@@ -136,16 +251,6 @@ export default function FavorietenPage() {
               isInCollection={collectionRecipeIds.has(recipe.id)}
             />
           ))}
-        </div>
-      ) : (
-        <div className="flex flex-col items-center justify-center py-20 text-center">
-          <Heart className="h-12 w-12 text-gray-300" />
-          <h2 className="mt-4 text-lg font-semibold text-text-primary">
-            Nog geen favorieten
-          </h2>
-          <p className="mt-1 text-sm text-text-secondary">
-            Klik op het hartje bij een recept om het als favoriet op te slaan.
-          </p>
         </div>
       )}
 
@@ -156,6 +261,12 @@ export default function FavorietenPage() {
           onClose={() => setCollectionRecipeId(null)}
         />
       )}
+
+      <NewCollectionModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={(c) => setCollections((prev) => [c, ...prev])}
+      />
     </div>
   );
 }

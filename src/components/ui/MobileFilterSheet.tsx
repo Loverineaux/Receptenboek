@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { SlidersHorizontal, X } from 'lucide-react';
+import BottomSheet from '@/components/ui/BottomSheet';
 import Button from '@/components/ui/Button';
+import Chip from '@/components/ui/Chip';
+import { ALL_CATEGORIES } from '@/components/ui/CategoryFilter';
 
 interface FilterOption {
   value: string;
@@ -10,6 +11,8 @@ interface FilterOption {
 }
 
 interface MobileFilterSheetProps {
+  open: boolean;
+  onClose: () => void;
   source: string;
   onSourceChange: (value: string) => void;
   sourceOptions: FilterOption[];
@@ -23,9 +26,31 @@ interface MobileFilterSheetProps {
   onSortChange: (value: string) => void;
   sortOptions: FilterOption[];
   onResetAll?: () => void;
+  /** Volledige categorielijst (de chips op het scherm tonen alleen de snelle keuzes) */
+  category?: string | null;
+  onCategoryChange?: (category: string | null) => void;
+  searchIngredients?: boolean;
+  onSearchIngredientsChange?: (value: boolean) => void;
+  /** Aantal actieve filters, voor de "Alles wissen"-knop */
+  activeCount?: number;
 }
 
+function SectionLabel({ children, hint }: { children: React.ReactNode; hint?: string }) {
+  return (
+    <div className="mb-2.5">
+      <h3 className="text-[15px] font-semibold text-ink">{children}</h3>
+      {hint && <p className="mt-0.5 text-meta text-ink-3">{hint}</p>}
+    </div>
+  );
+}
+
+/**
+ * Filterpaneel (design v2): sortering, categorie, zoekopties en bronnen in een
+ * BottomSheet. Wordt geopend via de filterknop in de kop van /recepten.
+ */
 export default function MobileFilterSheet({
+  open,
+  onClose,
   source,
   onSourceChange,
   sourceOptions,
@@ -39,221 +64,133 @@ export default function MobileFilterSheet({
   onSortChange,
   sortOptions,
   onResetAll,
+  category,
+  onCategoryChange,
+  searchIngredients,
+  onSearchIngredientsChange,
+  activeCount = 0,
 }: MobileFilterSheetProps) {
-  const [open, setOpen] = useState(false);
-
-  const activeFilterCount =
-    (source ? 1 : 0) + includedSources.size + excludedSources.size + (sort !== 'newest' ? 1 : 0);
-
-  // Prevent body scroll when sheet is open
-  useEffect(() => {
-    if (open) {
-      document.body.style.overflow = 'hidden';
+  const cycleSource = (value: string) => {
+    const included = includedSources.has(value);
+    const excluded = excludedSources.has(value);
+    if (!included && !excluded) {
+      onIncludedSourceToggle?.(value);
+      if (source) onSourceChange('');
     } else {
-      document.body.style.overflow = '';
+      // ingesloten → verbergen (de toggle haalt hem ook uit de ingesloten set);
+      // verborgen → weer neutraal
+      onExcludedSourceToggle(value);
     }
-    return () => { document.body.style.overflow = ''; };
-  }, [open]);
+  };
 
   return (
-    <>
-      {/* Mobile: filter button */}
-      <div className="md:hidden">
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="flex items-center gap-2 rounded-lg border border-gray-300 bg-surface px-4 py-2.5 text-sm text-text-primary transition-colors hover:bg-gray-50"
-        >
-          <SlidersHorizontal className="h-4 w-4" />
-          Filters
-          {activeFilterCount > 0 && (
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-white">
-              {activeFilterCount}
-            </span>
-          )}
-        </button>
-      </div>
-
-      {/* Desktop: inline filters */}
-      <div className="hidden md:flex md:flex-wrap md:items-center md:gap-3">
-        {/* Source chips */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-xs font-medium text-text-muted">Bron:</span>
-          {sourceOptions.map((s) => {
-            const included = includedSources.has(s.value);
-            const excluded = excludedSources.has(s.value);
-            return (
-              <button
-                key={s.value}
-                type="button"
-                onClick={() => {
-                  if (excluded) { onExcludedSourceToggle(s.value); }
-                  else if (included) { onIncludedSourceToggle?.(s.value); }
-                  else { onIncludedSourceToggle?.(s.value); if (source) onSourceChange(''); }
-                }}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  if (included) onIncludedSourceToggle?.(s.value);
-                  if (!excluded) onExcludedSourceToggle(s.value);
-                  else onExcludedSourceToggle(s.value);
-                }}
-                className={`rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
-                  included ? 'bg-green-100 text-green-700' :
-                  excluded ? 'bg-red-100 text-red-700 line-through' :
-                  'bg-gray-100 text-text-secondary hover:bg-gray-200'
-                }`}
-              >
-                {s.label}
-              </button>
-            );
-          })}
-          {(includedSources.size > 0 || excludedSources.size > 0) && (
-            <button
-              type="button"
-              onClick={() => { onClearIncluded?.(); onClearExcluded(); if (source) onSourceChange(''); }}
-              className="text-[10px] text-text-muted hover:text-text-secondary"
+    <BottomSheet
+      open={open}
+      onClose={onClose}
+      title="Filters"
+      footer={
+        <div className="space-y-1">
+          <Button variant="primary" size="lg" className="w-full" onClick={onClose}>
+            Toepassen
+          </Button>
+          {activeCount > 0 && onResetAll && (
+            <Button
+              variant="ghost"
+              size="md"
+              className="w-full"
+              onClick={() => { onResetAll(); onClose(); }}
             >
-              reset
-            </button>
+              Alle filters wissen
+            </Button>
           )}
         </div>
-
-        <div className="h-5 w-px bg-gray-200" />
-
-        {/* Sort */}
-        <select
-          value={sort}
-          onChange={(e) => onSortChange(e.target.value)}
-          className="rounded-lg border border-gray-300 bg-surface px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-        >
-          {sortOptions.map((s) => (
-            <option key={s.value} value={s.value}>{s.label}</option>
-          ))}
-        </select>
-      </div>
-
-      {/* Bottom sheet overlay */}
-      {open && (
-        <div className="fixed inset-0 z-50 md:hidden">
-          {/* Backdrop */}
-          <div
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-            onClick={() => setOpen(false)}
-          />
-
-          {/* Sheet */}
-          <div className="absolute bottom-0 left-0 right-0 max-h-[85vh] overflow-y-auto rounded-t-2xl bg-surface pb-8 shadow-xl animate-in slide-in-from-bottom">
-            {/* Handle */}
-            <div className="sticky top-0 z-10 bg-surface pb-2 pt-3">
-              <div className="mx-auto h-1 w-10 rounded-full bg-gray-300" />
-              <div className="mt-3 flex items-center justify-between px-5">
-                <h3 className="text-lg font-semibold text-text-primary">Filters</h3>
-                <button
-                  type="button"
-                  onClick={() => setOpen(false)}
-                  className="flex h-8 w-8 items-center justify-center rounded-full text-text-muted hover:bg-gray-100"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
-
-            <div className="space-y-6 px-5 pt-2">
-              {/* Sort */}
-              <div>
-                <label className="mb-2 block text-sm font-medium text-text-primary">Sorteren</label>
-                <div className="flex flex-wrap gap-2">
-                  {sortOptions.map((s) => (
-                    <button
-                      key={s.value}
-                      type="button"
-                      onClick={() => onSortChange(s.value)}
-                      className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
-                        sort === s.value
-                          ? 'bg-primary text-white'
-                          : 'bg-gray-100 text-text-secondary'
-                      }`}
-                    >
-                      {s.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Source filter — multi-select with toon/verberg */}
-              <div>
-                <label className="mb-2 block text-sm font-medium text-text-primary">Bronnen</label>
-                <p className="mb-2 text-xs text-text-muted">Tik om te filteren (groen) of lang indrukken om te verbergen (rood)</p>
-                <div className="flex flex-wrap gap-2">
-                  {sourceOptions.map((s) => {
-                    const included = includedSources.has(s.value);
-                    const excluded = excludedSources.has(s.value);
-                    return (
-                      <button
-                        key={s.value}
-                        type="button"
-                        onClick={() => {
-                          if (excluded) {
-                            // Unexclude
-                            onExcludedSourceToggle(s.value);
-                          } else if (included) {
-                            // Uninclude
-                            onIncludedSourceToggle?.(s.value);
-                          } else {
-                            // Include
-                            onIncludedSourceToggle?.(s.value);
-                            // Clear single source filter
-                            if (source) onSourceChange('');
-                          }
-                        }}
-                        onContextMenu={(e) => {
-                          e.preventDefault();
-                          if (included) onIncludedSourceToggle?.(s.value);
-                          if (!excluded) {
-                            onExcludedSourceToggle(s.value);
-                          } else {
-                            onExcludedSourceToggle(s.value);
-                          }
-                        }}
-                        className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
-                          included
-                            ? 'bg-green-100 text-green-700'
-                            : excluded
-                            ? 'bg-red-100 text-red-700 line-through'
-                            : 'bg-gray-100 text-text-secondary'
-                        }`}
-                      >
-                        {s.label}
-                      </button>
-                    );
-                  })}
-                </div>
-                {(includedSources.size > 0 || excludedSources.size > 0) && (
-                  <button
-                    type="button"
-                    onClick={() => { onClearIncluded?.(); onClearExcluded(); if (source) onSourceChange(''); }}
-                    className="mt-2 text-xs text-text-muted hover:text-text-secondary"
-                  >
-                    Filters wissen
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Buttons */}
-            <div className="space-y-2 px-5 pb-20 pt-6">
-              <Button variant="primary" size="lg" className="w-full" onClick={() => setOpen(false)}>
-                Toepassen
-              </Button>
-              {activeFilterCount > 0 && onResetAll && (
-                <Button variant="ghost" size="lg" className="w-full" onClick={() => { onResetAll(); setOpen(false); }}>
-                  Alle filters wissen
-                </Button>
-              )}
-            </div>
+      }
+    >
+      <div className="space-y-6 pt-1">
+        <div>
+          <SectionLabel>Sorteren</SectionLabel>
+          <div className="flex flex-wrap gap-2">
+            {sortOptions.map((s) => (
+              <Chip key={s.value} active={sort === s.value} onClick={() => onSortChange(s.value)}>
+                {s.label}
+              </Chip>
+            ))}
           </div>
         </div>
-      )}
-    </>
+
+        {onCategoryChange && (
+          <div>
+            <SectionLabel>Categorie</SectionLabel>
+            <div className="flex flex-wrap gap-2">
+              <Chip active={!category} onClick={() => onCategoryChange(null)}>
+                Alles
+              </Chip>
+              {ALL_CATEGORIES.map((c) => (
+                <Chip
+                  key={c}
+                  active={category?.toLowerCase() === c.toLowerCase()}
+                  onClick={() => onCategoryChange(c)}
+                >
+                  {c}
+                </Chip>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {onSearchIngredientsChange && (
+          <label className="flex min-h-[44px] cursor-pointer items-center justify-between gap-4 rounded-input border border-line bg-surface px-4">
+            <span className="text-[15px] text-ink">Zoek ook in ingrediënten</span>
+            <input
+              type="checkbox"
+              checked={!!searchIngredients}
+              onChange={(e) => onSearchIngredientsChange(e.target.checked)}
+              className="h-5 w-5 rounded-[6px] border-line-strong text-primary focus:ring-primary/20"
+            />
+          </label>
+        )}
+
+        {sourceOptions.length > 0 && (
+          <div>
+            <SectionLabel hint="Tik om te tonen (groen), tik nogmaals om te verbergen (rood)">Bronnen</SectionLabel>
+            <div className="flex flex-wrap gap-2">
+              {sourceOptions.map((s) => {
+                const included = includedSources.has(s.value);
+                const excluded = excludedSources.has(s.value);
+                return (
+                  <button
+                    key={s.value}
+                    type="button"
+                    onClick={() => cycleSource(s.value)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      onExcludedSourceToggle(s.value);
+                    }}
+                    className={`inline-flex h-10 items-center rounded-chip border px-4 text-sm font-medium transition-colors ${
+                      included
+                        ? 'border-primary bg-primary-tint text-primary'
+                        : excluded
+                          ? 'border-red-200 bg-red-50 text-red-700 line-through'
+                          : 'border-line bg-surface text-ink hover:bg-gray-50'
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                );
+              })}
+            </div>
+            {(includedSources.size > 0 || excludedSources.size > 0) && (
+              <button
+                type="button"
+                onClick={() => { onClearIncluded?.(); onClearExcluded(); if (source) onSourceChange(''); }}
+                className="mt-2 min-h-[44px] text-meta font-semibold text-primary"
+              >
+                Bronfilters wissen
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </BottomSheet>
   );
 }

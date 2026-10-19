@@ -1,9 +1,9 @@
 'use client';
 
-import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Plus } from 'lucide-react';
+import { ChefHat, LayoutGrid, List, Plus, SlidersHorizontal } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { recordTiming } from '@/lib/telemetry';
 import { readRecipesCardCache, writeRecipesCardCache } from '@/lib/recipes-card-cache';
@@ -12,6 +12,9 @@ import SearchBar from '@/components/ui/SearchBar';
 import CategoryFilter from '@/components/ui/CategoryFilter';
 import Button from '@/components/ui/Button';
 import RecipeCard from '@/components/recipes/RecipeCard';
+import HeroRecipeCard from '@/components/recipes/HeroRecipeCard';
+import IconButton from '@/components/ui/IconButton';
+import SectionHeader from '@/components/ui/SectionHeader';
 import dynamic from 'next/dynamic';
 import PullToRefresh from '@/components/ui/PullToRefresh';
 
@@ -25,6 +28,24 @@ type SortOption = 'newest' | 'rating' | 'time' | 'az' | 'za';
 
 const PAGE_SIZE = 24;
 
+/**
+ * `tijd` is vrije tekst ("25 min", "1 uur", "1 uur 15 min", "1,5 uur").
+ * Geeft het aantal minuten of null als er geen tijd uit te halen valt.
+ */
+function parseMinutes(tijd: string | null | undefined): number | null {
+  if (!tijd) return null;
+  const t = tijd.toLowerCase().replace(',', '.');
+  const hours = t.match(/(\d+(?:\.\d+)?)\s*(?:uur|u\b|h\b)/);
+  const mins = t.match(/(\d+)\s*(?:min|m\b)/);
+  if (hours || mins) {
+    return Math.round((hours ? parseFloat(hours[1]) * 60 : 0) + (mins ? parseInt(mins[1], 10) : 0));
+  }
+  const plain = t.match(/^\s*(\d+)\s*$/);
+  return plain ? parseInt(plain[1], 10) : null;
+}
+
+const QUICK_MAX_MINUTES = 30;
+
 export default function ReceptenPageWrapper() {
   return (
     <Suspense>
@@ -34,7 +55,7 @@ export default function ReceptenPageWrapper() {
 }
 
 function ReceptenPage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, profile, loading: authLoading } = useAuth();
   const collectionRecipeIds = useCollectionRecipeIds();
   const supabase = createClient();
   const router = useRouter();
@@ -70,12 +91,33 @@ function ReceptenPage() {
   const [sort, setSort] = useState<SortOption>((searchParams.get('sort') as SortOption) || 'newest');
   const [searchIngredients, setSearchIngredients] = useState(searchParams.get('ing') === '1');
   const [sourceOptions, setSourceOptions] = useState<string[]>([]);
+  // "Snel"-chip: bereidingstijd ≤ 30 min, client-side (tijd is vrije tekst)
+  const [quick, setQuick] = useState(searchParams.get('snel') === '1');
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [layout, setLayout] = useState<'grid' | 'list'>('grid');
+  // Pas true als de stats (beoordelingen) van de eerste fetch binnen zijn; voorkomt
+  // dat de hero eerst een willekeurig recept toont en daarna wisselt.
+  const [statsReady, setStatsReady] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('recepten-layout');
+      if (saved === 'list' || saved === 'grid') setLayout(saved);
+    } catch {}
+  }, []);
+
+  const toggleLayout = () => {
+    const next = layout === 'grid' ? 'list' : 'grid';
+    setLayout(next);
+    try { localStorage.setItem('recepten-layout', next); } catch {}
+  };
 
   // Sync filters to URL params
   useEffect(() => {
     const params = new URLSearchParams();
     if (search) params.set('q', search);
     if (category) params.set('cat', category);
+    if (quick) params.set('snel', '1');
     if (source) params.set('bron', source);
     if (includedSources.size > 0) params.set('inbron', [...includedSources].join(','));
     if (excludedSources.size > 0) params.set('exbron', [...excludedSources].join(','));
@@ -87,7 +129,7 @@ function ReceptenPage() {
     // (middleware + root layout met sessie- en profielquery), ook op de eerste mount.
     if (`${window.location.pathname}${window.location.search}` === target) return;
     router.replace(target, { scroll: false });
-  }, [search, category, source, includedSources, excludedSources, sort, searchIngredients, router]);
+  }, [search, category, quick, source, includedSources, excludedSources, sort, searchIngredients, router]);
 
   // Fetch unique sources from DB (select only bron, limit to 500 to avoid huge payload)
   useEffect(() => {
@@ -311,6 +353,7 @@ function ReceptenPage() {
       } finally {
         setLoading(false);
         setLoadingMore(false);
+        setStatsReady(true);
       }
     },
     [supabase, search, searchIngredients, category, source, includedSources, excludedSources, sort]
@@ -538,23 +581,119 @@ function ReceptenPage() {
     });
   };
 
+  const hasSourceFilters = !!source || includedSources.size > 0 || excludedSources.size > 0;
+  const isDefaultView = !search && !category && !quick && !hasSourceFilters && sort === 'newest';
+  const hasQuery = !!search || !!category || quick || hasSourceFilters;
+  const chipCategories = ['vegetarisch', 'pasta', 'soep', 'dessert'];
+  const activeFilterCount =
+    (source ? 1 : 0) +
+    includedSources.size +
+    excludedSources.size +
+    (sort !== 'newest' ? 1 : 0) +
+    (category && !chipCategories.includes(category.toLowerCase()) ? 1 : 0) +
+    (searchIngredients ? 1 : 0);
+
+  const visibleRecipes = quick
+    ? recipes.filter((r) => {
+        const m = parseMinutes(r.tijd);
+        return m !== null && m <= QUICK_MAX_MINUTES;
+      })
+    : recipes;
+  const hasMore = recipes.length < totalCount;
+
+  // "Snel" filtert client-side: laad door tot er genoeg snelle recepten staan
+  useEffect(() => {
+    if (!quick || loading || loadingMore || !hasMore) return;
+    if (visibleRecipes.length < 8) fetchRecipesRef.current(true);
+  }, [quick, loading, loadingMore, hasMore, visibleRecipes.length]);
+
+  // Hero "Voor vanavond": alleen op de standaardweergave, eerlijk gelabeld, stabiel per dag
+  const hero = useMemo(() => {
+    if (!isDefaultView || !statsReady) return null;
+    const pool = recipes.slice(0, PAGE_SIZE).filter((r) => r.image_url);
+    if (pool.length === 0) return null;
+    const day = Math.floor(Date.now() / 86400000);
+    const rated = pool
+      .filter((r) => (r.rating_count ?? 0) > 0 && (r.average_rating ?? 0) > 0)
+      .sort((a, b) => (b.average_rating ?? 0) - (a.average_rating ?? 0))
+      .slice(0, 5);
+    if (rated.length > 0) return { recipe: rated[day % rated.length], label: 'Hoog beoordeeld' };
+    return { recipe: pool[day % pool.length], label: 'Uitgelicht' };
+  }, [recipes, isDefaultView, statsReady]);
+
+  const initial = (profile?.display_name || user?.email || '?').trim().charAt(0).toUpperCase();
+  const countLabel = `${visibleRecipes.length}${quick && hasMore ? '+' : ''} ${visibleRecipes.length === 1 && !(quick && hasMore) ? 'recept' : 'recepten'}`;
+  const resetAll = () => {
+    setSearch('');
+    setCategory(null);
+    setQuick(false);
+    setSource('');
+    setIncludedSources(new Set());
+    setExcludedSources(new Set());
+    setSort('newest');
+    setSearchIngredients(false);
+  };
+
   return (
     <PullToRefresh onRefresh={fetchRecipes}>
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-text-primary">Receptenbibliotheek</h1>
+    <div>
+      <h1 className="sr-only">Recepten</h1>
 
-      {/* Sticky filter bar */}
-      <div className="sticky top-[3.75rem] z-30 -mx-4 space-y-3 bg-background px-4 pb-3 pt-2 shadow-sm md:-mx-6 md:top-[4.25rem] md:px-6">
-      <SearchBar
-        value={search}
-        onChange={setSearch}
-        searchIngredients={searchIngredients}
-        onSearchIngredientsChange={setSearchIngredients}
-      />
+      {/* Kop: logo · zoeken · filter · avatar (logo en avatar alleen mobiel; desktop heeft de topbalk) */}
+      <div className="flex items-center gap-2.5 pt-2 md:pt-0">
+        <Link
+          href="/recepten"
+          aria-label="Receptenboek"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-icon-btn bg-primary text-on-primary md:hidden"
+        >
+          <ChefHat className="h-[23px] w-[23px]" strokeWidth={1.9} />
+        </Link>
+        <div className="min-w-0 flex-1 md:max-w-xl md:flex-none md:basis-full">
+          <SearchBar
+            value={search}
+            onChange={setSearch}
+            placeholder="Zoek recept of ingrediënt"
+            searchIngredients={searchIngredients}
+          />
+        </div>
+        <IconButton
+          label={activeFilterCount > 0 ? `Filters (${activeFilterCount} actief)` : 'Filters'}
+          dot={activeFilterCount > 0}
+          onClick={() => setFilterOpen(true)}
+        >
+          <SlidersHorizontal className="h-[19px] w-[19px]" strokeWidth={1.9} />
+        </IconButton>
+        <Link
+          href="/profiel"
+          aria-label="Profiel"
+          className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-placeholder-3 font-display text-lg font-semibold text-ink-2 md:hidden"
+        >
+          {profile?.avatar_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={profile.avatar_url} alt="" className="h-full w-full object-cover" />
+          ) : (
+            initial
+          )}
+        </Link>
+      </div>
 
-      <CategoryFilter selected={category} onChange={setCategory} />
+      <div className="mt-[18px]">
+        <CategoryFilter
+          selected={category}
+          onChange={setCategory}
+          quick={quick}
+          onQuickChange={setQuick}
+        />
+      </div>
 
       <MobileFilterSheet
+        open={filterOpen}
+        onClose={() => setFilterOpen(false)}
+        activeCount={activeFilterCount}
+        category={category}
+        onCategoryChange={(c) => { setCategory(c); setQuick(false); }}
+        searchIngredients={searchIngredients}
+        onSearchIngredientsChange={setSearchIngredients}
         source={source}
         onSourceChange={(v) => { setSource(v); if (v) { setIncludedSources(new Set()); setExcludedSources(new Set()); } }}
         sourceOptions={sourceOptions.map((s) => ({ value: s, label: s }))}
@@ -589,54 +728,87 @@ function ReceptenPage() {
           { value: 'az', label: 'A → Z' },
           { value: 'za', label: 'Z → A' },
         ]}
-        onResetAll={() => {
-          setSearch('');
-          setCategory(null);
-          setSource('');
-          setIncludedSources(new Set());
-          setExcludedSources(new Set());
-          setSort('newest');
-          setSearchIngredients(false);
-        }}
+        onResetAll={resetAll}
       />
 
-      {/* Active source filter chips (mobile) */}
+      {/* Actieve bronfilters */}
       {(includedSources.size > 0 || excludedSources.size > 0) && (
-        <div className="flex flex-wrap items-center gap-1.5 md:hidden">
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           {[...includedSources].map((s) => (
             <button key={`i-${s}`} type="button"
+              aria-label={`Bronfilter ${s} verwijderen`}
               onClick={() => setIncludedSources((prev) => { const next = new Set(prev); next.delete(s); return next; })}
-              className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700">
-              {s} <span className="text-green-400">&times;</span>
+              className="inline-flex h-8 items-center gap-1.5 rounded-chip border border-primary bg-primary-tint px-3 text-meta font-semibold text-primary">
+              {s} <span aria-hidden>&times;</span>
             </button>
           ))}
           {[...excludedSources].map((s) => (
             <button key={`e-${s}`} type="button"
+              aria-label={`Verborgen bron ${s} weer tonen`}
               onClick={() => setExcludedSources((prev) => { const next = new Set(prev); next.delete(s); return next; })}
-              className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-700 line-through">
-              {s} <span className="text-red-400">&times;</span>
+              className="inline-flex h-8 items-center gap-1.5 rounded-chip border border-red-200 bg-red-50 px-3 text-meta font-semibold text-red-700 line-through">
+              {s} <span aria-hidden>&times;</span>
             </button>
           ))}
         </div>
       )}
-      </div>
 
-      {/* Loading spinner */}
+      {/* Voor vanavond */}
+      {hero && !loading && (
+        <section className="mt-[22px]">
+          <h2 className="mb-2.5 text-meta font-semibold text-ink-3">Voor vanavond</h2>
+          <HeroRecipeCard recipe={hero.recipe} label={hero.label} />
+        </section>
+      )}
+
+      <SectionHeader
+        title={isDefaultView ? 'Recent toegevoegd' : hasQuery ? 'Resultaten' : 'Alle recepten'}
+        className="!mt-7"
+        action={
+          !loading && recipes.length > 0 ? (
+            <span className="inline-flex items-center gap-1">
+              <span className="text-[13.5px]">{countLabel}</span>
+              <button
+                type="button"
+                onClick={toggleLayout}
+                aria-label={layout === 'grid' ? 'Toon als lijst' : 'Toon als raster'}
+                className="-my-2.5 -mr-2.5 flex h-11 w-11 items-center justify-center rounded-full text-ink-3 hover:text-ink"
+              >
+                {layout === 'grid' ? <List className="h-5 w-5" strokeWidth={2} /> : <LayoutGrid className="h-5 w-5" strokeWidth={2} />}
+              </button>
+            </span>
+          ) : undefined
+        }
+      />
+
+      {/* Loading skeleton */}
       {loading && (
-        <div className="flex flex-col items-center justify-center py-20 gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-          <p className="text-sm text-text-muted">Recepten laden...</p>
+        <div role="status" aria-label="Recepten laden" className="grid grid-cols-2 gap-x-3.5 gap-y-[22px] md:grid-cols-3 lg:grid-cols-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="animate-pulse space-y-2.5">
+              <div className="h-[164px] rounded-card bg-sunk" />
+              <div className="h-4 w-4/5 rounded bg-sunk" />
+              <div className="h-3 w-1/3 rounded bg-sunk" />
+            </div>
+          ))}
         </div>
       )}
 
-      {/* Recipe grid */}
-      {!loading && recipes.length > 0 && (
+      {/* Recipe grid / list */}
+      {!loading && visibleRecipes.length > 0 && (
         <>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {recipes.map((recipe) => (
+          <div
+            className={
+              layout === 'grid'
+                ? 'grid grid-cols-2 gap-x-3.5 gap-y-[22px] md:grid-cols-3 lg:grid-cols-4'
+                : 'flex flex-col gap-2.5 md:grid md:grid-cols-2'
+            }
+          >
+            {visibleRecipes.map((recipe) => (
               <RecipeCard
                 key={recipe.id}
                 recipe={recipe}
+                layout={layout}
                 onFavoriteToggle={handleFavoriteToggle}
                 onRate={user ? handleRate : undefined}
                 userRating={userRatings[recipe.id]}
@@ -648,8 +820,8 @@ function ReceptenPage() {
             ))}
           </div>
 
-          {recipes.length < totalCount && (
-            <div className="flex justify-center pt-2">
+          {hasMore && (
+            <div className="flex justify-center pt-8">
               <Button
                 variant="secondary"
                 size="lg"
@@ -663,23 +835,33 @@ function ReceptenPage() {
         </>
       )}
 
+      {/* Snel-filter zoekt nog door */}
+      {!loading && quick && visibleRecipes.length === 0 && (hasMore || loadingMore) && (
+        <p className="py-16 text-center text-[15px] text-ink-3">Snelle recepten zoeken...</p>
+      )}
+
       {/* Empty state */}
-      {!loading && recipes.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-20 text-center">
-          <span className="text-5xl">🍽️</span>
-          <h2 className="mt-4 text-lg font-semibold text-text-primary">
-            Nog geen recepten
-          </h2>
-          <p className="mt-1 text-sm text-text-secondary">
-            Voeg je eerste recept toe!
-          </p>
-          <Link href="/recepten/nieuw">
-            <Button variant="primary" size="lg" className="mt-4">
-              <Plus className="h-4 w-4" />
-              Nieuw recept
+      {!loading && visibleRecipes.length === 0 && !(quick && (hasMore || loadingMore)) && (
+        hasQuery ? (
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <h2 className="font-display text-section font-semibold text-ink">Geen recepten gevonden</h2>
+            <p className="mt-1 text-[15px] text-ink-3">Pas je zoekopdracht of filters aan.</p>
+            <Button variant="secondary" size="lg" className="mt-5" onClick={resetAll}>
+              Filters wissen
             </Button>
-          </Link>
-        </div>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <h2 className="font-display text-section font-semibold text-ink">Nog geen recepten</h2>
+            <p className="mt-1 text-[15px] text-ink-3">Voeg je eerste recept toe!</p>
+            <Link href="/recepten/nieuw">
+              <Button variant="primary" size="lg" className="mt-5">
+                <Plus className="h-4 w-4" />
+                Nieuw recept
+              </Button>
+            </Link>
+          </div>
+        )
       )}
 
       {/* Add to collection modal */}

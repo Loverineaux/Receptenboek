@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import { createBrowserClient } from '@supabase/ssr';
+import Chip from '@/components/ui/Chip';
 
 interface IngredientChipsProps {
   items: string[];
@@ -15,10 +16,14 @@ const FALLBACK_INGREDIENTS = [
   'paprika', 'tomaat', 'ei', 'kaas', 'wortel', 'broccoli',
 ];
 
+/**
+ * "Ik heb"-chips (design v2): wrap-rij met multi-select toggle-chips.
+ * Gekozen items staan vooraan (actief, tik om te verwijderen), daarna suggesties.
+ * Eigen ingrediënten kunnen via het invoerveld worden toegevoegd.
+ */
 export default function IngredientChips({ items, onAdd, onRemove }: IngredientChipsProps) {
   const [input, setInput] = useState('');
   const [suggestions, setSuggestions] = useState<string[]>(FALLBACK_INGREDIENTS);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const supabase = createBrowserClient(
@@ -31,7 +36,7 @@ export default function IngredientChips({ items, onAdd, onRemove }: IngredientCh
       .order('name')
       .then(({ data }) => {
         if (data && data.length > 0) {
-          // Pick 12 random ingredients to show as suggestions
+          // Toon 12 willekeurige ingrediënten als suggestie
           const names = data.map((d) => d.name);
           const shuffled = names.sort(() => Math.random() - 0.5);
           setSuggestions(shuffled.slice(0, 12));
@@ -56,67 +61,50 @@ export default function IngredientChips({ items, onAdd, onRemove }: IngredientCh
     }
   };
 
-  const suggestionsToShow = suggestions.filter(
-    (s) => !items.includes(s)
-  );
+  const suggestionsToShow = suggestions.filter((s) => !items.includes(s));
 
   return (
     <div className="space-y-3">
-      {/* Input area with chips */}
-      <div
-        className="flex flex-wrap items-center gap-1.5 rounded-xl border border-gray-300 bg-surface px-3 py-2 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20"
-        onClick={() => inputRef.current?.focus()}
-      >
-        {items.map((item) => (
-          <span
-            key={item}
-            className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary"
-          >
-            {item}
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); onRemove(item); }}
-              className="ml-0.5 rounded-full p-0.5 hover:bg-primary/20"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </span>
-        ))}
+      <div className="flex h-11 items-center gap-2 rounded-input border border-line bg-surface pl-3.5 pr-1.5 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15">
         <input
-          ref={inputRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           enterKeyHint="done"
-          placeholder={items.length === 0 ? 'Typ een ingrediënt...' : 'Nog een...'}
-          className="min-w-[100px] flex-1 bg-transparent text-sm text-text-primary placeholder:text-text-muted focus:outline-none"
+          aria-label="Eigen ingrediënt toevoegen"
+          placeholder="Typ een ander ingrediënt..."
+          className="min-w-0 flex-1 bg-transparent text-[15px] text-ink placeholder:text-ink-4 focus:outline-none"
         />
         {input.trim() && (
           <button
             type="button"
             onClick={() => addItem(input)}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-white"
+            aria-label={`Voeg ${input.trim()} toe`}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-icon-btn bg-primary text-on-primary"
           >
             <Plus className="h-4 w-4" />
           </button>
         )}
       </div>
 
-      {/* Common ingredient suggestions */}
-      {items.length < 8 && suggestionsToShow.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {suggestionsToShow.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => addItem(s)}
-              className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs text-text-secondary transition-colors hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
-            >
-              + {s}
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="flex flex-wrap gap-2">
+        {items.map((item) => (
+          <Chip
+            key={item}
+            active
+            onClick={() => onRemove(item)}
+            aria-label={`${item} verwijderen`}
+            icon={<X className="h-3.5 w-3.5" strokeWidth={2.4} />}
+          >
+            {item}
+          </Chip>
+        ))}
+        {suggestionsToShow.map((s) => (
+          <Chip key={s} onClick={() => addItem(s)}>
+            {s}
+          </Chip>
+        ))}
+      </div>
     </div>
   );
 }

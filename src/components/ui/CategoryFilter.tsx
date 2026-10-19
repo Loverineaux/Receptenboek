@@ -1,12 +1,17 @@
 'use client';
 
+import Chip from '@/components/ui/Chip';
+
 interface CategoryFilterProps {
   selected: string | null;
   onChange: (category: string | null) => void;
+  /** "Snel"-chip (bereidingstijd ≤ 30 min) is een aparte, client-side filter */
+  quick?: boolean;
+  onQuickChange?: (quick: boolean) => void;
 }
 
-const categories = [
-  'Alles',
+/** Volledige lijst tag-categorieën (beschikbaar in het filterpaneel). */
+export const ALL_CATEGORIES = [
   'Kip',
   'Vlees',
   'Vis',
@@ -20,29 +25,45 @@ const categories = [
   'Dessert',
 ];
 
-export default function CategoryFilter({ selected, onChange }: CategoryFilterProps) {
-  const handleClick = (cat: string) => {
-    onChange(cat === 'Alles' ? null : cat);
+type QuickChip = { kind: 'all' } | { kind: 'quick' } | { kind: 'category'; category: string };
+
+// Snelle keuzes uit het ontwerp, bovenop de bestaande tag-categorieën.
+const CHIPS: Array<{ label: string; chip: QuickChip }> = [
+  { label: 'Alles', chip: { kind: 'all' } },
+  { label: 'Snel', chip: { kind: 'quick' } },
+  { label: 'Vega', chip: { kind: 'category', category: 'Vegetarisch' } },
+  { label: 'Pasta', chip: { kind: 'category', category: 'Pasta' } },
+  { label: 'Soep', chip: { kind: 'category', category: 'Soep' } },
+  { label: 'Zoet', chip: { kind: 'category', category: 'Dessert' } },
+];
+
+export default function CategoryFilter({ selected, onChange, quick = false, onQuickChange }: CategoryFilterProps) {
+  const handleClick = (chip: QuickChip) => {
+    if (chip.kind === 'all') {
+      onChange(null);
+      onQuickChange?.(false);
+    } else if (chip.kind === 'quick') {
+      onChange(null);
+      onQuickChange?.(true);
+    } else {
+      onChange(chip.category);
+      onQuickChange?.(false);
+    }
   };
 
   return (
-    <div data-tour="category-filter" className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
-      {categories.map((cat) => {
-        const isActive = cat === 'Alles' ? selected === null : selected === cat;
-
+    <div data-tour="category-filter" className="flex gap-2 overflow-x-auto scrollbar-none">
+      {CHIPS.map(({ label, chip }) => {
+        const isActive =
+          chip.kind === 'all'
+            ? selected === null && !quick
+            : chip.kind === 'quick'
+              ? quick
+              : !quick && selected?.toLowerCase() === chip.category.toLowerCase();
         return (
-          <button
-            key={cat}
-            type="button"
-            onClick={() => handleClick(cat)}
-            className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
-              isActive
-                ? 'bg-primary text-white'
-                : 'bg-gray-100 text-text-secondary hover:bg-gray-200'
-            }`}
-          >
-            {cat}
-          </button>
+          <Chip key={label} active={isActive} onClick={() => handleClick(chip)} className="h-9">
+            {label}
+          </Chip>
         );
       })}
     </div>
