@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import { Bricolage_Grotesque, Geist } from 'next/font/google';
 import './globals.css';
 import PWAInstall from '@/components/layout/PWAInstall';
 import NavigationProgress from '@/components/layout/NavigationProgress';
@@ -32,11 +33,28 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#16653a',
+  themeColor: '#F4EFE3',
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
+  // Nodig voor env(safe-area-inset-*) onder de tabbalk en sticky actiebalken
+  viewportFit: 'cover',
 };
+
+// Koppen: Bricolage Grotesque · UI/body: Geist (design v2)
+const bricolage = Bricolage_Grotesque({
+  subsets: ['latin'],
+  weight: ['500', '600', '700'],
+  variable: '--font-bricolage',
+  display: 'swap',
+});
+
+const geist = Geist({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-geist',
+  display: 'swap',
+});
 
 export default async function RootLayout({
   children,
@@ -48,7 +66,7 @@ export default async function RootLayout({
   // no client-side getSession() round trip blocking the cold open.
   const { user, profile } = await getInitialAuth();
   return (
-    <html lang="nl">
+    <html lang="nl" className={`${bricolage.variable} ${geist.variable}`}>
       <head>
         {/* Warm the TLS connection to Supabase before the first auth call.
             Saves ~200-400ms on mobile cold opens where the handshake would

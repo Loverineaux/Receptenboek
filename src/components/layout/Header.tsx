@@ -3,22 +3,24 @@
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import {
-  ChefHat, User, LogOut, Settings, ShieldAlert,
-  BookOpen, Soup, FolderOpen, Heart, Apple,
-} from 'lucide-react';
+import { ChefHat, LogOut, Settings, ShieldAlert, Plus, User } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useAdmin } from '@/hooks/useAdmin';
 import NotificationBell from '@/components/notifications/NotificationBell';
 
+// Desktop heeft ruimte genoeg: Collecties krijgt hier wél een eigen link.
 const navLinks = [
-  { href: '/recepten', label: 'Recepten', icon: BookOpen },
-  { href: '/suggesties', label: 'Wat koken?', icon: Soup },
-  { href: '/collecties', label: 'Collecties', icon: FolderOpen },
-  { href: '/favorieten', label: 'Favorieten', icon: Heart },
-  { href: '/ingredienten', label: 'Ingrediënten', icon: Apple },
+  { href: '/recepten', label: 'Recepten' },
+  { href: '/suggesties', label: 'Wat koken?' },
+  { href: '/favorieten', label: 'Favorieten' },
+  { href: '/collecties', label: 'Collecties' },
+  { href: '/ingredienten', label: 'Ingrediënten' },
 ];
 
+/**
+ * Desktop-bovenbalk (md+). Op mobiel heeft elk scherm zijn eigen kop volgens
+ * design v2 en gebeurt navigatie via de BottomNav.
+ */
 export default function Header() {
   const { user, profile, signOut } = useAuth();
   const { isAdmin } = useAdmin();
@@ -26,7 +28,6 @@ export default function Header() {
   const userMenuRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
 
-  // Close user menu on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
@@ -43,81 +44,80 @@ export default function Header() {
     window.location.href = '/';
   };
 
-  return (
-    <>
-      {/* ── Top header ──────────────────────────────── */}
-      <header className="sticky top-0 z-40 border-b bg-surface">
-        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6 md:h-16">
-          {/* Logo */}
-          <Link href="/" className="flex items-center gap-2">
-            <ChefHat className="h-7 w-7 text-primary" />
-            <span className="text-xl font-bold text-primary">Receptenboek</span>
-          </Link>
+  const initial = (profile?.display_name || user?.email || '?').trim().charAt(0).toUpperCase();
 
-          {/* Desktop nav */}
-          <nav data-tour="desktop-nav" className="hidden items-center gap-6 md:flex">
-            {navLinks.map((link) => (
+  return (
+    <header className="bar-blur sticky top-0 z-40 hidden border-b border-line md:block">
+      <div className="mx-auto flex h-[72px] max-w-6xl items-center gap-8 px-8">
+        <Link href="/recepten" className="flex items-center gap-3">
+          <span className="flex h-10 w-10 items-center justify-center rounded-icon-btn bg-primary text-on-primary">
+            <ChefHat className="h-[22px] w-[22px]" strokeWidth={2} />
+          </span>
+          <span className="font-display text-[22px] font-semibold tracking-[-0.02em] text-ink">Receptenboek</span>
+        </Link>
+
+        <nav data-tour="desktop-nav" className="flex flex-1 items-center gap-1">
+          {navLinks.map((link) => {
+            const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
+            return (
               <Link
                 key={link.href}
                 href={link.href}
-                className={`text-sm font-medium transition-colors hover:text-primary ${
-                  pathname.startsWith(link.href) ? 'text-primary' : 'text-text-secondary'
+                aria-current={active ? 'page' : undefined}
+                className={`rounded-chip px-3.5 py-2 text-[15px] font-medium transition-colors ${
+                  active ? 'bg-primary-tint text-primary' : 'text-ink-3 hover:bg-sunk hover:text-ink'
                 }`}
               >
                 {link.label}
               </Link>
-            ))}
-          </nav>
+            );
+          })}
+        </nav>
 
-          {/* Notification bell + User menu */}
-          <div className="flex items-center gap-1">
-            {user && <NotificationBell />}
-          <div ref={userMenuRef} className="relative">
-            {user ? (
-              <>
+        <div className="flex items-center gap-2">
+          {user ? (
+            <>
+              <Link
+                href="/recepten/nieuw"
+                className="mr-1 inline-flex h-10 items-center gap-1.5 rounded-icon-btn bg-primary px-4 text-[15px] font-semibold text-on-primary shadow-btn-primary hover:bg-primary-dark"
+              >
+                <Plus className="h-[18px] w-[18px]" strokeWidth={2.2} />
+                Nieuw recept
+              </Link>
+              <NotificationBell />
+              <div ref={userMenuRef} className="relative">
                 <button
                   type="button"
                   onClick={() => setUserMenuOpen(!userMenuOpen)}
-                  className="flex items-center gap-2 rounded-full py-1 pl-1 pr-1 transition-colors hover:bg-gray-100 md:pr-3"
+                  aria-label="Accountmenu"
+                  className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-placeholder font-display text-lg font-semibold text-ink"
                 >
-                  <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-light text-primary md:h-9 md:w-9">
-                    {!profile ? (
-                      <div className="h-full w-full animate-pulse rounded-full bg-gray-200" />
-                    ) : profile.avatar_url ? (
-                      <img
-                        src={profile.avatar_url}
-                        alt={profile.display_name || ''}
-                        className="h-full w-full rounded-full object-cover"
-                      />
-                    ) : (
-                      <User className="h-4 w-4 md:h-5 md:w-5" />
-                    )}
-                    {isAdmin && (
-                      <div className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[8px] font-bold text-white ring-2 ring-surface">
-                        <ShieldAlert className="h-2.5 w-2.5" />
-                      </div>
-                    )}
-                  </div>
-                  <span className="hidden text-sm font-medium text-text-primary md:inline">
-                    {!profile ? (
-                      <span className="inline-block h-4 w-16 animate-pulse rounded bg-gray-200" />
-                    ) : (
-                      profile.display_name || 'Gebruiker'
-                    )}
-                  </span>
+                  {profile?.avatar_url ? (
+                    <img src={profile.avatar_url} alt="" className="h-full w-full object-cover" />
+                  ) : profile ? (
+                    initial
+                  ) : (
+                    <User className="h-5 w-5 text-ink-3" />
+                  )}
                 </button>
 
                 {userMenuOpen && (
-                  <div className="absolute right-0 top-full mt-2 w-48 rounded-lg border bg-surface py-1 shadow-lg">
-                    <div className="border-b px-4 py-2">
-                      <p className="text-sm font-medium text-text-primary">
-                        {profile?.display_name || 'Gebruiker'}
-                      </p>
-                      <p className="text-xs text-text-muted">{user.email}</p>
+                  <div className="absolute right-0 top-full mt-2 w-56 overflow-hidden rounded-card border border-line bg-surface py-1 shadow-lg">
+                    <div className="border-b border-line-soft px-4 py-3">
+                      <p className="text-[15px] font-semibold text-ink">{profile?.display_name || 'Gebruiker'}</p>
+                      <p className="truncate text-meta text-ink-3">{user.email}</p>
                     </div>
                     <Link
+                      href="/profiel"
+                      className="flex items-center gap-2.5 px-4 py-2.5 text-[15px] text-ink-2 hover:bg-gray-50"
+                      onClick={() => setUserMenuOpen(false)}
+                    >
+                      <User className="h-4 w-4" />
+                      Profiel
+                    </Link>
+                    <Link
                       href="/instellingen"
-                      className="flex items-center gap-2 px-4 py-2 text-sm text-text-secondary hover:bg-gray-50"
+                      className="flex items-center gap-2.5 px-4 py-2.5 text-[15px] text-ink-2 hover:bg-gray-50"
                       onClick={() => setUserMenuOpen(false)}
                     >
                       <Settings className="h-4 w-4" />
@@ -126,7 +126,7 @@ export default function Header() {
                     {isAdmin && (
                       <Link
                         href="/admin"
-                        className="flex items-center gap-2 px-4 py-2 text-sm text-primary hover:bg-primary/5"
+                        className="flex items-center gap-2.5 px-4 py-2.5 text-[15px] text-primary hover:bg-primary-tint"
                         onClick={() => setUserMenuOpen(false)}
                       >
                         <ShieldAlert className="h-4 w-4" />
@@ -135,7 +135,7 @@ export default function Header() {
                     )}
                     <button
                       type="button"
-                      className="flex w-full items-center gap-2 px-4 py-2 text-sm text-text-secondary hover:bg-gray-50"
+                      className="flex w-full items-center gap-2.5 px-4 py-2.5 text-[15px] text-ink-2 hover:bg-gray-50"
                       onClick={handleSignOut}
                     >
                       <LogOut className="h-4 w-4" />
@@ -143,41 +143,18 @@ export default function Header() {
                     </button>
                   </div>
                 )}
-              </>
-            ) : (
-              <Link
-                href="/login"
-                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90"
-              >
-                Inloggen
-              </Link>
-            )}
-          </div>
-          </div>
+              </div>
+            </>
+          ) : (
+            <Link
+              href="/login"
+              className="inline-flex h-10 items-center rounded-icon-btn bg-primary px-4 text-[15px] font-semibold text-on-primary hover:bg-primary-dark"
+            >
+              Inloggen
+            </Link>
+          )}
         </div>
-      </header>
-
-      {/* ── Mobile bottom tab bar ───────────────────── */}
-      <nav data-tour="mobile-nav" className="fixed bottom-0 left-0 right-0 z-40 border-t bg-surface md:hidden">
-        <div className="flex items-stretch justify-around">
-          {navLinks.map((link) => {
-            const Icon = link.icon;
-            const active = pathname.startsWith(link.href);
-            return (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-medium transition-colors ${
-                  active ? 'text-primary' : 'text-text-muted'
-                }`}
-              >
-                <Icon className={`h-5 w-5 ${active ? 'text-primary' : 'text-text-muted'}`} />
-                {link.label}
-              </Link>
-            );
-          })}
-        </div>
-      </nav>
-    </>
+      </div>
+    </header>
   );
 }

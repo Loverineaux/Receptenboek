@@ -40,18 +40,19 @@ export default function Modal({ open, onClose, title, children, footer }: ModalP
     <div
       ref={overlayRef}
       onClick={handleOverlayClick}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-50 flex animate-fade-in items-center justify-center bg-[rgba(18,24,18,0.5)] p-4"
     >
-      <div className="w-full max-w-lg rounded-xl bg-surface shadow-xl">
+      <div className="w-full max-w-lg rounded-card-lg bg-background shadow-xl">
         {/* Header */}
-        <div className="flex items-center justify-between border-b px-6 py-4">
-          <h2 className="text-lg font-semibold text-text-primary">{title}</h2>
+        <div className="flex items-center justify-between px-6 pb-2 pt-5">
+          <h2 className="font-display text-section font-semibold text-ink">{title}</h2>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-1 text-text-muted hover:bg-gray-100 hover:text-text-secondary"
+            aria-label="Sluiten"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-sunk text-ink hover:bg-line"
           >
-            <X className="h-5 w-5" />
+            <X className="h-[18px] w-[18px]" strokeWidth={2.2} />
           </button>
         </div>
 
@@ -60,7 +61,7 @@ export default function Modal({ open, onClose, title, children, footer }: ModalP
 
         {/* Footer */}
         {footer && (
-          <div className="flex items-center justify-end gap-2 border-t px-6 py-4">
+          <div className="flex items-center justify-end gap-2 border-t border-line-soft px-6 py-4">
             {footer}
           </div>
         )}

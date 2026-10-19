@@ -9,21 +9,22 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   loading?: boolean;
 }
 
+// Design v2: primair = bosgroen met groene gloed, secundair = crème kaart met rand.
 const variantStyles: Record<string, string> = {
   primary:
-    'bg-primary text-white hover:bg-primary/90 focus:ring-primary/50',
+    'bg-primary text-on-primary shadow-btn-primary hover:bg-primary-dark focus-visible:ring-primary/40',
   secondary:
-    'border border-primary text-primary hover:bg-primary-light focus:ring-primary/50',
+    'border border-line bg-surface text-ink hover:bg-gray-50 focus-visible:ring-primary/30',
   danger:
-    'bg-error text-white hover:bg-error/90 focus:ring-error/50',
+    'bg-error text-white hover:bg-error/90 focus-visible:ring-error/40',
   ghost:
-    'text-text-secondary hover:bg-gray-100 focus:ring-gray-300',
+    'text-ink-3 hover:bg-sunk focus-visible:ring-line-strong',
 };
 
 const sizeStyles: Record<string, string> = {
-  sm: 'px-3 py-1.5 text-sm',
-  md: 'px-4 py-2 text-sm',
-  lg: 'px-6 py-3 text-base',
+  sm: 'h-9 rounded-icon-btn px-3.5 text-sm',
+  md: 'h-11 rounded-icon-btn px-4 text-[15px]',
+  lg: 'h-[54px] rounded-btn px-6 text-base',
 };
 
 const Button = forwardRef<HTMLButtonElement, ButtonProps>(
@@ -43,7 +44,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       <button
         ref={ref}
         disabled={disabled || loading}
-        className={`inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed ${variantStyles[variant]} ${sizeStyles[size]} ${className}`}
+        className={`inline-flex items-center justify-center gap-2 font-semibold transition-colors focus:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50 ${variantStyles[variant]} ${sizeStyles[size]} ${className}`}
         {...props}
       >
         {loading && <Loader2 className="h-4 w-4 animate-spin" />}
