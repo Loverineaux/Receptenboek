@@ -354,14 +354,19 @@ function RecipeDetailPage({
   const [nutritionOpen, setNutritionOpen] = useState(false);
   const nutritionFetched = useRef(false);
 
-  // Persist tab + portions in URL so state survives app suspend / screen off
+  // Persist tab + portions in URL so state survives app suspend / screen off.
+  // Bewust history.replaceState i.p.v. router.replace: dat laatste haalt de hele
+  // pagina opnieuw van de server (RSC + receptquery) bij elke tab- of portiewissel.
+  // Next.js synchroniseert useSearchParams met native replaceState.
   useEffect(() => {
     const p = new URLSearchParams();
     if (tab !== 'ingredienten') p.set('tab', tab);
     if (recipe && portions !== recipe.basis_porties) p.set('porties', String(portions));
     const qs = p.toString();
-    router.replace(`/recepten/${params.id}${qs ? `?${qs}` : ''}`, { scroll: false });
-  }, [tab, portions, recipe, params.id, router]);
+    const target = `/recepten/${params.id}${qs ? `?${qs}` : ''}`;
+    if (`${window.location.pathname}${window.location.search}` === target) return;
+    window.history.replaceState(window.history.state, '', target);
+  }, [tab, portions, recipe, params.id]);
 
   // Auto-calculate nutrition when tab is 'voeding' and no source nutrition exists
   useEffect(() => {

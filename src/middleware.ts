@@ -17,6 +17,8 @@ export const config = {
     /*
      * Match page routes only (not static files, images, or API routes handled above).
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    // Ook manifest, service workers en overige statische bestanden overslaan:
+    // die werden anders naar /login doorgestuurd (PWA-manifest kapot).
+    '/((?!_next/static|_next/image|favicon.ico|manifest.json|sw.js|firebase-messaging-sw.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|json|js|txt|xml|woff2?)$).*)',
   ],
 }
