@@ -6,6 +6,16 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '1.19.2',
+    date: '19 oktober 2026',
+    highlights: [
+      'Na het inloggen met Google blijf je niet meer seconden lang op het Google-scherm hangen',
+      'Het receptenoverzicht verschijnt direct na het inloggen, je profielgegevens laden op de achtergrond',
+      'De app reageert ook sneller als hij een tijdje niet gebruikt is',
+      'Achter de schermen worden je recepten en inloggegevens klaargehouden, zodat het eerste openen vlotter gaat',
+    ],
+  },
+  {
     version: '1.19.1',
     date: '19 oktober 2026',
     highlights: [
@@ -24,15 +34,6 @@ export const releaseNotes: ReleaseNote[] = [
       'Een Picnic-recept importeren duurt nu ongeveer een seconde in plaats van tientallen seconden',
       'De receptherkenning voor links, foto’s, PDF’s en geplakte tekst gebruikt de nieuwste AI-modellen',
       'De receptchat, het omrekenen van porties en het automatisch indelen in categorieën werken sneller',
-    ],
-  },
-  {
-    version: '1.18.28',
-    date: '2 juli 2026',
-    highlights: [
-      'Picnic-recepten die eerder correct werden opgehaald werken gewoon weer — de automatische import blijft behouden',
-      'Lukt een import toch niet, dan krijg je nu tenminste de titel terug om zelf aan te vullen, in plaats van een leeg recept',
-      'Je kunt een heel gedeeld bericht plakken (met de link erin) — de titel wordt er automatisch uitgehaald',
     ],
   },
 ];
