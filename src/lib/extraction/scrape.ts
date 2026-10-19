@@ -7,6 +7,7 @@
  */
 
 import { assertPublicUrl } from "@/lib/security/ssrf";
+import { extractPicnicRecipe, isPicnicUrl } from "./picnic";
 
 // Verlaagd van 15s → 8s: twee opeenvolgende pogingen (browser- en simple-
 // headers) kostten in het slechtste geval 30s vóór er überhaupt een LLM in
@@ -44,6 +45,8 @@ interface ScrapedRecipe {
   rawHtml: string;
   /** Page title */
   pageTitle: string;
+  /** Recept uit de Picnic RSC-payload (alleen voor picnic.app) */
+  picnicRecipe: ReturnType<typeof extractPicnicRecipe>;
 }
 
 // Minimal headers — less likely to trigger bot detection on some CDNs
@@ -362,7 +365,10 @@ function parseHtml(html: string, url: string): ScrapedRecipe {
   // 5. Truncated raw HTML (keep relevant parts)
   const rawHtml = html.length > 50000 ? html.substring(0, 50000) : html;
 
-  return { jsonLd, ogImage, pageText, rawHtml, pageTitle };
+  // 6. Picnic: recept staat in de Next.js-payload, niet in de zichtbare HTML
+  const picnicRecipe = isPicnicUrl(url) ? extractPicnicRecipe(html, ogImage) : null;
+
+  return { jsonLd, ogImage, pageText, rawHtml, pageTitle, picnicRecipe };
 }
 
 function extractJsonLd(html: string, pageUrl?: string): any | null {
@@ -673,7 +679,7 @@ function parseIsoDuration(iso: any): string | null {
 }
 
 // Standardize unit abbreviations to full Dutch names
-function normalizeUnit(unit: string | null): string | null {
+export function normalizeUnit(unit: string | null): string | null {
   if (!unit) return null;
   const u = unit.toLowerCase().replace(/\.$/, '').trim();
   const map: Record<string, string> = {

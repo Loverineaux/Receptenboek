@@ -48,8 +48,10 @@ export async function POST(request: NextRequest) {
     const client = new Anthropic();
 
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 2048,
+      model: 'claude-sonnet-5-5',
+      max_tokens: 4096,
+      thinking: { type: 'between_tools' },
+      output_config: { effort: 'low' },
       system: 'Lees de voedingswaardentabel op deze foto.',
       messages: [
         {

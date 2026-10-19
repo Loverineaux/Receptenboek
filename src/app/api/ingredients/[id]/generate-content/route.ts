@@ -58,8 +58,10 @@ export async function POST(
 
         // Step 1: Research with web search
         const researchResponse = await client.messages.create({
-          model: 'claude-sonnet-4-6',
+          model: 'claude-sonnet-5-5',
           max_tokens: 4096,
+          thinking: { type: 'between_tools' },
+          output_config: { effort: 'low' },
           tools: [
             {
               type: 'web_search_20250305',
@@ -97,8 +99,10 @@ Geef alle informatie zo volledig en feitelijk mogelijk.`,
 
         // Step 2: Structure as JSON
         const structureResponse = await client.messages.create({
-          model: 'claude-sonnet-4-6',
-          max_tokens: 2048,
+          model: 'claude-sonnet-5-5',
+          max_tokens: 4096,
+          thinking: { type: 'between_tools' },
+          output_config: { effort: 'low' },
           system: 'Je bent een data-assistent. Structureer de gegeven informatie als JSON. Antwoord ALLEEN met valid JSON, geen andere tekst.',
           messages: [
             {

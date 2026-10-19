@@ -22,8 +22,9 @@ async function autoCategorize(recipeId: string, title: string, ingredients: any[
       .join('\n');
 
     const response = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 256,
+      model: 'claude-haiku-5-5',
+      max_tokens: 1024,
+      output_config: { effort: 'low' },
       messages: [{
         role: 'user',
         content: `Categoriseer dit recept. Titel: "${title}"\nIngrediënten:\n${ingList || '(geen)'}\n\nKies uit: Kip, Vlees, Vis, Vegetarisch, Veganistisch, Pasta, Salade, Soep, Dessert, Ontbijt, Lunch.\nEIWIT: kies max 1 (Kip/Vlees/Vis/Vegetarisch/Veganistisch). NIET bij desserts/ontbijt/lunch/soep.\nAntwoord ALLEEN als JSON array, bijv. ["Vis", "Salade"].`
@@ -133,8 +134,9 @@ export async function POST(request: NextRequest) {
           ? `\n\nDe afbeelding van dit recept is: ${scraped.ogImage} — gebruik dit als image_url.`
           : '';
         const response = await client.messages.create({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 4096,
+          model: 'claude-haiku-5-5',
+          max_tokens: 8192,
+          output_config: { effort: 'low' },
           system: EXTRACTION_SYSTEM_PROMPT,
           messages: [{
             role: 'user',

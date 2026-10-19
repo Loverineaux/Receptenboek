@@ -141,9 +141,10 @@ Alleen JSON.`,
     });
 
     const response = await client.messages.create({
-      model: "claude-sonnet-5",
+      model: "claude-sonnet-5-5",
       max_tokens: 2048,
-      thinking: { type: "disabled" },
+      thinking: { type: "between_tools" },
+      output_config: { effort: "low" },
       messages: [{ role: "user", content: contentBlocks }],
     });
 
@@ -257,8 +258,9 @@ export async function POST(request: NextRequest) {
                     try {
                       const pageText = batch.map((p: any) => `--- PAGINA ${p.pageNum} ---\n${p.text}`).join("\n\n");
                       const response = await client.messages.create({
-                        model: "claude-haiku-4-5-20251001",
+                        model: "claude-haiku-5-5",
                         max_tokens: 16384,
+                        output_config: { effort: "low" },
                         system: buildAiPrompt(bron),
                         messages: [{ role: "user", content: `Vind alle recepten:\n\n${pageText}` }],
                       });
@@ -318,9 +320,10 @@ export async function POST(request: NextRequest) {
                       });
 
                       const response = await client.messages.create({
-                        model: "claude-sonnet-5",
+                        model: "claude-sonnet-5-5",
                         max_tokens: 16384,
-                        thinking: { type: "disabled" },
+                        thinking: { type: "between_tools" },
+                        output_config: { effort: "low" },
                         system: buildAiPrompt(bron),
                         messages: [{ role: "user", content: contentBlocks }],
                       });
@@ -425,8 +428,9 @@ export async function POST(request: NextRequest) {
                   try {
                     const pageText = batch.map((p) => `--- PAGINA ${p.pageNum} ---\n${p.text}`).join("\n\n");
                     const response = await client.messages.create({
-                      model: "claude-haiku-4-5-20251001",
+                      model: "claude-haiku-5-5",
                       max_tokens: 16384,
+                      output_config: { effort: "low" },
                       system: buildAiPrompt(bron),
                       messages: [{ role: "user", content: `Vind alle recepten:\n\n${pageText}` }],
                     });
@@ -486,9 +490,10 @@ export async function POST(request: NextRequest) {
                     });
 
                     const response = await client.messages.create({
-                      model: "claude-sonnet-5",
+                      model: "claude-sonnet-5-5",
                       max_tokens: 16384,
-                      thinking: { type: "disabled" },
+                      thinking: { type: "between_tools" },
+                      output_config: { effort: "low" },
                       system: buildAiPrompt(bron),
                       messages: [{ role: "user", content: contentBlocks }],
                     });

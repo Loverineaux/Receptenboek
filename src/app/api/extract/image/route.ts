@@ -212,12 +212,13 @@ export async function POST(request: NextRequest) {
           send({ type: "status", message: "Tekst en ingrediënten herkennen..." });
 
           const response = await client.messages.create({
-            model: "claude-sonnet-5",
+            model: "claude-sonnet-5-5",
             max_tokens: 8192,
-            // Sonnet 5 zet adaptive thinking standaard aan als dit veld
-            // ontbreekt; voor gestructureerde extractie uitzetten (sneller,
-            // geen risico op afgekapte JSON).
-            thinking: { type: "disabled" },
+            // Sonnet 5.5 weigert thinking "disabled" (HTTP 400). between_tools + effort
+            // low is de laagste stand: voor gestructureerde extractie het snelst en
+            // met minste risico op afgekapte JSON.
+            thinking: { type: "between_tools" },
+            output_config: { effort: "low" },
             system: IMAGE_EXTRACTION_PROMPT,
             messages: [{ role: "user", content: contentBlocks }],
           });

@@ -83,8 +83,10 @@ export async function POST() {
     .join('\n');
 
   const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-6',
+    model: 'claude-sonnet-5-5',
     max_tokens: 4096,
+    thinking: { type: 'between_tools' },
+    output_config: { effort: 'low' },
     messages: [
       {
         role: 'user',
@@ -114,7 +116,7 @@ Antwoord ALLEEN als JSON array waarbij elk item: {"idx": <input-rij-nummer>, "pa
     ],
   });
 
-  const text = response.content[0].type === 'text' ? response.content[0].text : '';
+  const text = response.content.filter((b) => b.type === 'text').map((b: any) => b.text).join('');
   let parsedRaw: unknown;
   try {
     const jsonMatch = text.match(/\[[\s\S]*\]/);

@@ -69,8 +69,9 @@ async function filterProductsWithAI(ingredientName: string, products: OffProduct
 
   try {
     const response = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 256,
+      model: 'claude-haiku-5-5',
+      max_tokens: 1024,
+      output_config: { effort: 'low' },
       messages: [{
         role: 'user',
         content: `Ik zoek het PURE ingrediënt "${ingredientName}". Welke van deze supermarktproducten bevatten ALLEEN dat ingrediënt (puur, rauw, gedroogd, of gemalen)?

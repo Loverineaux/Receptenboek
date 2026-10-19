@@ -186,8 +186,9 @@ async function findImageViaWebSearch(
     try {
       const client = new Anthropic();
       const res = await client.messages.create({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 1024,
+        model: "claude-haiku-5-5",
+        max_tokens: 2048,
+        output_config: { effort: "low" },
         system: `Je zoekt de directe afbeelding-URL van een specifieke receptpagina op ${hostname}. Retourneer UITSLUITEND geldig JSON: {"image_url": "https://..."} of {"image_url": null}. Geen uitleg.`,
         tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }],
         messages: [
@@ -324,6 +325,18 @@ export async function POST(request: NextRequest) {
         recipe._incomplete = true;
       }
 
+      setCachedRecipe(url, recipe);
+      return respondWithValidation(recipe);
+    }
+
+    // Step 1b: Picnic — recept rechtstreeks uit de Next.js-payload (geen LLM).
+    // Alleen gebruiken als er echt inhoud is; anders de normale route volgen.
+    const picnic = scraped.picnicRecipe;
+    if (picnic && (picnic.ingredients.length > 0 || picnic.steps.length > 0)) {
+      console.log(
+        `[URL Extract] Picnic-payload: ${picnic.ingredients.length} ingrediënten, ${picnic.steps.length} stappen`,
+      );
+      const recipe = ensureTitle(picnic, url, titleHint);
       setCachedRecipe(url, recipe);
       return respondWithValidation(recipe);
     }
@@ -510,12 +523,13 @@ async function extractRecipeFromPageText(
     ? `\n\nDe afbeelding van dit recept is: ${ogImage} — gebruik dit als image_url.`
     : "";
   const response = await client.messages.create({
-    model: "claude-sonnet-5",
+    model: "claude-sonnet-5-5",
     max_tokens: 4096,
-    // Extractie is gestructureerde output — geen thinking nodig. Op Sonnet 5
-    // staat adaptive thinking standaard AAN als je dit veld weglaat, wat
-    // latency toevoegt en de JSON-output kan afkappen. Expliciet uitzetten.
-    thinking: { type: "disabled" },
+    // Extractie is gestructureerde output — geen thinking nodig. Sonnet 5.5
+    // weigert thinking "disabled" (HTTP 400); between_tools + effort low is de
+    // laagste stand, voor snelheid en minder kans op afgekapte JSON.
+    thinking: { type: "between_tools" },
+    output_config: { effort: "low" },
     system: [
       { type: "text", text: EXTRACTION_SYSTEM_PROMPT, cache_control: { type: "ephemeral" } },
     ],
@@ -545,9 +559,10 @@ async function extractWithClaude(
     : "";
 
   const response = await client.messages.create({
-    model: "claude-sonnet-5",
+    model: "claude-sonnet-5-5",
     max_tokens: 4096,
-    thinking: { type: "disabled" },
+    thinking: { type: "between_tools" },
+    output_config: { effort: "low" },
     system: [
       { type: "text", text: EXTRACTION_SYSTEM_PROMPT, cache_control: { type: "ephemeral" } },
     ],
@@ -614,9 +629,10 @@ async function fallbackWebSearch(url: string, quick = false, titleHint: string |
   const hostname = urlObj.hostname.replace("www.", "");
 
   const searchResponse = await client.messages.create({
-    model: "claude-sonnet-5",
+    model: "claude-sonnet-5-5",
     max_tokens: 4096,
-    thinking: { type: "disabled" },
+    thinking: { type: "between_tools" },
+    output_config: { effort: "low" },
     system:
       "Je bent een assistent die recepten opzoekt via het web. Zoek de volledige receptinformatie op. Het is CRUCIAAL dat je ALLE ingrediënten vindt met de EXACTE hoeveelheden en eenheden (bijv. '300 gram spitskool', '1 ui', '2 eieren', '30 ml ketjap manis'). Doe MEERDERE zoekopdrachten als de eerste niet alle ingrediënten met hoeveelheden geeft.",
     tools: [
@@ -674,9 +690,10 @@ Als het recept in het Engels is, vertaal dan alles naar het Nederlands.`,
   const fullText = searchText;
 
   const structureResponse = await client.messages.create({
-    model: "claude-sonnet-5",
+    model: "claude-sonnet-5-5",
     max_tokens: 4096,
-    thinking: { type: "disabled" },
+    thinking: { type: "between_tools" },
+    output_config: { effort: "low" },
     system: [
       { type: "text", text: EXTRACTION_SYSTEM_PROMPT, cache_control: { type: "ephemeral" } },
     ],

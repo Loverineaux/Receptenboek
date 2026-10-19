@@ -51,8 +51,9 @@ async function autoCategorize(recipeId: string, title: string, ingredients: any[
   console.log(`[Auto-categorize] ${title}`);
 
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 256,
+    model: 'claude-haiku-5-5',
+    max_tokens: 1024,
+    output_config: { effort: 'low' },
     messages: [{
       role: 'user',
       content: `Je bent een ervaren kok. Categoriseer dit recept op basis van je culinaire kennis.

@@ -115,8 +115,9 @@ De vervolgvragen moeten logische opvolgers zijn van je antwoord, kort (max 6 woo
     async start(controller) {
       try {
         const response = await client.messages.stream({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 1024,
+          model: 'claude-haiku-5-5',
+          max_tokens: 2048,
+          output_config: { effort: 'low' },
           system: systemPrompt,
           messages: messages.map((m: any) => ({
             role: m.role,
