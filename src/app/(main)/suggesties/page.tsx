@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import useSWR from 'swr';
 import Link from 'next/link';
 import Image from 'next/image';
 import { ChefHat, ChevronRight, UtensilsCrossed } from 'lucide-react';
@@ -8,6 +9,7 @@ import IngredientChips from '@/components/ui/IngredientChips';
 import ScreenHeader from '@/components/ui/ScreenHeader';
 import SectionHeader from '@/components/ui/SectionHeader';
 import Chip from '@/components/ui/Chip';
+import { SWR_PAGE_OPTIONS } from '@/lib/swr';
 
 interface SuggestionResult {
   recipe: any;
@@ -31,6 +33,8 @@ function parseMinutes(tijd: string | null | undefined): number | null {
   return Math.round((hours ? parseFloat(hours[1]) * 60 : 0) + (mins ? parseInt(mins[1], 10) : 0));
 }
 
+const SELECTION_STORAGE_KEY = 'suggesties-ingredienten';
+
 const VEGA_TAGS = ['vegetarisch', 'veganistisch'];
 
 function isVega(recipe: any): boolean {
@@ -42,49 +46,69 @@ function isVega(recipe: any): boolean {
 
 export default function SuggestiesPage() {
   const [ingredients, setIngredients] = useState<string[]>([]);
-  const [results, setResults] = useState<SuggestionResult[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [searched, setSearched] = useState(false);
-  const [error, setError] = useState(false);
+  // Selectie na de debounce: bepaalt de SWR-key
+  const [searchList, setSearchList] = useState<string[]>([]);
+  const [hydrated, setHydrated] = useState(false);
   const [quick, setQuick] = useState(false);
   const [vega, setVega] = useState(false);
+
+  // Herstel de selectie uit sessionStorage (overleeft navigeren en terugkomen)
+  useLayoutEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(SELECTION_STORAGE_KEY);
+      const saved = raw ? JSON.parse(raw) : null;
+      if (Array.isArray(saved) && saved.every((i) => typeof i === 'string')) {
+        setIngredients(saved);
+        setSearchList(saved);
+      }
+    } catch {}
+    setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      sessionStorage.setItem(SELECTION_STORAGE_KEY, JSON.stringify(ingredients));
+    } catch {}
+  }, [ingredients, hydrated]);
 
   // Zoek automatisch (met korte vertraging) zodra de selectie verandert
   useEffect(() => {
     if (ingredients.length === 0) {
-      setResults([]);
-      setSearched(false);
-      setError(false);
+      setSearchList([]);
       return;
     }
-    const controller = new AbortController();
-    const timer = setTimeout(async () => {
-      setLoading(true);
-      setError(false);
-      try {
-        const res = await fetch('/api/suggesties', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ingredienten: ingredients }),
-          signal: controller.signal,
-        });
-        if (res.ok) {
-          setResults(await res.json());
-          setSearched(true);
-        } else {
-          setError(true);
-        }
-      } catch (e: any) {
-        if (e?.name !== 'AbortError') setError(true);
-      } finally {
-        if (!controller.signal.aborted) setLoading(false);
-      }
-    }, 300);
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
+    const timer = setTimeout(() => setSearchList(ingredients), 300);
+    return () => clearTimeout(timer);
   }, [ingredients]);
+
+  // Cache per gesorteerde ingrediëntenlijst: terug naar "Wat koken we?" toont direct de laatste resultaten
+  const sortedKey = useMemo(() => [...searchList].sort().join('|'), [searchList]);
+  const {
+    data,
+    error: swrError,
+    isLoading,
+  } = useSWR<SuggestionResult[]>(
+    searchList.length > 0 ? ['suggesties', sortedKey] : null,
+    async () => {
+      const res = await fetch('/api/suggesties', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ingredienten: [...searchList].sort() }),
+      });
+      if (!res.ok) throw new Error('Zoeken is niet gelukt');
+      return res.json();
+    },
+    SWR_PAGE_OPTIONS
+  );
+
+  const hasSelection = ingredients.length > 0;
+  const results = useMemo(() => (hasSelection && data ? data : []), [hasSelection, data]);
+  const searched = hasSelection && data !== undefined;
+  const error = hasSelection && !!swrError && data === undefined;
+  // Skeleton alleen zonder data; bij een nieuwe selectie blijft de oude lijst zichtbaar (gedimd)
+  const loading = hasSelection && data === undefined && !swrError;
+  const switching = hasSelection && data !== undefined && isLoading;
 
   const filtered = useMemo(
     () =>
@@ -147,7 +171,7 @@ export default function SuggestiesPage() {
       )}
 
       {!loading && !error && filtered.length > 0 && (
-        <div className="flex flex-col gap-3">
+        <div className={`flex flex-col gap-3 transition-opacity ${switching ? 'opacity-60' : ''}`}>
           {filtered.map((r) => (
             <SuggestionRow key={r.recipe.id} result={r} />
           ))}

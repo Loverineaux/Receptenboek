@@ -1,26 +1,18 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
+import useSWR from 'swr';
 import { useAuth } from '@/hooks/useAuth';
+import { jsonFetcher, SWR_PAGE_OPTIONS } from '@/lib/swr';
 
 export function useCollectionRecipeIds() {
   const { user, loading } = useAuth();
-  const [ids, setIds] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
-    if (loading) return;
-    if (!user) {
-      setIds(new Set());
-      return;
-    }
+  const { data } = useSWR<string[]>(
+    !loading && user ? ['collection-recipe-ids', user.id] : null,
+    () => jsonFetcher<string[]>('/api/collections/my-recipe-ids'),
+    SWR_PAGE_OPTIONS
+  );
 
-    fetch('/api/collections/my-recipe-ids')
-      .then((res) => res.json())
-      .then((data) => {
-        if (Array.isArray(data)) setIds(new Set(data));
-      })
-      .catch(() => {});
-  }, [user?.id, loading]);
-
-  return ids;
+  return useMemo(() => new Set<string>(Array.isArray(data) ? data : []), [data]);
 }

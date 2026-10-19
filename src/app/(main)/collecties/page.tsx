@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import useSWR from 'swr';
 import { Plus } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { createClient } from '@/lib/supabase/client';
+import { jsonFetcher, SWR_PAGE_OPTIONS } from '@/lib/swr';
 import CollectionCard from '@/components/recipes/CollectionCard';
 import NewCollectionModal from '@/components/collections/NewCollectionModal';
 import PullToRefresh from '@/components/ui/PullToRefresh';
@@ -15,27 +17,23 @@ import type { CollectionWithDetails } from '@/types';
 type Tab = 'all' | 'mine';
 
 export default function CollectiesPage() {
-  const { user } = useAuth();
-  const [collections, setCollections] = useState<CollectionWithDetails[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { user, loading: authLoading } = useAuth();
+  // SWR-cache (key gedeeld met favorieten-pagina): terugnavigeren toont direct de vorige lijst
+  const { data: collectionsData, error, mutate } = useSWR<CollectionWithDetails[]>(
+    authLoading ? null : ['collections', user?.id ?? 'anon'],
+    () => jsonFetcher<CollectionWithDetails[]>('/api/collections'),
+    SWR_PAGE_OPTIONS
+  );
+  const collections = useMemo(
+    () => (Array.isArray(collectionsData) ? collectionsData : []),
+    [collectionsData]
+  );
+  const loading = collectionsData === undefined && !error;
+  const fetchCollections = async () => {
+    await mutate();
+  };
   const [tab, setTab] = useState<Tab>('all');
   const [createOpen, setCreateOpen] = useState(false);
-
-  const fetchCollections = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch('/api/collections');
-      const data = await res.json();
-      setCollections(Array.isArray(data) ? data : []);
-    } catch {
-      setCollections([]);
-    }
-    setLoading(false);
-  }, []);
-
-  useEffect(() => {
-    fetchCollections();
-  }, [fetchCollections]);
 
   // Realtime: collections changes
   useEffect(() => {
@@ -121,7 +119,7 @@ export default function CollectiesPage() {
         <NewCollectionModal
           open={createOpen}
           onClose={() => setCreateOpen(false)}
-          onCreated={(c) => setCollections((prev) => [c, ...prev])}
+          onCreated={(c) => mutate((prev) => [c, ...(prev ?? [])], { revalidate: false })}
         />
       </div>
     </PullToRefresh>

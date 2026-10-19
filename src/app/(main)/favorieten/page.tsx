@@ -1,10 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import useSWR from 'swr';
 import Link from 'next/link';
 import { Search, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { jsonFetcher, SWR_PAGE_OPTIONS } from '@/lib/swr';
 import RecipeCard from '@/components/recipes/RecipeCard';
 import ScreenHeader from '@/components/ui/ScreenHeader';
 import SectionHeader from '@/components/ui/SectionHeader';
@@ -20,99 +22,86 @@ const AddToCollectionModal = dynamic(() => import('@/components/recipes/AddToCol
 import { useCollectionRecipeIds } from '@/hooks/useCollectionRecipeIds';
 import type { CollectionWithDetails, RecipeWithRelations } from '@/types';
 
-export default function FavorietenPage() {
-  const { user } = useAuth();
-  const collectionRecipeIds = useCollectionRecipeIds();
+// Haalt de favoriete recepten van een gebruiker op (Supabase-client)
+async function fetchFavoriteRecipes(userId: string): Promise<RecipeWithRelations[]> {
   const supabase = createClient();
 
-  const [recipes, setRecipes] = useState<RecipeWithRelations[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Get favorite recipe IDs
+  const { data: favs } = await supabase
+    .from('favorites')
+    .select('recipe_id')
+    .eq('user_id', userId);
+
+  const favIds = (favs ?? []).map((f: any) => f.recipe_id);
+  if (favIds.length === 0) return [];
+
+  // Fetch those recipes
+  const { data } = await supabase
+    .from('recipes')
+    .select(`
+      id, title, subtitle, image_url, bron, tijd, moeilijkheid, created_at,
+      ingredients(naam),
+      tags:recipe_tags(tag:tags(id, name)),
+      ratings(sterren),
+      comments(id),
+      user:profiles!recipes_user_id_fkey(id, display_name, avatar_url)
+    `)
+    .in('id', favIds)
+    .order('created_at', { ascending: false });
+
+  return (data ?? []).map((r: any) => {
+    const ratings = r.ratings ?? [];
+    const avg =
+      ratings.length > 0
+        ? ratings.reduce((s: number, rt: any) => s + rt.sterren, 0) / ratings.length
+        : null;
+
+    return {
+      ...r,
+      tags: (r.tags ?? []).map((rt: any) => rt.tag).filter(Boolean),
+      average_rating: avg,
+      nutrition: null,
+      steps: [],
+      is_favorited: true,
+    };
+  });
+}
+
+export default function FavorietenPage() {
+  const { user, loading: authLoading } = useAuth();
+  const collectionRecipeIds = useCollectionRecipeIds();
+
+  // SWR-cache: terugnavigeren toont direct de vorige lijst en ververst stil op de achtergrond
+  const { data: recipesData, mutate: mutateFavorites } = useSWR<RecipeWithRelations[]>(
+    user ? ['favorites-page', user.id] : null,
+    () => fetchFavoriteRecipes(user!.id),
+    SWR_PAGE_OPTIONS
+  );
+  // Gedeelde key met de collecties-pagina
+  const { data: collectionsData, mutate: mutateCollections } = useSWR<CollectionWithDetails[]>(
+    user ? ['collections', user.id] : null,
+    () => jsonFetcher<CollectionWithDetails[]>('/api/collections'),
+    SWR_PAGE_OPTIONS
+  );
+
+  const recipes = useMemo(() => recipesData ?? [], [recipesData]);
+  const collections = useMemo(
+    () => (Array.isArray(collectionsData) ? collectionsData : []),
+    [collectionsData]
+  );
+  const loading = authLoading || (!!user && recipesData === undefined);
+
   const [collectionRecipeId, setCollectionRecipeId] = useState<string | null>(null);
-  const [collections, setCollections] = useState<CollectionWithDetails[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
-
-  const fetchFavorites = useCallback(async () => {
-    if (!user) {
-      setLoading(false);
-      return;
-    }
-
-    // Get favorite recipe IDs
-    const { data: favs } = await supabase
-      .from('favorites')
-      .select('recipe_id')
-      .eq('user_id', user.id);
-
-    const favIds = (favs ?? []).map((f: any) => f.recipe_id);
-
-    if (favIds.length === 0) {
-      setRecipes([]);
-      setLoading(false);
-      return;
-    }
-
-    // Fetch those recipes
-    const { data } = await supabase
-      .from('recipes')
-      .select(`
-        id, title, subtitle, image_url, bron, tijd, moeilijkheid, created_at,
-        ingredients(naam),
-        tags:recipe_tags(tag:tags(id, name)),
-        ratings(sterren),
-        comments(id),
-        user:profiles!recipes_user_id_fkey(id, display_name, avatar_url)
-      `)
-      .in('id', favIds)
-      .order('created_at', { ascending: false });
-
-    const processed: RecipeWithRelations[] = (data ?? []).map((r: any) => {
-      const ratings = r.ratings ?? [];
-      const avg =
-        ratings.length > 0
-          ? ratings.reduce((s: number, rt: any) => s + rt.sterren, 0) / ratings.length
-          : null;
-
-      return {
-        ...r,
-        tags: (r.tags ?? []).map((rt: any) => rt.tag).filter(Boolean),
-        average_rating: avg,
-        nutrition: null,
-        steps: [],
-        is_favorited: true,
-      };
-    });
-
-    setRecipes(processed);
-    setLoading(false);
-  }, [supabase, user]);
-
-  const fetchCollections = useCallback(async () => {
-    try {
-      const res = await fetch('/api/collections');
-      const data = await res.json();
-      setCollections(Array.isArray(data) ? data : []);
-    } catch {
-      setCollections([]);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchFavorites();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]);
-
-  useEffect(() => {
-    if (user) fetchCollections();
-  }, [user?.id, fetchCollections]);
 
   // Realtime: favorites changes
   useEffect(() => {
     if (!user) return;
     const sb = createClient();
     const channel = sb.channel('favorites-realtime');
-    const refresh = () => fetchFavorites();
+    const refresh = () => mutateFavorites();
     channel
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'favorites' }, refresh)
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'favorites' }, refresh)
@@ -150,12 +139,12 @@ export default function FavorietenPage() {
       return;
     }
 
-    setRecipes((prev) => prev.filter((r) => r.id !== recipeId));
+    mutateFavorites((prev) => (prev ?? []).filter((r) => r.id !== recipeId), { revalidate: false });
     try {
       const res = await fetch(`/api/recipes/${recipeId}/favorite`, { method: 'DELETE' });
-      if (!res.ok) fetchFavorites();
+      if (!res.ok) mutateFavorites();
     } catch {
-      fetchFavorites();
+      mutateFavorites();
     }
   };
 
@@ -265,7 +254,7 @@ export default function FavorietenPage() {
       <NewCollectionModal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
-        onCreated={(c) => setCollections((prev) => [c, ...prev])}
+        onCreated={(c) => mutateCollections((prev) => [c, ...(prev ?? [])], { revalidate: false })}
       />
     </div>
   );

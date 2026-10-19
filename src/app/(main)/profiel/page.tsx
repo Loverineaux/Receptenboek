@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import useSWR from 'swr';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -8,6 +9,7 @@ import { BookOpen, Bell, ShieldCheck, Settings, UserPen, UserCog } from 'lucide-
 import dynamic from 'next/dynamic';
 import { useAuth } from '@/hooks/useAuth';
 import { useAdmin } from '@/hooks/useAdmin';
+import { jsonFetcher, SWR_PAGE_OPTIONS } from '@/lib/swr';
 import IconButton from '@/components/ui/IconButton';
 import NotificationBell from '@/components/notifications/NotificationBell';
 import ProfileStats from '@/components/profile/ProfileStats';
@@ -26,26 +28,24 @@ export default function ProfielPage() {
   const router = useRouter();
   const { user, profile, loading, signOut } = useAuth();
   const { isAdmin } = useAdmin();
-  const [stats, setStats] = useState<ProfileStatsData | null>(null);
+  // SWR-cache: terugnavigeren toont direct de vorige statistieken
+  const { data: stats = null } = useSWR<ProfileStatsData | null>(
+    user ? ['profile-stats', user.id] : null,
+    async () => {
+      try {
+        const data = await jsonFetcher<{ stats?: ProfileStatsData }>(`/api/users/${user!.id}/profile`);
+        return data?.stats ?? null;
+      } catch {
+        return null;
+      }
+    },
+    SWR_PAGE_OPTIONS
+  );
   const [confirmLogout, setConfirmLogout] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) router.push('/login');
   }, [user, loading, router]);
-
-  useEffect(() => {
-    if (!user) return;
-    let cancelled = false;
-    fetch(`/api/users/${user.id}/profile`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (!cancelled && data?.stats) setStats(data.stats);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [user]);
 
   const handleSignOut = async () => {
     await signOut();

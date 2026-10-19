@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import useSWR from 'swr';
 import { useParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { ArrowLeft, Sparkles, Loader2, Pencil, X, Check, Camera, Search } from 'lucide-react';
@@ -19,6 +20,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useAdmin } from '@/hooks/useAdmin';
 import { useRealtimeRefresh } from '@/hooks/useRealtimeSubscription';
 import { createClient } from '@/lib/supabase/client';
+import { SWR_PAGE_OPTIONS } from '@/lib/swr';
 import { categoryLabel, categoryTint, formatNumberNl, initialOf } from '@/lib/ingredients/category';
 import { currentMonth, isSeasonal } from '@/lib/ingredients/season';
 import type { GenericIngredientWithProducts, GenericIngredient } from '@/types';
@@ -61,21 +63,60 @@ export default function IngredientDetailPage() {
   const { user } = useAuth();
   const { isAdmin: isAdminUser } = useAdmin();
 
-  const [ingredient, setIngredient] = useState<GenericIngredientWithProducts | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const supabaseClient = createClient();
+
+  // SWR-cache per ingrediënt: terugnavigeren toont direct de vorige data en ververst stil
+  const {
+    data: ingredientData,
+    error: fetchError,
+    mutate: mutateIngredient,
+  } = useSWR<GenericIngredientWithProducts>(
+    id ? ['ingredient', id] : null,
+    async () => {
+      const res = await fetch(`/api/ingredients/${id}`, { cache: 'no-store' });
+      if (!res.ok) throw new Error('Ingrediënt niet gevonden');
+      return res.json();
+    },
+    // Geen keepPreviousData: bij een ander ingrediënt mag nooit het vorige getoond worden
+    { ...SWR_PAGE_OPTIONS, keepPreviousData: false }
+  );
+  const ingredient = ingredientData ?? null;
+  const loading = ingredientData === undefined && !fetchError;
+  // Fout bij opslaan (lokaal) of bij ophalen
+  const [saveError, setError] = useState<string | null>(null);
+  const error = saveError ?? (fetchError && !ingredientData ? (fetchError as Error).message : null);
+
+  // Lokale (optimistische) aanpassing van de gecachte data, zonder revalidatie
+  const setIngredient = (
+    updater: (prev: GenericIngredientWithProducts | null) => GenericIngredientWithProducts | null
+  ) => {
+    mutateIngredient((prev) => updater(prev ?? null) ?? undefined, { revalidate: false });
+  };
+  const fetchIngredient = () => mutateIngredient();
 
   // Recepten met dit ingrediënt (zichtbaarheid via RLS, zoals de receptenlijsten)
-  const [recipes, setRecipes] = useState<RecipeMini[]>([]);
-  const [recipeTotal, setRecipeTotal] = useState(0);
+  const { data: recipesData } = useSWR<{ rows: RecipeMini[]; total: number }>(
+    id ? ['ingredient-recipes', id] : null,
+    async () => {
+      const { data, count } = await supabaseClient
+        .from('recipes')
+        .select('id, title, image_url, tijd, ingredients!inner(generic_ingredient_id)', { count: 'exact' })
+        .eq('ingredients.generic_ingredient_id', id)
+        .order('created_at', { ascending: false })
+        .limit(30);
+      const rows = (data ?? []) as unknown as RecipeMini[];
+      return { rows, total: count ?? rows.length };
+    },
+    { ...SWR_PAGE_OPTIONS, keepPreviousData: false }
+  );
+  const recipes = recipesData?.rows ?? [];
+  const recipeTotal = recipesData?.total ?? 0;
 
   // Transfer product state
   const [transferProductId, setTransferProductId] = useState<string | null>(null);
   const [transferSearch, setTransferSearch] = useState('');
   const [transferResults, setTransferResults] = useState<GenericIngredient[]>([]);
   const [transferring, setTransferring] = useState(false);
-  const supabaseClient = createClient();
-
   // Generate-content state
   const [generating, setGenerating] = useState(false);
   const [generateProgress, setGenerateProgress] = useState('');
@@ -178,47 +219,6 @@ export default function IngredientDetailPage() {
     setTransferring(false);
   };
 
-  // ── Fetch ingredient data ──
-
-  const fetchIngredient = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/ingredients/${id}`, { cache: 'no-store' });
-      if (!res.ok) throw new Error('Ingrediënt niet gevonden');
-      const data = await res.json();
-      setIngredient(data);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Er ging iets mis');
-    } finally {
-      setLoading(false);
-    }
-  }, [id]);
-
-  useEffect(() => {
-    if (id) fetchIngredient();
-  }, [id, fetchIngredient]);
-
-  // Recepten met dit ingrediënt: zelfde zichtbaarheid als de receptenlijsten (RLS: openbaar of eigen)
-  useEffect(() => {
-    if (!id) return;
-    let cancelled = false;
-    (async () => {
-      const { data, count } = await supabaseClient
-        .from('recipes')
-        .select('id, title, image_url, tijd, ingredients!inner(generic_ingredient_id)', { count: 'exact' })
-        .eq('ingredients.generic_ingredient_id', id)
-        .order('created_at', { ascending: false })
-        .limit(30);
-      if (cancelled) return;
-      const rows = (data ?? []) as unknown as RecipeMini[];
-      setRecipes(rows);
-      setRecipeTotal(count ?? rows.length);
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
-
   // Realtime: ingredient and product changes
   useRealtimeRefresh({ table: 'generic_ingredients', filter: `id=eq.${id}`, onAnyChange: fetchIngredient, enabled: !!ingredient });
   useRealtimeRefresh({ table: 'products', filter: `generic_ingredient_id=eq.${id}`, onAnyChange: fetchIngredient, enabled: !!ingredient });
@@ -274,8 +274,7 @@ export default function IngredientDetailPage() {
       }
 
       // Refresh data after generation
-      setLoading(true);
-      await fetchIngredient();
+      await mutateIngredient();
     } catch (err: unknown) {
       setGenerateError(err instanceof Error ? err.message : 'Er ging iets mis');
     } finally {

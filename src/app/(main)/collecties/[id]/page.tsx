@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import useSWR from 'swr';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -25,6 +26,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useAdmin } from '@/hooks/useAdmin';
 import { useRealtimeRefresh } from '@/hooks/useRealtimeSubscription';
 import { createClient } from '@/lib/supabase/client';
+import { jsonFetcher, SWR_PAGE_OPTIONS } from '@/lib/swr';
 import { formatRating } from '@/components/recipes/RecipeCard';
 import Button from '@/components/ui/Button';
 import Chip from '@/components/ui/Chip';
@@ -78,27 +80,40 @@ function SheetAction({
 }
 
 export default function CollectionDetailPage() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const supabase = createClient();
   const params = useParams();
   const router = useRouter();
-  const [collection, setCollection] = useState<any>(null);
-  const [recipes, setRecipes] = useState<CollectionRecipe[]>([]);
-  const [loading, setLoading] = useState(true);
+
+  // SWR-cache per collectie en gebruiker: terugnavigeren toont direct de vorige data
+  const {
+    data: collectionData,
+    error: collectionError,
+    mutate: mutateCollection,
+  } = useSWR<any>(
+    !authLoading && params.id ? ['collection', params.id as string, user?.id ?? 'anon'] : null,
+    () => jsonFetcher(`/api/collections/${params.id}`),
+    // Geen keepPreviousData: bij een andere collectie mag nooit de vorige getoond worden
+    { ...SWR_PAGE_OPTIONS, keepPreviousData: false }
+  );
+  const loading = collectionData === undefined && !collectionError;
+
+  const [collection, setCollection] = useState<any>(collectionData ?? null);
+  const [recipes, setRecipes] = useState<CollectionRecipe[]>(collectionData?.recipes ?? []);
   const [editOpen, setEditOpen] = useState(false);
-  const [editTitle, setEditTitle] = useState('');
-  const [editDesc, setEditDesc] = useState('');
+  const [editTitle, setEditTitle] = useState<string>(collectionData?.title ?? '');
+  const [editDesc, setEditDesc] = useState<string>(collectionData?.description || '');
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [userRatings, setUserRatings] = useState<Record<string, number>>({});
-  const [isFollowing, setIsFollowing] = useState(false);
-  const [isCollaborator, setIsCollaborator] = useState(false);
-  const [collaborators, setCollaborators] = useState<UserProfile[]>([]);
+  const [isFollowing, setIsFollowing] = useState<boolean>(collectionData?.is_following ?? false);
+  const [isCollaborator, setIsCollaborator] = useState<boolean>(collectionData?.is_collaborator ?? false);
+  const [collaborators, setCollaborators] = useState<UserProfile[]>(collectionData?.collaborators ?? []);
   const [followLoading, setFollowLoading] = useState(false);
   const [addToCollectionRecipeId, setAddToCollectionRecipeId] = useState<string | null>(null);
   const [collabModalOpen, setCollabModalOpen] = useState(false);
   const [collectionRating, setCollectionRating] = useState(0);
-  const [avgCollectionRating, setAvgCollectionRating] = useState<number | null>(null);
-  const [collectionRatingCount, setCollectionRatingCount] = useState(0);
+  const [avgCollectionRating, setAvgCollectionRating] = useState<number | null>(collectionData?.average_rating ?? null);
+  const [collectionRatingCount, setCollectionRatingCount] = useState<number>(collectionData?.rating_count ?? 0);
   const [duplicateOpen, setDuplicateOpen] = useState(false);
   const [duplicateTitle, setDuplicateTitle] = useState('');
   const [duplicateError, setDuplicateError] = useState('');
@@ -114,13 +129,10 @@ export default function CollectionDetailPage() {
   const isOwner = !!user && collection?.user_id === user.id;
   const canEdit = isOwner || isCollaborator || isAdminUser;
 
-  const fetchCollection = useCallback(async () => {
-    const res = await fetch(`/api/collections/${params.id}`);
-    if (!res.ok) {
-      setLoading(false);
-      return;
-    }
-    const data = await res.json();
+  // Spiegel de SWR-data naar lokale state (lokale optimistische updates blijven mogelijk)
+  useEffect(() => {
+    if (!collectionData) return;
+    const data = collectionData;
     setCollection(data);
     setRecipes((prev) => {
       // Bewaar favoriet-status over een refresh heen
@@ -134,12 +146,9 @@ export default function CollectionDetailPage() {
     setCollaborators(data.collaborators ?? []);
     setAvgCollectionRating(data.average_rating ?? null);
     setCollectionRatingCount(data.rating_count ?? 0);
-    setLoading(false);
-  }, [params.id]);
+  }, [collectionData]);
 
-  useEffect(() => {
-    fetchCollection();
-  }, [fetchCollection]);
+  const fetchCollection = () => mutateCollection();
 
   // Load user's collection rating
   useEffect(() => {
@@ -215,6 +224,7 @@ export default function CollectionDetailPage() {
     });
     setCollection((prev: any) => ({ ...prev, title: editTitle, description: editDesc || null }));
     setEditOpen(false);
+    mutateCollection();
   };
 
   const handleDelete = async () => {
@@ -229,6 +239,7 @@ export default function CollectionDetailPage() {
       body: JSON.stringify({ recipe_id: recipeId }),
     });
     setRecipes((prev) => prev.filter((r) => r.id !== recipeId));
+    mutateCollection();
   };
 
   const handleFavoriteToggle = async (recipeId: string, isFavorited: boolean) => {
@@ -272,6 +283,7 @@ export default function CollectionDetailPage() {
     });
     if (res.ok) {
       setCollaborators((prev) => [...prev, collab as UserProfile]);
+      mutateCollection();
     }
   };
 
@@ -283,6 +295,7 @@ export default function CollectionDetailPage() {
     });
     if (res.ok) {
       setCollaborators((prev) => prev.filter((c) => c.id !== userId));
+      mutateCollection();
     }
   };
 
@@ -316,6 +329,7 @@ export default function CollectionDetailPage() {
     await fetch(`/api/collections/${params.id}/follow`, { method });
     setIsFollowing(!isFollowing);
     setFollowLoading(false);
+    mutateCollection();
   };
 
   const handleShuffle = () => {

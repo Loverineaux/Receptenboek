@@ -1,35 +1,38 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
+import useSWR from 'swr';
 import { useAuth } from '@/hooks/useAuth';
 import { useRealtimeSubscription } from '@/hooks/useRealtimeSubscription';
+import { jsonFetcher, SWR_PAGE_OPTIONS } from '@/lib/swr';
 import type { AppNotification } from '@/types';
 
 export function useNotifications() {
   const { user } = useAuth();
-  const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Fetch initial unread count
-  useEffect(() => {
-    if (!user) {
-      setUnreadCount(0);
-      return;
-    }
+  // Gedeelde SWR-key: meerdere componenten (ProfileButton, NotificationBell) delen één request
+  const { data: countData, mutate: mutateCount } = useSWR<{ count: number }>(
+    user ? ['notifications-count', user.id] : null,
+    () => jsonFetcher<{ count: number }>('/api/notifications/count'),
+    SWR_PAGE_OPTIONS
+  );
+  const unreadCount = user ? countData?.count ?? 0 : 0;
 
-    const fetchCount = async () => {
-      try {
-        const res = await fetch('/api/notifications/count');
-        if (res.ok) {
-          const data = await res.json();
-          setUnreadCount(data.count);
-        }
-      } catch {}
-    };
-
-    fetchCount();
-  }, [user]);
+  // Optimistisch de teller aanpassen zonder te revalideren
+  const setUnreadCount = useCallback(
+    (next: number | ((prev: number) => number)) => {
+      mutateCount(
+        (cur) => {
+          const prev = cur?.count ?? 0;
+          return { count: typeof next === 'function' ? next(prev) : next };
+        },
+        { revalidate: false }
+      );
+    },
+    [mutateCount]
+  );
 
   // Realtime: listen for new/updated/deleted notifications
   useRealtimeSubscription({
@@ -37,7 +40,8 @@ export function useNotifications() {
     filter: user ? `recipient_id=eq.${user.id}` : undefined,
     enabled: !!user,
     onInsert: () => {
-      setUnreadCount((c) => c + 1);
+      // Alle mounts delen de key: herbereken i.p.v. optellen (voorkomt dubbel tellen)
+      mutateCount();
       // If panel is open (notifications loaded), refresh the list
       if (notifications.length > 0) {
         fetch('/api/notifications')
@@ -51,14 +55,11 @@ export function useNotifications() {
         prev.map((n) => (n.id === updated.id ? { ...n, ...updated } : n))
       );
       // Recalculate unread count
-      fetch('/api/notifications/count')
-        .then((r) => r.json())
-        .then((data) => setUnreadCount(data.count))
-        .catch(() => {});
+      mutateCount();
     },
     onDelete: (deleted) => {
       setNotifications((prev) => prev.filter((n) => n.id !== deleted.id));
-      if (!deleted.is_read) setUnreadCount((c) => Math.max(0, c - 1));
+      if (!deleted.is_read) mutateCount();
     },
   });
 
@@ -76,7 +77,7 @@ export function useNotifications() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, setUnreadCount]);
 
   const markAsRead = useCallback(async (ids: string[]) => {
     await fetch('/api/notifications', {
@@ -90,7 +91,7 @@ export function useNotifications() {
     setUnreadCount((prev) => Math.max(0, prev - ids.filter((id) =>
       notifications.find((n) => n.id === id && !n.is_read)
     ).length));
-  }, [notifications]);
+  }, [notifications, setUnreadCount]);
 
   const markAsUnread = useCallback(async (ids: string[]) => {
     await fetch('/api/notifications', {
@@ -104,7 +105,7 @@ export function useNotifications() {
     setUnreadCount((prev) => prev + ids.filter((id) =>
       notifications.find((n) => n.id === id && n.is_read)
     ).length);
-  }, [notifications]);
+  }, [notifications, setUnreadCount]);
 
   const markAllAsRead = useCallback(async () => {
     await fetch('/api/notifications', {
@@ -114,7 +115,7 @@ export function useNotifications() {
     });
     setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
     setUnreadCount(0);
-  }, []);
+  }, [setUnreadCount]);
 
   const deleteNotification = useCallback(async (ids: string[]) => {
     await fetch('/api/notifications', {
@@ -126,7 +127,7 @@ export function useNotifications() {
     setUnreadCount((prev) => Math.max(0, prev - ids.filter((id) =>
       notifications.find((n) => n.id === id && !n.is_read)
     ).length));
-  }, [notifications]);
+  }, [notifications, setUnreadCount]);
 
   const deleteAll = useCallback(async () => {
     await fetch('/api/notifications', {
@@ -136,7 +137,7 @@ export function useNotifications() {
     });
     setNotifications([]);
     setUnreadCount(0);
-  }, []);
+  }, [setUnreadCount]);
 
   return {
     unreadCount,
