@@ -504,7 +504,7 @@ export default function NieuwReceptPage() {
     };
   }, [isBusy]);
 
-  const handleExtractAndSave = async () => {
+  const handleExtractAndSave = async (textOverride?: string) => {
     setExtracting(true);
     setExtractError(null);
     setProgressStep(0);
@@ -521,7 +521,7 @@ export default function NieuwReceptPage() {
       // "... 'Flatbreads met vissticks en frisse salade' ... https://..."):
       // haal de URL eruit, en gebruik een eventuele titel (tussen quotes, of
       // de tekst vóór de link) als hint voor bronnen die zelf geen titel geven.
-      const raw = importUrl.trim();
+      const raw = (textOverride ?? importUrl).trim();
       const urlMatch = raw.match(/https?:\/\/[^\s]+/);
       const url = urlMatch ? urlMatch[0] : raw;
       let titleHint = '';
@@ -1034,7 +1034,8 @@ export default function NieuwReceptPage() {
 
   const methodLocked = extracting || bulkImporting || saving;
   const showMethods = (activeTab === 'url' || activeTab === 'foto' || activeTab === 'handmatig') && !(activeTab === 'handmatig' && writeStarted);
-  const ctaVisible = showMethods && ((activeTab === 'url' && !bulkMode) || activeTab === 'foto' || activeTab === 'handmatig');
+  // Link-import heeft zijn eigen "Importeren"-knop naast het veld, dus geen sticky CTA.
+  const ctaVisible = showMethods && (activeTab === 'foto' || activeTab === 'handmatig');
 
   const selectMethod = (tab: ImportTab) => {
     setActiveTab(tab);
@@ -1044,14 +1045,25 @@ export default function NieuwReceptPage() {
     if (tab !== 'url') setBulkMode(false);
   };
 
-  const handlePasteClick = async () => {
+  // "Importeren"-knop naast het veld: staat er al iets in, dan direct importeren;
+  // is het veld leeg, dan eerst het klembord plakken (link of heel deelbericht)
+  // en meteen importeren — plakken + importeren in één tik.
+  const handleImportClick = async () => {
     setPasteHint(null);
+    if (importUrl.trim()) {
+      handleExtractAndSave();
+      return;
+    }
     try {
-      const text = await navigator.clipboard.readText();
-      if (text.trim()) setImportUrl(text.trim());
-      else setPasteHint('Het klembord is leeg.');
+      const text = (await navigator.clipboard.readText()).trim();
+      if (!text) {
+        setPasteHint('Het klembord is leeg. Plak of typ eerst een link.');
+        return;
+      }
+      setImportUrl(text);
+      handleExtractAndSave(text);
     } catch {
-      setPasteHint('Plakken lukt niet automatisch. Houd het veld ingedrukt om te plakken.');
+      setPasteHint('Plakken lukt niet automatisch. Houd het veld ingedrukt om te plakken en tik dan op Importeren.');
     }
   };
 
@@ -1402,11 +1414,12 @@ export default function NieuwReceptPage() {
                   />
                   <button
                     type="button"
-                    onClick={handlePasteClick}
+                    onClick={handleImportClick}
                     disabled={extracting}
-                    className="h-9 shrink-0 rounded-[11px] bg-sunk px-3 text-[13px] font-semibold text-ink hover:bg-line disabled:opacity-50"
+                    className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-[11px] bg-primary px-3.5 text-[13px] font-semibold text-on-primary hover:bg-primary-dark disabled:opacity-60"
                   >
-                    Plakken
+                    {extracting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                    {extracting ? 'Bezig…' : 'Importeren'}
                   </button>
                 </div>
                 {pasteHint && <p className="mt-2 text-[13px] text-ink-3">{pasteHint}</p>}
@@ -1902,18 +1915,6 @@ export default function NieuwReceptPage() {
       {/* Sticky CTA */}
       {ctaVisible && (
         <StickyCta>
-          {activeTab === 'url' && (
-            <Button
-              variant="primary"
-              size="lg"
-              className="w-full"
-              loading={extracting}
-              onClick={handleExtractAndSave}
-              disabled={!importUrl.trim() || extracting}
-            >
-              {extracting ? 'Bezig...' : 'Importeren'}
-            </Button>
-          )}
           {activeTab === 'foto' && (
             photoFiles.length === 0 ? (
               <Button
