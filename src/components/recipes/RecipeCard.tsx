@@ -226,6 +226,9 @@ export default function RecipeCard({
           {photo('84px')}
         </div>
         <div className="min-w-0 flex-1">
+          {recipe.bron && (
+            <p className="mb-0.5 truncate text-[12px] font-semibold text-primary">{recipe.bron}</p>
+          )}
           <h3 className="line-clamp-2 text-[15.5px] font-semibold leading-[1.3] text-ink text-pretty">{recipe.title}</h3>
           <div className="mt-1.5">{meta}</div>
         </div>
@@ -248,6 +251,13 @@ export default function RecipeCard({
         <div className="relative h-[164px] overflow-hidden rounded-card bg-placeholder md:h-[190px]">
           {photo('(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw')}
         </div>
+        {recipe.bron && (
+          <div className="pointer-events-none absolute left-2.5 right-[52px] top-2.5 flex">
+            <span className="flex h-[26px] min-w-0 items-center rounded-chip bg-[rgba(255,253,248,0.92)] px-2.5 text-[12px] font-semibold text-primary shadow-sm">
+              <span className="truncate">{recipe.bron}</span>
+            </span>
+          </div>
+        )}
         <div data-tour="card-actions" className="absolute right-2.5 top-2.5">
           {favButton('sm')}
         </div>
