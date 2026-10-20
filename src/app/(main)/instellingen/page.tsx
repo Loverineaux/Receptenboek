@@ -118,7 +118,7 @@ export default function InstellingenPage() {
   return (
     <div className="mx-auto max-w-2xl pb-24">
       <div className="pt-1">
-        <BackButton />
+        <BackButton href="/profiel" label="Terug naar profiel" />
       </div>
 
       <ScreenHeader title="Instellingen" profileButton={false} />
