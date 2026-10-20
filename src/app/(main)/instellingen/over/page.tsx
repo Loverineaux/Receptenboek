@@ -1,20 +1,14 @@
-import Link from 'next/link';
-import { ArrowLeft, ChefHat, Code, Heart, Sparkles, Coffee } from 'lucide-react';
+import { ChefHat, Code, Heart, Sparkles, Coffee } from 'lucide-react';
 import { releaseNotes } from '@/lib/release-notes';
+import BackButton from '@/components/ui/BackButton';
 
 const APP_VERSION = process.env.APP_VERSION || '0.0.0';
 
 export default function OverPage() {
   return (
-    <div className="mx-auto max-w-2xl px-4 pb-24">
-      <div className="sticky top-14 z-20 -mx-4 bg-background px-4 pb-2 pt-4 md:top-16">
-        <Link
-          href="/instellingen"
-          className="flex items-center gap-1.5 text-sm font-medium text-text-muted transition-colors hover:text-text-primary"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Instellingen
-        </Link>
+    <div className="mx-auto max-w-2xl pb-24">
+      <div className="pt-1">
+        <BackButton href="/instellingen" label="Terug naar instellingen" />
       </div>
 
       {/* App icon + name */}

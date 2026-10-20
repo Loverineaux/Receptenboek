@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Loader2, Smartphone } from 'lucide-react';
+import { Loader2, Smartphone } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import type { NotificationPreferences } from '@/types';
+import BackButton from '@/components/ui/BackButton';
+import ScreenHeader from '@/components/ui/ScreenHeader';
 
 const NOTIFICATION_TYPES = [
   {
@@ -161,18 +163,12 @@ export default function MeldingenInstellingenPage() {
   if (!prefs) return null;
 
   return (
-    <div className="mx-auto max-w-2xl px-4 pb-24">
-      <div className="sticky top-14 z-20 -mx-4 bg-background px-4 pb-2 pt-4 md:top-16">
-        <button
-          onClick={() => router.push('/instellingen')}
-          className="flex items-center gap-1.5 text-sm font-medium text-text-muted transition-colors hover:text-text-primary"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Instellingen
-        </button>
+    <div className="mx-auto max-w-2xl pb-24">
+      <div className="pt-1">
+        <BackButton href="/instellingen" label="Terug naar instellingen" />
       </div>
 
-      <h1 className="mb-6 text-2xl font-bold text-text-primary">Meldingen</h1>
+      <ScreenHeader title="Meldingen" profileButton={false} className="mb-6" />
 
       {/* ── Push toggle ── */}
       <section className="mb-6">

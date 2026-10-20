@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Search, User, ChefHat, Star, Clock, CalendarDays } from 'lucide-react';
+import { Search, User, ChefHat, Star, Clock, CalendarDays } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { createClient } from '@/lib/supabase/client';
+import BackButton from '@/components/ui/BackButton';
+import ScreenHeader from '@/components/ui/ScreenHeader';
 
 interface UserWithStats {
   id: string;
@@ -97,18 +99,12 @@ export default function GebruikersPage() {
   }, [search, users]);
 
   return (
-    <div className="mx-auto max-w-2xl px-4 pb-24">
-      <div className="sticky top-14 z-20 -mx-4 bg-background px-4 pb-2 pt-4 md:top-16">
-        <button
-          onClick={() => router.push('/instellingen')}
-          className="flex items-center gap-1.5 text-sm font-medium text-text-muted transition-colors hover:text-text-primary"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Instellingen
-        </button>
+    <div className="mx-auto max-w-2xl pb-24">
+      <div className="pt-1">
+        <BackButton href="/instellingen" label="Terug naar instellingen" />
       </div>
 
-      <h1 className="mb-4 text-2xl font-bold text-text-primary">Gebruikers</h1>
+      <ScreenHeader title="Gebruikers" profileButton={false} className="mb-4" />
 
       {/* Search */}
       <div className="relative mb-6">

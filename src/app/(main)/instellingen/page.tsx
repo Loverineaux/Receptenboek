@@ -3,13 +3,15 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  ArrowLeft, Loader2, Bell, User, Shield, LogOut,
+  Loader2, Bell, User, Shield, LogOut,
   ChevronRight, Trash2, ChefHat, Users, Info, HelpCircle,
 } from 'lucide-react';
 import Image from 'next/image';
 import { useAuth } from '@/hooks/useAuth';
 import { useTour } from '@/hooks/useTour';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import BackButton from '@/components/ui/BackButton';
+import ScreenHeader from '@/components/ui/ScreenHeader';
 
 function SettingsItem({
   icon: Icon,
@@ -114,18 +116,12 @@ export default function InstellingenPage() {
   if (!user) return null;
 
   return (
-    <div className="mx-auto max-w-2xl px-4 pb-24">
-      <div className="sticky top-14 z-20 -mx-4 bg-background px-4 pb-2 pt-4 md:top-16">
-        <button
-          onClick={() => router.back()}
-          className="flex items-center gap-1.5 text-sm font-medium text-text-muted transition-colors hover:text-text-primary"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Terug
-        </button>
+    <div className="mx-auto max-w-2xl pb-24">
+      <div className="pt-1">
+        <BackButton />
       </div>
 
-      <h1 className="sr-only">Instellingen</h1>
+      <ScreenHeader title="Instellingen" profileButton={false} />
 
       {/* ── Profile header ── */}
       <button

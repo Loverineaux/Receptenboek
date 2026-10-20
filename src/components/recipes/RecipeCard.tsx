@@ -188,6 +188,12 @@ export default function RecipeCard({
       {liveAvg.count > 0 && liveAvg.avg > 0 && (
         <span data-tour="star-rating" className="tabular font-semibold text-primary">
           ★ {formatRating(liveAvg.avg)}
+          <span
+            className="ml-1 font-normal text-ink-3"
+            aria-label={`${liveAvg.count} ${liveAvg.count === 1 ? 'beoordeling' : 'beoordelingen'}`}
+          >
+            ({liveAvg.count})
+          </span>
         </span>
       )}
       {commentCount > 0 && (
