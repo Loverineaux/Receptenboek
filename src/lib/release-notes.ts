@@ -6,6 +6,16 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '1.21.1',
+    date: '20 oktober 2026',
+    highlights: [
+      'Receptenboek heeft een nieuw adres: receptenboek.loofhub.nl',
+      'Het oude adres stuurt je vanzelf door, dus bestaande links blijven werken',
+      'Gedeelde recepten verwijzen voortaan naar het nieuwe adres',
+      'Op het nieuwe adres log je één keer opnieuw in; staat de app op je telefoon, installeer hem dan opnieuw vanaf het nieuwe adres',
+    ],
+  },
+  {
     version: '1.21.0',
     date: '19 oktober 2026',
     highlights: [
@@ -25,16 +35,6 @@ export const releaseNotes: ReleaseNote[] = [
       'In een collectie kun je sorteren op snelste of best beoordeeld, en laat je de app met één tik een recept voor je kiezen',
       'Je profiel toont hoeveel recepten en collecties je hebt en hoe vaak je al gekookt hebt, en is vanaf elk scherm bereikbaar',
       'Alles laadt sneller, en als je teruggaat naar een pagina staat die er meteen weer',
-    ],
-  },
-  {
-    version: '1.19.2',
-    date: '19 oktober 2026',
-    highlights: [
-      'Na het inloggen met Google blijf je niet meer seconden lang op het Google-scherm hangen',
-      'Het receptenoverzicht verschijnt direct na het inloggen, je profielgegevens laden op de achtergrond',
-      'De app reageert ook sneller als hij een tijdje niet gebruikt is',
-      'Achter de schermen worden je recepten en inloggegevens klaargehouden, zodat het eerste openen vlotter gaat',
     ],
   },
 ];
