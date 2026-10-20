@@ -1,6 +1,7 @@
 'use client';
 
 import Chip from '@/components/ui/Chip';
+import { DINER_CATEGORY } from '@/lib/meal-categories';
 
 interface CategoryFilterProps {
   selected: string | null;
@@ -22,6 +23,7 @@ export const ALL_CATEGORIES = [
   'Soep',
   'Ontbijt',
   'Lunch',
+  'Diner',
   'Dessert',
 ];
 
@@ -30,12 +32,20 @@ type QuickChip = { kind: 'all' } | { kind: 'quick' } | { kind: 'category'; categ
 // Snelle keuzes uit het ontwerp, bovenop de bestaande tag-categorieën.
 const CHIPS: Array<{ label: string; chip: QuickChip }> = [
   { label: 'Alles', chip: { kind: 'all' } },
+  { label: 'Ontbijt', chip: { kind: 'category', category: 'Ontbijt' } },
+  { label: 'Lunch', chip: { kind: 'category', category: 'Lunch' } },
+  { label: 'Diner', chip: { kind: 'category', category: DINER_CATEGORY } },
+  { label: 'Dessert', chip: { kind: 'category', category: 'Dessert' } },
   { label: 'Snel', chip: { kind: 'quick' } },
   { label: 'Vega', chip: { kind: 'category', category: 'Vegetarisch' } },
   { label: 'Pasta', chip: { kind: 'category', category: 'Pasta' } },
   { label: 'Soep', chip: { kind: 'category', category: 'Soep' } },
-  { label: 'Zoet', chip: { kind: 'category', category: 'Dessert' } },
 ];
+
+/** Categorieën die als chip op het scherm staan (tellen niet mee als actief filter). */
+export const CHIP_CATEGORIES = CHIPS.flatMap(({ chip }) =>
+  chip.kind === 'category' ? [chip.category.toLowerCase()] : [],
+);
 
 export default function CategoryFilter({ selected, onChange, quick = false, onQuickChange }: CategoryFilterProps) {
   const handleClick = (chip: QuickChip) => {

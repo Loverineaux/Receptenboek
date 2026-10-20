@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { DINER_CATEGORY, NON_DINER_TAGS } from '@/lib/meal-categories';
 
 /**
  * Lightweight recipes-card endpoint for the /recepten list view.
@@ -11,7 +12,8 @@ import { createClient } from '@/lib/supabase/server';
  *
  * Accepts the same filter set as the client-side fetchRecipes:
  *   - search        title + subtitle multi-word ilike
- *   - category      tag name (resolves to recipe ids via recipe_tags)
+ *   - category      tag name (resolves to recipe ids via recipe_tags);
+ *                   "Diner" = everything not tagged Ontbijt/Lunch/Dessert
  *   - source        exact bron match
  *   - included      comma-separated bron list (OR)
  *   - excluded      comma-separated bron list (NOT IN)
@@ -48,7 +50,15 @@ export async function GET(request: NextRequest) {
 
   // Resolve category → recipe ids
   let filteredIds: string[] | null = null;
-  if (category) {
+  let excludedIds: string[] = [];
+  if (category.toLowerCase() === DINER_CATEGORY.toLowerCase()) {
+    const { data: tagMatches, error: tagErr } = await supabase
+      .from('recipe_tags')
+      .select('recipe_id, tag:tags!inner(name)')
+      .in('tags.name', NON_DINER_TAGS);
+    if (tagErr) return NextResponse.json({ error: tagErr.message }, { status: 500 });
+    excludedIds = Array.from(new Set((tagMatches ?? []).map((t: { recipe_id: string }) => t.recipe_id)));
+  } else if (category) {
     const { data: tagMatches, error: tagErr } = await supabase
       .from('recipe_tags')
       .select('recipe_id, tag:tags!inner(name)')
@@ -78,6 +88,9 @@ export async function GET(request: NextRequest) {
 
   if (filteredIds) {
     query = query.in('id', filteredIds);
+  }
+  if (excludedIds.length > 0) {
+    query = query.not('id', 'in', `(${excludedIds.join(',')})`);
   }
 
   if (search) {
@@ -124,7 +137,7 @@ export async function GET(request: NextRequest) {
   const recipes = data ?? [];
   const ids = recipes.map((r: { id: string }) => r.id);
 
-  // Fetch tags in parallel for just the 24 recipes we returned. Split query
+  // Fetch tags in parallel for just the page of recipes we returned. Split query
   // is typically cheaper than PostgREST's correlated subselect.
   let tagsByRecipe: Map<string, Array<{ id: string; name: string }>> = new Map();
   let tagsMs = 0;
