@@ -47,9 +47,10 @@ export default function HeroRecipeCard({ recipe, label }: HeroRecipeCardProps) {
           <h2 className="line-clamp-3 font-display text-hero-title font-semibold text-white text-pretty">
             {recipe.title}
           </h2>
-          <div className="mt-2 flex gap-3.5 text-meta font-medium text-white">
-            {recipe.tijd && <span>{recipe.tijd}</span>}
-            {hasRating && <span className="tabular">★ {formatRating(recipe.average_rating as number)}</span>}
+          <div className="mt-2 flex min-w-0 gap-3.5 text-meta font-medium text-white">
+            {recipe.bron && <span className="truncate">{recipe.bron}</span>}
+            {recipe.tijd && <span className="shrink-0">{recipe.tijd}</span>}
+            {hasRating && <span className="tabular shrink-0">★ {formatRating(recipe.average_rating as number)}</span>}
           </div>
         </div>
         <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-background text-primary">

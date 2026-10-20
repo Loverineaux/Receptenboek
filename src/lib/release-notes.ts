@@ -6,6 +6,14 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '1.22.1',
+    date: '20 oktober 2026',
+    highlights: [
+      'Op de foto van elk recept zie je weer van welke website of bron het komt',
+      'Ook in de lijstweergave en bij het uitgelichte recept staat de bron er weer bij',
+    ],
+  },
+  {
     version: '1.22.0',
     date: '20 oktober 2026',
     highlights: [
@@ -21,15 +29,6 @@ export const releaseNotes: ReleaseNote[] = [
     highlights: [
       'Het oude adres stuurt je nu vanzelf door naar receptenboek.loofhub.nl',
       'Ook een bewaarde link naar een specifiek recept komt op de juiste pagina uit',
-    ],
-  },
-  {
-    version: '1.21.1',
-    date: '20 oktober 2026',
-    highlights: [
-      'Receptenboek heeft een nieuw adres: receptenboek.loofhub.nl',
-      'Gedeelde recepten verwijzen voortaan naar het nieuwe adres',
-      'Op het nieuwe adres log je één keer opnieuw in; staat de app op je telefoon, installeer hem dan opnieuw vanaf het nieuwe adres',
     ],
   },
 ];
