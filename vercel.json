@@ -1,4 +1,12 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "regions": ["dub1"]
+  "regions": ["dub1"],
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "receptenboek-rcr7.vercel.app" }],
+      "destination": "https://receptenboek.loofhub.nl/:path*",
+      "permanent": true
+    }
+  ]
 }
