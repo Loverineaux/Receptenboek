@@ -6,6 +6,15 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '1.22.3',
+    date: '20 oktober 2026',
+    highlights: [
+      'De terugknop brengt je nu altijd één stap omhoog: van een instelling naar Instellingen, dan naar je profiel en dan naar de recepten',
+      'Heen en weer klikken tussen instellingen zorgt niet meer voor een lange omweg terug',
+      'Je profielpagina heeft nu ook een terugknop naar de recepten',
+    ],
+  },
+  {
     version: '1.22.2',
     date: '20 oktober 2026',
     highlights: [
@@ -21,16 +30,6 @@ export const releaseNotes: ReleaseNote[] = [
     highlights: [
       'Op de foto van elk recept zie je weer van welke website of bron het komt',
       'Ook in de lijstweergave en bij het uitgelichte recept staat de bron er weer bij',
-    ],
-  },
-  {
-    version: '1.22.0',
-    date: '20 oktober 2026',
-    highlights: [
-      'Filter je recepten snel op Ontbijt, Lunch, Diner of Dessert met de knoppen bovenaan',
-      'Onder Diner vind je alle recepten die geen ontbijt, lunch of dessert zijn',
-      'Je ziet nu 60 recepten tegelijk in plaats van 24',
-      'Scroll je naar beneden, dan worden er vanzelf meer recepten bijgeladen',
     ],
   },
 ];
