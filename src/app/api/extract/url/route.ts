@@ -18,6 +18,7 @@ import {
   detectBronFromUrl,
 } from "@/lib/extraction/scrape";
 import { getCachedRecipe, setCachedRecipe } from "@/lib/extraction/cache";
+import { extractAhRecipeId, fetchAhRecipe, isAhUrl } from "@/lib/extraction/ah";
 import { createClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/admin";
 import { validateRecipe } from "@/lib/extraction/validate";
@@ -303,6 +304,20 @@ export async function POST(request: NextRequest) {
       recipe._hashSPA = true;
       setCachedRecipe(url, recipe);
       return respondWithValidation(recipe);
+    }
+
+    // Albert Heijn: de website weigert elke server (Akamai), dus het recept
+    // via AH's eigen API ophalen. Mislukt dat, dan de normale route volgen.
+    const ahRecipeId = isAhUrl(url) ? extractAhRecipeId(url) : null;
+    if (ahRecipeId) {
+      const ahRecipe = await fetchAhRecipe(ahRecipeId);
+      if (ahRecipe && ahRecipe.ingredients.length > 0) {
+        console.log(
+          `[URL Extract] AH-API: "${ahRecipe.title}", ${ahRecipe.ingredients.length} ingrediënten, ${ahRecipe.steps.length} stappen`,
+        );
+        setCachedRecipe(url, ahRecipe);
+        return respondWithValidation(ahRecipe);
+      }
     }
 
     console.log("[URL Extract] Scraping:", url);

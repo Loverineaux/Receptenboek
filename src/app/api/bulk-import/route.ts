@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { scrapePage, jsonLdToRecipe, detectBronFromUrl, normalizeBron } from '@/lib/extraction/scrape';
+import { extractAhRecipeId, fetchAhRecipe, isAhUrl } from '@/lib/extraction/ah';
 import { cleanStepTitle, EXTRACTION_SYSTEM_PROMPT, parseRecipeResponse } from '@/lib/extraction/prompt';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser, isAdmin } from '@/lib/admin';
@@ -121,11 +122,20 @@ export async function POST(request: NextRequest) {
     try {
       // Resolve short URLs to full URLs first
       const resolvedUrl = await resolveUrl(url);
-      console.log(`[Bulk] Scraping: ${url} → ${resolvedUrl}`);
-      const scraped = await scrapePage(resolvedUrl);
+
+      // Albert Heijn blokkeert servers; haal het recept via AH's eigen API.
+      const ahRecipeId = isAhUrl(resolvedUrl) ? extractAhRecipeId(resolvedUrl) : null;
+      const ahRecipe = ahRecipeId ? await fetchAhRecipe(ahRecipeId) : null;
+
+      console.log(`[Bulk] ${ahRecipe ? 'AH-API' : 'Scraping'}: ${url} → ${resolvedUrl}`);
+      const scraped = ahRecipe ? null : await scrapePage(resolvedUrl);
 
       let recipe: any;
-      if (scraped.jsonLd) {
+      if (ahRecipe) {
+        recipe = ahRecipe;
+      } else if (!scraped) {
+        throw new Error('Geen data gevonden (pagina geblokkeerd)');
+      } else if (scraped.jsonLd) {
         recipe = jsonLdToRecipe(scraped.jsonLd, scraped.ogImage, scraped.metaDescription);
       } else if (scraped.pageText && scraped.pageText.length > 200) {
         console.log(`[Bulk] No JSON-LD, using Claude on page text for: ${url}`);
