@@ -6,11 +6,18 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '1.21.2',
+    date: '20 oktober 2026',
+    highlights: [
+      'Het oude adres stuurt je nu vanzelf door naar receptenboek.loofhub.nl',
+      'Ook een bewaarde link naar een specifiek recept komt op de juiste pagina uit',
+    ],
+  },
+  {
     version: '1.21.1',
     date: '20 oktober 2026',
     highlights: [
       'Receptenboek heeft een nieuw adres: receptenboek.loofhub.nl',
-      'Het oude adres stuurt je vanzelf door, dus bestaande links blijven werken',
       'Gedeelde recepten verwijzen voortaan naar het nieuwe adres',
       'Op het nieuwe adres log je één keer opnieuw in; staat de app op je telefoon, installeer hem dan opnieuw vanaf het nieuwe adres',
     ],
@@ -23,18 +30,6 @@ export const releaseNotes: ReleaseNote[] = [
       'Is het veld nog leeg, dan plakt de knop wat je net gekopieerd hebt en importeert hij direct: één tik is genoeg',
       'Je kunt ook een heel deelbericht plakken, bijvoorbeeld uit de Picnic-app; de link wordt er vanzelf uitgehaald',
       'Achter de schermen is een overbodige taak opgeruimd, zodat de app zuiniger draait',
-    ],
-  },
-  {
-    version: '1.20.0',
-    date: '19 oktober 2026',
-    highlights: [
-      'Een compleet nieuw uiterlijk: rustiger, warmer en makkelijker te lezen, met een nieuwe menubalk en een grote groene plusknop om snel een recept toe te voegen',
-      'De kookmodus is vernieuwd: timers per stap die vanzelf uit het recept komen, de ingrediënten per stap in beeld en een knop om de stap hardop te laten voorlezen',
-      'Bij elk ingrediënt zie je nu in welke maanden het in het seizoen is, en op het overzicht staat wat er deze maand lekker vers is',
-      'In een collectie kun je sorteren op snelste of best beoordeeld, en laat je de app met één tik een recept voor je kiezen',
-      'Je profiel toont hoeveel recepten en collecties je hebt en hoe vaak je al gekookt hebt, en is vanaf elk scherm bereikbaar',
-      'Alles laadt sneller, en als je teruggaat naar een pagina staat die er meteen weer',
     ],
   },
 ];
