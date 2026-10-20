@@ -18,6 +18,15 @@
 - NOOIT recepten van andere websites gebruiken als fallback. Als de bron niet genoeg info geeft, geef dan terug wat je hebt — de gebruiker kan het handmatig aanvullen.
 - De bron die in het recept wordt opgeslagen moet altijd de website zijn waar de URL naartoe wijst.
 
+## Database-migraties
+- Sinds 30 oktober 2026 krijgen nieuwe tabellen in `public` geen automatische Data API-rechten meer. Elke migratie die een tabel aanmaakt, moet in dezelfde migratie ook expliciet `grant`s geven (naast RLS aanzetten en policies):
+  ```sql
+  grant select on public.<tabel> to anon;
+  grant select, insert, update, delete on public.<tabel> to authenticated;
+  grant select, insert, update, delete on public.<tabel> to service_role;
+  ```
+  Geef `anon` alleen `select` als de tabel ook zonder inloggen leesbaar moet zijn; RLS blijft de echte beveiliging.
+
 ## Tech Stack
 - Next.js 14 (App Router)
 - Supabase (Auth, Database, Storage)
