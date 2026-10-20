@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { createClient } from '@/lib/supabase/client';
 import RecipeCard from '@/components/recipes/RecipeCard';
 import type { RecipeWithRelations } from '@/types';
+import BackButton from '@/components/ui/BackButton';
+import ScreenHeader from '@/components/ui/ScreenHeader';
 
 export default function MijnReceptenPage() {
   const router = useRouter();
@@ -67,25 +68,17 @@ export default function MijnReceptenPage() {
   }, [user, authLoading, fetchMyRecipes, router]);
 
   return (
-    <div className="mx-auto max-w-5xl px-4 pb-24">
-      <div className="sticky top-14 z-20 -mx-4 bg-background px-4 pb-2 pt-4 md:top-16">
-        <button
-          onClick={() => router.push('/instellingen')}
-          className="flex items-center gap-1.5 text-sm font-medium text-text-muted transition-colors hover:text-text-primary"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Instellingen
-        </button>
+    <div className="mx-auto max-w-5xl pb-24">
+      <div className="pt-1">
+        <BackButton href="/instellingen" label="Terug naar instellingen" />
       </div>
 
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-text-primary">Mijn recepten</h1>
-        {!loading && (
-          <p className="mt-1 text-sm text-text-muted">
-            {recipes.length} van jou — {totalCount} totaal in de bibliotheek
-          </p>
-        )}
-      </div>
+      <ScreenHeader
+        title="Mijn recepten"
+        subtitle={!loading ? `${recipes.length} van jou — ${totalCount} totaal in de bibliotheek` : undefined}
+        profileButton={false}
+        className="mb-6"
+      />
 
       {loading ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

@@ -791,6 +791,7 @@ function RecipeDetailPage({
   const checkedCount = recipe.ingredients.filter((i) => checkedIngredients.has(i.id)).length;
   const averageText =
     recipe.average_rating !== null ? recipe.average_rating.toFixed(1).replace('.', ',') : null;
+  const ratingCount = recipe.ratings?.length ?? recipe.rating_count ?? 0;
 
   const tabOptions: { value: Tab; label: string }[] = [
     { value: 'ingredienten', label: 'Ingrediënten' },
@@ -898,6 +899,14 @@ function RecipeDetailPage({
                 {averageText ? (
                   <>
                     <span className="text-primary">★</span> {averageText}
+                    {ratingCount > 0 && (
+                      <span
+                        className="ml-1 text-[13px] font-normal text-ink-3"
+                        aria-label={`${ratingCount} ${ratingCount === 1 ? 'beoordeling' : 'beoordelingen'}`}
+                      >
+                        ({ratingCount})
+                      </span>
+                    )}
                   </>
                 ) : (
                   '–'

@@ -3,7 +3,7 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { ArrowLeft, User, Camera, KeyRound, Mail, Check } from 'lucide-react';
+import { User, Camera, KeyRound, Mail, Check } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { createClient } from '@/lib/supabase/client';
 import dynamic from 'next/dynamic';
@@ -12,6 +12,8 @@ const ConfirmDialog = dynamic(() => import('@/components/ui/ConfirmDialog'));
 const AvatarCropModal = dynamic(() => import('@/components/ui/AvatarCropModal'));
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
+import BackButton from '@/components/ui/BackButton';
+import ScreenHeader from '@/components/ui/ScreenHeader';
 
 export default function AccountInstellingenPage() {
   const router = useRouter();
@@ -143,18 +145,12 @@ export default function AccountInstellingenPage() {
   if (!user) return null;
 
   return (
-    <div className="mx-auto max-w-2xl px-4 pb-24">
-      <div className="sticky top-14 z-20 -mx-4 bg-background px-4 pb-2 pt-4 md:top-16">
-        <button
-          onClick={() => router.push('/instellingen')}
-          className="flex items-center gap-1.5 text-sm font-medium text-text-muted transition-colors hover:text-text-primary"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Instellingen
-        </button>
+    <div className="mx-auto max-w-2xl pb-24">
+      <div className="pt-1">
+        <BackButton href="/instellingen" label="Terug naar instellingen" />
       </div>
 
-      <h1 className="mb-6 text-2xl font-bold text-text-primary">Account</h1>
+      <ScreenHeader title="Account" profileButton={false} className="mb-6" />
 
       {/* ── Avatar ── */}
       <div className="mb-6 flex items-center gap-4">
