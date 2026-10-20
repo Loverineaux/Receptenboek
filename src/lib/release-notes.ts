@@ -6,6 +6,16 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '1.22.0',
+    date: '20 oktober 2026',
+    highlights: [
+      'Filter je recepten snel op Ontbijt, Lunch, Diner of Dessert met de knoppen bovenaan',
+      'Onder Diner vind je alle recepten die geen ontbijt, lunch of dessert zijn',
+      'Je ziet nu 60 recepten tegelijk in plaats van 24',
+      'Scroll je naar beneden, dan worden er vanzelf meer recepten bijgeladen',
+    ],
+  },
+  {
     version: '1.21.2',
     date: '20 oktober 2026',
     highlights: [
@@ -20,16 +30,6 @@ export const releaseNotes: ReleaseNote[] = [
       'Receptenboek heeft een nieuw adres: receptenboek.loofhub.nl',
       'Gedeelde recepten verwijzen voortaan naar het nieuwe adres',
       'Op het nieuwe adres log je één keer opnieuw in; staat de app op je telefoon, installeer hem dan opnieuw vanaf het nieuwe adres',
-    ],
-  },
-  {
-    version: '1.21.0',
-    date: '19 oktober 2026',
-    highlights: [
-      'De knop naast het linkveld heet nu "Importeren" en haalt het recept meteen op',
-      'Is het veld nog leeg, dan plakt de knop wat je net gekopieerd hebt en importeert hij direct: één tik is genoeg',
-      'Je kunt ook een heel deelbericht plakken, bijvoorbeeld uit de Picnic-app; de link wordt er vanzelf uitgehaald',
-      'Achter de schermen is een overbodige taak opgeruimd, zodat de app zuiniger draait',
     ],
   },
 ];
