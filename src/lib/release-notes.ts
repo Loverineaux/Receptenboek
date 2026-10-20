@@ -6,6 +6,14 @@ export interface ReleaseNote {
 
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '1.22.4',
+    date: '20 oktober 2026',
+    highlights: [
+      'Recepten van sites die de app eerst blokkeerden, zoals Miljuschka, komen nu compleet binnen, inclusief foto',
+      'Heeft een recept zelf geen introductie, dan neemt de app de korte omschrijving van de website over',
+    ],
+  },
+  {
     version: '1.22.3',
     date: '20 oktober 2026',
     highlights: [
@@ -22,14 +30,6 @@ export const releaseNotes: ReleaseNote[] = [
       'De instellingen hebben een nieuwe, rustigere bovenkant in dezelfde stijl als de rest van de app',
       'De terugknop bij de instellingen is groter en makkelijker aan te tikken',
       'Bovenaan de instellingen schuift er niets meer half onder de terugknop door',
-    ],
-  },
-  {
-    version: '1.22.1',
-    date: '20 oktober 2026',
-    highlights: [
-      'Op de foto van elk recept zie je weer van welke website of bron het komt',
-      'Ook in de lijstweergave en bij het uitgelichte recept staat de bron er weer bij',
     ],
   },
 ];
