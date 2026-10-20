@@ -9,7 +9,7 @@ import { recordTiming } from '@/lib/telemetry';
 import { readRecipesCardCache, writeRecipesCardCache } from '@/lib/recipes-card-cache';
 import { useAuth } from '@/hooks/useAuth';
 import SearchBar from '@/components/ui/SearchBar';
-import CategoryFilter from '@/components/ui/CategoryFilter';
+import CategoryFilter, { CHIP_CATEGORIES } from '@/components/ui/CategoryFilter';
 import Button from '@/components/ui/Button';
 import RecipeCard from '@/components/recipes/RecipeCard';
 import HeroRecipeCard from '@/components/recipes/HeroRecipeCard';
@@ -27,7 +27,7 @@ import type { RecipeWithRelations, Source } from '@/types';
 
 type SortOption = 'newest' | 'rating' | 'time' | 'az' | 'za';
 
-const PAGE_SIZE = 24;
+const PAGE_SIZE = 60;
 
 /**
  * `tijd` is vrije tekst ("25 min", "1 uur", "1 uur 15 min", "1,5 uur").
@@ -585,13 +585,12 @@ function ReceptenPage() {
   const hasSourceFilters = !!source || includedSources.size > 0 || excludedSources.size > 0;
   const isDefaultView = !search && !category && !quick && !hasSourceFilters && sort === 'newest';
   const hasQuery = !!search || !!category || quick || hasSourceFilters;
-  const chipCategories = ['vegetarisch', 'pasta', 'soep', 'dessert'];
   const activeFilterCount =
     (source ? 1 : 0) +
     includedSources.size +
     excludedSources.size +
     (sort !== 'newest' ? 1 : 0) +
-    (category && !chipCategories.includes(category.toLowerCase()) ? 1 : 0) +
+    (category && !CHIP_CATEGORIES.includes(category.toLowerCase()) ? 1 : 0) +
     (searchIngredients ? 1 : 0);
 
   const visibleRecipes = quick
@@ -607,6 +606,21 @@ function ReceptenPage() {
     if (!quick || loading || loadingMore || !hasMore) return;
     if (visibleRecipes.length < 8) fetchRecipesRef.current(true);
   }, [quick, loading, loadingMore, hasMore, visibleRecipes.length]);
+
+  // Automatisch doorladen zodra de onderkant van de lijst in beeld komt
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = loadMoreRef.current;
+    if (!el || loading || loadingMore || !hasMore) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) fetchRecipesRef.current(true);
+      },
+      { rootMargin: '600px 0px' },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [loading, loadingMore, hasMore]);
 
   // Hero "Voor vanavond": alleen op de standaardweergave, eerlijk gelabeld, stabiel per dag
   const hero = useMemo(() => {
@@ -810,7 +824,7 @@ function ReceptenPage() {
           </div>
 
           {hasMore && (
-            <div className="flex justify-center pt-8">
+            <div ref={loadMoreRef} className="flex justify-center pt-8">
               <Button
                 variant="secondary"
                 size="lg"
