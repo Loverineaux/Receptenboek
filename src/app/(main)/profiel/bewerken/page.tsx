@@ -4,13 +4,13 @@ import { useState, useEffect, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import dynamic from 'next/dynamic';
-import { ArrowLeft, Camera, Trash2, User } from 'lucide-react';
+import { Camera, Trash2, User } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { createClient } from '@/lib/supabase/client';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import Modal from '@/components/ui/Modal';
-import IconButton from '@/components/ui/IconButton';
+import BackButton from '@/components/ui/BackButton';
 import ScreenHeader from '@/components/ui/ScreenHeader';
 
 const AvatarCropModal = dynamic(() => import('@/components/ui/AvatarCropModal'));
@@ -130,9 +130,7 @@ export default function ProfielBewerkenPage() {
   return (
     <div className="mx-auto max-w-[640px]">
       <div className="pt-1">
-        <IconButton label="Terug naar profiel" onClick={() => router.push('/profiel')}>
-          <ArrowLeft className="h-5 w-5" strokeWidth={2} />
-        </IconButton>
+        <BackButton href="/profiel" label="Terug naar profiel" />
       </div>
 
       <ScreenHeader title="Profiel bewerken" subtitle="Naam, foto en bio" profileButton={false} />

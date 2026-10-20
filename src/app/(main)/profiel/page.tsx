@@ -11,6 +11,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useAdmin } from '@/hooks/useAdmin';
 import { jsonFetcher, SWR_PAGE_OPTIONS } from '@/lib/swr';
 import IconButton from '@/components/ui/IconButton';
+import BackButton from '@/components/ui/BackButton';
 import NotificationBell from '@/components/notifications/NotificationBell';
 import ProfileStats from '@/components/profile/ProfileStats';
 import ProfileMenu, { type ProfileMenuItem } from '@/components/profile/ProfileMenu';
@@ -86,8 +87,11 @@ export default function ProfielPage() {
 
   return (
     <div className="mx-auto max-w-[640px]">
-      {/* Acties rechtsboven: meldingen (alleen mobiel, desktop heeft de topbalk) + instellingen */}
-      <div className="flex items-center justify-end gap-2 pt-1">
+      {/* Terug (alleen mobiel) + acties rechtsboven: meldingen (alleen mobiel, desktop heeft de topbalk) + instellingen */}
+      <div className="flex items-center gap-2 pt-1">
+        <div className="mr-auto md:invisible">
+          <BackButton href="/recepten" label="Terug naar recepten" />
+        </div>
         <div className="flex h-11 w-11 items-center justify-center rounded-icon-btn border border-line bg-surface md:hidden [&>div>button]:h-11 [&>div>button]:w-11 [&>div>button]:rounded-icon-btn">
           <NotificationBell />
         </div>
