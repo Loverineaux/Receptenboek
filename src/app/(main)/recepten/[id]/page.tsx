@@ -34,7 +34,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   const title = recipe.title;
   const description = recipe.subtitle || `Bekijk "${recipe.title}" op Receptenboek`;
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://receptenboek-rcr7.vercel.app';
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://receptenboek.loofhub.nl';
 
   // Use Next.js image optimizer for OG images — resizes and compresses automatically
   // This also proxies external images, bypassing hotlink protection

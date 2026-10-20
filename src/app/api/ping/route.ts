@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 // Lightweight endpoint to keep Vercel serverless functions warm
 // Also pings other critical API routes to prevent their cold starts
 export async function GET() {
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://receptenboek-rcr7.vercel.app';
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://receptenboek.loofhub.nl';
 
   // Fire-and-forget pings to warm up the most-used API routes.
   // These bypass middleware (see src/middleware.ts) so their handler
