@@ -344,7 +344,7 @@ export async function POST(request: NextRequest) {
     // Step 2: If JSON-LD found, use it directly (fast path)
     if (scraped.jsonLd) {
       console.log("[URL Extract] Using JSON-LD structured data");
-      const recipe = jsonLdToRecipe(scraped.jsonLd, scraped.ogImage);
+      const recipe = jsonLdToRecipe(scraped.jsonLd, scraped.ogImage, scraped.metaDescription);
 
       // Set bron from URL if not detected from JSON-LD
       if (!recipe.bron) {
@@ -373,6 +373,7 @@ export async function POST(request: NextRequest) {
             const googlebotRecipe = jsonLdToRecipe(
               googlebotScraped.jsonLd,
               googlebotScraped.ogImage,
+              googlebotScraped.metaDescription,
             );
             if (
               googlebotRecipe.title &&

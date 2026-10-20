@@ -126,7 +126,7 @@ export async function POST(request: NextRequest) {
 
       let recipe: any;
       if (scraped.jsonLd) {
-        recipe = jsonLdToRecipe(scraped.jsonLd, scraped.ogImage);
+        recipe = jsonLdToRecipe(scraped.jsonLd, scraped.ogImage, scraped.metaDescription);
       } else if (scraped.pageText && scraped.pageText.length > 200) {
         console.log(`[Bulk] No JSON-LD, using Claude on page text for: ${url}`);
         const client = new Anthropic();

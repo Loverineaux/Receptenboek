@@ -45,6 +45,8 @@ interface ScrapedRecipe {
   rawHtml: string;
   /** Page title */
   pageTitle: string;
+  /** og:description / meta description — vangnet als JSON-LD geen description heeft */
+  metaDescription: string | null;
   /** Recept uit de Picnic RSC-payload (alleen voor picnic.app) */
   picnicRecipe: ReturnType<typeof extractPicnicRecipe>;
 }
@@ -175,6 +177,21 @@ export async function scrapePage(url: string): Promise<ScrapedRecipe> {
   console.log("[Scrape] Full headers failed, trying simple headers...");
   const simpleResult = await tryFetch(resolvedUrl, SIMPLE_HEADERS);
   if (simpleResult) return simpleResult;
+
+  // Strategy 1c: Googlebot UA. Sites with a JS challenge for every browser
+  // (e.g. miljuschka.nl) still let Googlebot through for SEO. Such sites
+  // block their images for browsers too, so inline the image as a data URL —
+  // POST /api/recipes uploads that to our own storage on save.
+  console.log("[Scrape] Simple headers failed, trying Googlebot UA...");
+  const googlebotResult = await tryFetch(resolvedUrl, GOOGLEBOT_HEADERS, GOOGLEBOT_TIMEOUT);
+  if (googlebotResult) {
+    const imageUrl = googlebotResult.ogImage;
+    if (imageUrl && !imageUrl.startsWith("data:")) {
+      const inlined = await fetchImageAsDataUrl(imageUrl, GOOGLEBOT_HEADERS);
+      if (inlined) googlebotResult.ogImage = inlined;
+    }
+    return googlebotResult;
+  }
 
   // Strategy 2: Headless browser (bypasses Cloudflare JS challenge)
   console.log("[Scrape] Simple headers failed, trying headless browser...");
@@ -359,6 +376,11 @@ function parseHtml(html: string, url: string): ScrapedRecipe {
   const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
   const pageTitle = titleMatch ? decodeHtmlEntities(titleMatch[1].trim()) : "";
 
+  // 3b. Meta description (fallback intro when JSON-LD has no description)
+  const rawDescription = extractMetaContent(html, 'property="og:description"')
+    || extractMetaContent(html, 'name="description"');
+  const metaDescription = rawDescription ? decodeHtmlEntities(rawDescription.trim()) : null;
+
   // 4. Clean text for Claude fallback
   const pageText = extractCleanText(html);
 
@@ -368,7 +390,53 @@ function parseHtml(html: string, url: string): ScrapedRecipe {
   // 6. Picnic: recept staat in de Next.js-payload, niet in de zichtbare HTML
   const picnicRecipe = isPicnicUrl(url) ? extractPicnicRecipe(html, ogImage) : null;
 
-  return { jsonLd, ogImage, pageText, rawHtml, pageTitle, picnicRecipe };
+  return { jsonLd, ogImage, pageText, rawHtml, pageTitle, metaDescription, picnicRecipe };
+}
+
+const MAX_INLINE_IMAGE_BYTES = 3 * 1024 * 1024;
+
+/** Download an image server-side and return it as a data URL, or null. */
+async function fetchImageAsDataUrl(
+  imageUrl: string,
+  headers: Record<string, string>,
+): Promise<string | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), GOOGLEBOT_TIMEOUT);
+  try {
+    await assertPublicUrl(imageUrl); // SSRF-guard: de afbeelding-URL komt van de pagina
+    const res = await fetch(imageUrl, {
+      headers: { ...headers, Accept: "image/avif,image/webp,image/*,*/*;q=0.8" },
+      signal: controller.signal,
+      redirect: "follow",
+    });
+    const contentType = res.headers.get("content-type")?.split(";")[0].trim() || "";
+    if (!res.ok || !contentType.startsWith("image/")) {
+      console.log(`[Scrape] Image download failed: HTTP ${res.status} ${contentType}`);
+      return null;
+    }
+    const buffer = Buffer.from(await res.arrayBuffer());
+    if (buffer.length > MAX_INLINE_IMAGE_BYTES) {
+      console.log(`[Scrape] Image too large to inline (${Math.round(buffer.length / 1024)}KB)`);
+      return null;
+    }
+    console.log(`[Scrape] Image downloaded: ${Math.round(buffer.length / 1024)}KB`);
+    return `data:${contentType};base64,${buffer.toString("base64")}`;
+  } catch (err: any) {
+    console.log("[Scrape] Image download error:", err.message);
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/** Strip SEO decoration (emoji such as ✅) from a meta description. */
+function cleanMetaDescription(text: string | null | undefined): string | null {
+  if (!text) return null;
+  const cleaned = text
+    .replace(/[☀-➿\u{1F300}-\u{1FAFF}️‍]/gu, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  return cleaned || null;
 }
 
 function extractJsonLd(html: string, pageUrl?: string): any | null {
@@ -563,9 +631,9 @@ function decodeHtmlEntities(text: string): string {
 /**
  * Convert schema.org/Recipe JSON-LD to our recipe format.
  */
-export function jsonLdToRecipe(ld: any, ogImage: string | null) {
+export function jsonLdToRecipe(ld: any, ogImage: string | null, metaDescription?: string | null) {
   const title = ld.name || "";
-  const description = ld.description || null;
+  const description = ld.description || cleanMetaDescription(metaDescription);
 
   // Image
   let image_url = ogImage;
